@@ -455,7 +455,7 @@ VSCode-Config/
 
 ## 📝 更新日誌
 
-### 2025-01-23
+### 2025-10-23
 - ✨ 初始版本
 - 📦 包含 35 個擴充套件
 - 🎨 設定 JetBrainsMono Nerd Font
