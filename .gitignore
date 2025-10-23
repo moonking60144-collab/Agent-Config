@@ -1,0 +1,27 @@
+# VSCode-Config .gitignore
+# 私人倉庫用（可保留大部分檔案）
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# 暫存/備份檔案
+*.bak
+*.tmp
+*.log
+*.old
+
+# Windows 系統檔案
+*.lnk
+*.ini
+
+# 編輯器暫存檔
+*~
+.*.swp
+.*.swo
+
+# 可選：如果未來要公開倉庫，取消以下註解
+# User/settings.json
+# extensions.txt

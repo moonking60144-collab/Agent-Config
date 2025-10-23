@@ -1,0 +1,33 @@
+{
+  "diffEditor.codeLens": true,
+  "explorer.confirmDelete": false,
+  "geminicodeassist.agentDebugMode": true,
+  "geminicodeassist.chat.changeView": "Default diff view",
+  "geminicodeassist.chat.enableStreaming": false,
+  "continue.enableConsole": true,
+  "chat.mcp.gallery.enabled": true,
+  "git.enableSmartCommit": true,
+  "chatgpt.cliExecutable": "",
+  "chat.mcp.discovery.enabled": {
+    "windsurf": true,
+    "claude-desktop": true
+  },
+  "git.path": "C:\\Program Files\\Git\\cmd\\git.exe",
+  "git.autofetch": true,
+  "mcp.git.useSystemGit": true,
+  "mcp.git.disableRemoteDiff": true,
+  "mcp.git.enabled": false,
+  "git.confirmSync": false,
+  "diffEditor.ignoreTrimWhitespace": false,
+  "github.copilot.nextEditSuggestions.enabled": false,
+  "geminicodeassist.project": "circular-nebula-bzbbb",
+  "workbench.editor.tabActionLocation": "left",
+  "workbench.editor.openPositioning": "left",
+  "window.restoreWindows": "all",
+  "gitlens.ai.model": "vscode",
+  "gitlens.ai.vscode.model": "copilot:gpt-4.1",
+  "workbench.iconTheme": "material-icon-theme",
+  "gitlens.views.commitDetails.files.layout": "list",
+  "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font Mono",
+  "editor.fontFamily": "JetBrainsMono Nerd Font, Cascadia Code, Consolas, 'Courier New', monospace"
+}
