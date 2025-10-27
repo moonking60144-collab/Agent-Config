@@ -25,7 +25,34 @@ deploy-vscode.bat
 
 ## 📦 包含內容
 
-### 🎨 編輯器設定
+### 🤖 Claude Code (CODEX) MCP 配置
+
+完整的 Model Context Protocol (MCP) 服務配置，包含 10 個專業 MCP 服務：
+
+| MCP 服務 | 用途 | 套件名稱 |
+|---------|------|---------|
+| Sequential Thinking | 任務規劃與步驟分解 | `@modelcontextprotocol/server-sequential-thinking` |
+| Context7 | 即時程式庫文件查詢 | `@upstash/context7-mcp` |
+| DuckDuckGo | 網路搜尋引擎 | `duckduckgo-mcp-server` |
+| Serena | 程式碼語意分析與符號級編輯 | `git+https://github.com/oraios/serena` |
+| DeepWiki | 深度維基百科搜尋 | `mcp-deepwiki` |
+| Firecrawl | 網頁抓取/爬行/抽取 | `firecrawl-mcp` |
+| Memory | 知識圖譜建模 | `@modelcontextprotocol/server-memory` |
+| GitHub | GitHub 倉庫管理 | `@modelcontextprotocol/server-github` |
+| Time | 時區與時間工具 | `mcp-server-time` |
+| Spec Workflow | 規格工作流程管理 | `@pimzino/spec-workflow-mcp` |
+
+**包含檔案**：
+- `AGENTS.md` - 完整的 MCP 服務規範文件（616 行）
+- `codex/config.toml` - MCP 服務配置檔
+- `.env.example` - API Keys 環境變數範本
+
+**必要 API Keys**：
+- GitHub Personal Access Token (`GITHUB_PERSONAL_ACCESS_TOKEN`)
+- Firecrawl API Key (`FIRECRAWL_API_KEY`)
+- 專案路徑 (`PROJECT_PATH`) - 用於 Serena MCP
+
+### 🎨 VS Code 編輯器設定
 
 - **字型**：JetBrainsMono Nerd Font（終端機與編輯器）
 - **主題**：Material Icon Theme
@@ -132,7 +159,9 @@ deploy-vscode.bat
 2. ✓ 備份現有設定（可選）
 3. ✓ 複製 settings.json 和 keybindings.json
 4. ✓ 安裝所有 35 個擴充套件
-5. ✓ 顯示詳細的安裝報告
+5. ✓ 部署 CODEX MCP 配置（AGENTS.md、config.toml）
+6. ✓ 引導設定 API Keys（可選）
+7. ✓ 顯示詳細的安裝報告
 
 ### 方式 2：手動部署
 
@@ -405,12 +434,16 @@ git push
 
 ```
 VSCode-Config/
+├── codex/                         # CODEX MCP 配置
+│   └── config.toml               # MCP 服務配置檔（已移除敏感資訊）
 ├── User/                          # VS Code 使用者設定
 │   ├── settings.json             # 編輯器設定
 │   ├── keybindings.json          # 快速鍵綁定
 │   └── snippets/                  # 程式碼片段（目前為空）
+├── AGENTS.md                      # MCP 服務完整規範（616 行）
+├── .env.example                   # API Keys 環境變數範本
 ├── extensions.txt                 # 35 個擴充套件清單
-├── deploy-vscode.bat             # Windows 批次部署腳本
+├── deploy-vscode.bat             # Windows 批次部署腳本（含 CODEX 配置）
 ├── deploy-vscode-insiders.bat    # VS Code Insiders 部署腳本
 ├── backup-current-settings.bat   # 反向備份腳本
 ├── README.md                      # 本檔案
@@ -435,6 +468,33 @@ VSCode-Config/
 - `git.path` - Git 安裝路徑（可能包含使用者名稱）
 - 任何包含個人資訊的設定
 
+### API Keys 設定
+
+本倉庫的 `codex/config.toml` 已移除所有敏感 API Keys，使用佔位符：
+- `YOUR_GITHUB_TOKEN_HERE`
+- `YOUR_FIRECRAWL_API_KEY_HERE`
+- `YOUR_PROJECT_PATH_HERE`
+
+**設定方式 1：部署時互動設定**
+```batch
+# 執行部署腳本時選擇 Y
+deploy-vscode.bat
+# 在 [7/8] API Keys 設定引導步驟輸入您的 API Keys
+```
+
+**設定方式 2：部署後手動編輯**
+```batch
+# 編輯檔案
+notepad %USERPROFILE%\.codex\config.toml
+
+# 參考範本
+.env.example
+```
+
+**申請 API Keys**：
+- GitHub Token: https://github.com/settings/tokens（需要 `repo`, `read:org`, `user:email` 權限）
+- Firecrawl Key: https://firecrawl.dev/
+
 ---
 
 ## 📄 授權
@@ -455,6 +515,12 @@ VSCode-Config/
 
 ## 📝 更新日誌
 
+### 2025-10-27
+- 🚀 整合 CODEX MCP 配置到部署腳本
+- 📦 新增 10 個 MCP 服務完整配置
+- 🔧 新增 API Keys 互動式設定功能
+- 📝 更新 README 完整說明
+
 ### 2025-10-23
 - ✨ 初始版本
 - 📦 包含 35 個擴充套件
@@ -464,5 +530,5 @@ VSCode-Config/
 
 ---
 
-**最後更新**：2025-10-23
+**最後更新**：2025-10-27
 **維護者**：chicago (moonking60144-collab)

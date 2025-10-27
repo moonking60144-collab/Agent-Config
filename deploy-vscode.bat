@@ -74,9 +74,9 @@ if not exist "%SCRIPT_DIR%extensions.txt" (
 echo.
 
 :: ========================================
-:: [3/6] 備份現有設定（可選）
+:: [3/8] 備份現有設定（可選）
 :: ========================================
-echo [3/6] 備份現有設定...
+echo [3/8] 備份現有設定...
 
 set "BACKUP_CHOICE=N"
 set /p BACKUP_CHOICE="是否備份現有設定？(Y/N，預設 N): "
@@ -106,9 +106,9 @@ if /i "%BACKUP_CHOICE%"=="Y" (
 echo.
 
 :: ========================================
-:: [4/6] 部署設定檔
+:: [4/8] 部署設定檔
 :: ========================================
-echo [4/6] 部署設定檔...
+echo [4/8] 部署設定檔...
 
 :: 確保目標目錄存在
 if not exist "%VS_CODE_USER%" (
@@ -147,9 +147,9 @@ if exist "%SCRIPT_DIR%User\snippets\*.*" (
 echo.
 
 :: ========================================
-:: [5/6] 安裝擴充套件
+:: [5/8] 安裝擴充套件
 :: ========================================
-echo [5/6] 安裝擴充套件...
+echo [5/8] 安裝擴充套件...
 
 set "INSTALL_EXTENSIONS=Y"
 set /p INSTALL_EXTENSIONS="是否安裝擴充套件（35個）？(Y/N，預設 Y): "
@@ -199,16 +199,108 @@ echo ✓ 擴充套件安裝完成
 echo.
 
 :: ========================================
-:: [6/6] 部署完成報告
+:: [6/8] 部署 CODEX MCP 配置
+:: ========================================
+echo [6/8] 部署 CODEX MCP 配置...
+
+set "CODEX_DIR=%USERPROFILE%\.codex"
+
+:: 建立 .codex 目錄
+if not exist "%CODEX_DIR%" (
+    mkdir "%CODEX_DIR%"
+    echo ✓ 已建立目錄: %CODEX_DIR%
+)
+
+:: 複製 AGENTS.md
+if exist "%SCRIPT_DIR%AGENTS.md" (
+    copy /Y "%SCRIPT_DIR%AGENTS.md" "%CODEX_DIR%\AGENTS.md" >nul
+    if %errorlevel% equ 0 (
+        echo ✓ 已部署 AGENTS.md
+    ) else (
+        echo ❌ 部署 AGENTS.md 失敗
+    )
+) else (
+    echo ⊘ 找不到 AGENTS.md，跳過
+)
+
+:: 複製 config.toml
+if exist "%SCRIPT_DIR%codex\config.toml" (
+    copy /Y "%SCRIPT_DIR%codex\config.toml" "%CODEX_DIR%\config.toml" >nul
+    if %errorlevel% equ 0 (
+        echo ✓ 已部署 config.toml
+    ) else (
+        echo ❌ 部署 config.toml 失敗
+    )
+) else (
+    echo ⊘ 找不到 codex\config.toml，跳過
+)
+
+echo.
+
+:: ========================================
+:: [7/8] API Keys 設定引導
+:: ========================================
+echo [7/8] API Keys 設定引導...
+
+set "SETUP_KEYS=N"
+echo.
+echo 📌 MCP 服務需要以下 API Keys：
+echo    1. GitHub Personal Access Token
+echo    2. Firecrawl API Key
+echo    3. 專案路徑（用於 Serena MCP）
+echo.
+set /p SETUP_KEYS="是否現在設定 API Keys？(Y/N，預設 N): "
+
+if /i "%SETUP_KEYS%"=="Y" (
+    echo.
+    echo 開始設定 API Keys...
+    echo.
+
+    :: 詢問 GitHub Token
+    set /p GITHUB_TOKEN="請輸入 GitHub Personal Access Token (ghp_...): "
+
+    :: 詢問 Firecrawl Key
+    set /p FIRECRAWL_KEY="請輸入 Firecrawl API Key (fc-...): "
+
+    :: 詢問專案路徑
+    set /p PROJECT_PATH="請輸入專案路徑 (例如 C:/Users/XXX/Desktop/Project): "
+
+    echo.
+    echo 正在更新 config.toml...
+
+    :: 使用 PowerShell 替換佔位符
+    powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_GITHUB_TOKEN_HERE', '%GITHUB_TOKEN%' | Set-Content '%CODEX_DIR%\config.toml'"
+    powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_FIRECRAWL_API_KEY_HERE', '%FIRECRAWL_KEY%' | Set-Content '%CODEX_DIR%\config.toml'"
+    powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_PROJECT_PATH_HERE', '%PROJECT_PATH%' | Set-Content '%CODEX_DIR%\config.toml'"
+
+    echo ✓ API Keys 已設定完成
+    set "KEYS_STATUS=已設定"
+) else (
+    echo ✓ 跳過 API Keys 設定
+    echo.
+    echo 📌 請稍後手動編輯：%CODEX_DIR%\config.toml
+    echo    參考範本：.env.example
+    set "KEYS_STATUS=需手動設定"
+)
+
+echo.
+
+:: ========================================
+:: [8/8] 部署完成報告
 :: ========================================
 echo ========================================
 echo   部署完成報告
 echo ========================================
 echo.
-echo ✓ 設定檔部署: 完成
+echo ✓ VS Code 設定檔部署: 完成
 echo   - settings.json
 echo   - keybindings.json
 echo   - snippets 目錄
+echo.
+echo ✓ CODEX MCP 配置: 完成
+echo   - AGENTS.md (10 個 MCP 服務規範)
+echo   - config.toml (MCP 服務配置)
+echo   - API Keys 設定: %KEYS_STATUS%
 echo.
 
 if /i "%INSTALL_EXTENSIONS%"=="Y" (
@@ -236,6 +328,8 @@ echo 📌 重要提示:
 echo   1. 請完全關閉並重啟 VS Code 以套用所有設定
 echo   2. 確認已安裝字型: JetBrainsMono Nerd Font
 echo   3. 部分擴充套件可能需要重新載入視窗
+echo   4. CODEX MCP 配置位於: %CODEX_DIR%
+echo   5. 如需修改 API Keys，請編輯: %CODEX_DIR%\config.toml
 echo.
 echo ========================================
 echo.
