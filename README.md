@@ -50,7 +50,50 @@ deploy-vscode.bat
 **必要 API Keys**：
 - GitHub Personal Access Token (`GITHUB_PERSONAL_ACCESS_TOKEN`)
 - Firecrawl API Key (`FIRECRAWL_API_KEY`)
-- 專案路徑 (`PROJECT_PATH`) - 用於 Serena MCP
+
+**注意**：Serena MCP 已設定為全局模式，不需要指定專案路徑。
+
+### 📄 規範檔案說明
+
+本倉庫包含兩套 AI 助手規範檔案：
+
+#### 1. Codex 規範（`codex/AGENTS.md`）
+
+**適用於**：Codex AI 助手
+
+**特色**：
+- 效率優先原則（主動、並用、完整、實測）
+- 支援 10 個 MCP 服務完整整合
+- Ragic 專案特化規範
+- Serena 全局配置（不綁定特定專案）
+
+#### 2. Claude Code 規範（`claude/CLAUDE_AGENTS.md`）
+
+**適用於**：Claude Code (Anthropic)
+
+**特色**：
+- 基於 Codex 規範調整
+- 針對 Claude Code 實際可用的 7 個 MCP 服務
+- 新增內建工具使用策略（Read/Write/Edit/Glob/Grep/Bash/TodoWrite）
+- 工具選擇優先級與避免重複使用指引
+- JavaScript-Ragic MCP 工具說明（自定義）
+
+**差異對比**：
+
+| 項目 | Codex 規範 | Claude Code 規範 |
+|------|-----------|-----------------|
+| **核心理念** | 效率優先、工具並用 | ✅ 相同 |
+| **語言規則** | 繁體中文 | ✅ 相同 |
+| **Ragic 規範** | 完整規範 | ✅ 相同（強化版） |
+| **MCP 工具** | 10+ 服務 | 7 個實際連接的服務 |
+| **內建工具** | - | ✅ 新增（Read/Edit/TodoWrite 等）|
+| **工具優先級** | - | ✅ 新增避免重複使用策略 |
+| **Serena 配置** | 全局模式 | ✅ 相同 |
+
+**何時使用哪個**：
+- 使用 Codex → 參考 `codex/AGENTS.md`
+- 使用 Claude Code → 參考 `claude/CLAUDE_AGENTS.md`
+- 兩者核心理念相同，主要差異在工具清單與使用策略
 
 ### 🎨 VS Code 編輯器設定
 
@@ -434,20 +477,22 @@ git push
 
 ```
 VSCode-Config/
-├── codex/                         # CODEX MCP 配置
-│   └── config.toml               # MCP 服務配置檔（已移除敏感資訊）
-├── User/                          # VS Code 使用者設定
+├── 📁 codex/                      # Codex 配置檔案
+│   ├── AGENTS.md                 # Codex 全局規範（效率優先版本）
+│   └── config.toml               # MCP 服務配置檔（Serena 全局模式）
+├── 📁 claude/                     # Claude Code 配置檔案
+│   └── CLAUDE_AGENTS.md          # Claude Code 規範（基於 Codex 調整）
+├── 📁 User/                       # VS Code 使用者設定
 │   ├── settings.json             # 編輯器設定
 │   ├── keybindings.json          # 快速鍵綁定
-│   └── snippets/                  # 程式碼片段（目前為空）
-├── AGENTS.md                      # MCP 服務完整規範（616 行）
-├── .env.example                   # API Keys 環境變數範本
-├── extensions.txt                 # 35 個擴充套件清單
-├── deploy-vscode.bat             # Windows 批次部署腳本（含 CODEX 配置）
-├── deploy-vscode-insiders.bat    # VS Code Insiders 部署腳本
-├── backup-current-settings.bat   # 反向備份腳本
-├── README.md                      # 本檔案
-└── .gitignore                     # Git 忽略規則
+│   └── snippets/                 # 程式碼片段（目前為空）
+├── 📄 .env.example                # API Keys 環境變數範本
+├── 📄 extensions.txt              # 35 個擴充套件清單
+├── 📄 deploy-vscode.bat           # Windows 批次部署腳本（含 CODEX 配置）
+├── 📄 deploy-vscode-insiders.bat  # VS Code Insiders 部署腳本
+├── 📄 backup-current-settings.bat # 反向備份腳本
+├── 📄 README.md                   # 本檔案
+└── 📄 .gitignore                  # Git 忽略規則
 ```
 
 ---
@@ -515,7 +560,15 @@ notepad %USERPROFILE%\.codex\config.toml
 
 ## 📝 更新日誌
 
-### 2025-10-27
+### 2025-10-27（第二版）
+- ✨ 新增 Claude Code 專用規範檔案（`claude/CLAUDE_AGENTS.md`）
+- 🔧 Codex AGENTS.md 更新為效率優先版本
+- 🔧 Serena MCP 改為全局配置（移除專案綁定）
+- 📝 新增規範檔案對比說明（Codex vs Claude Code）
+- 📝 更新部署腳本：支援 AGENTS.md 與 config.toml 部署
+- 📝 更新倉庫結構文件（含 claude/ 目錄）
+
+### 2025-10-27（第一版）
 - 🚀 整合 CODEX MCP 配置到部署腳本
 - 📦 新增 10 個 MCP 服務完整配置
 - 🔧 新增 API Keys 互動式設定功能

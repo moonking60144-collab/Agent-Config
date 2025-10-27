@@ -211,29 +211,34 @@ if not exist "%CODEX_DIR%" (
     echo ✓ 已建立目錄: %CODEX_DIR%
 )
 
-:: 複製 AGENTS.md
-if exist "%SCRIPT_DIR%AGENTS.md" (
-    copy /Y "%SCRIPT_DIR%AGENTS.md" "%CODEX_DIR%\AGENTS.md" >nul
+:: [6a] 複製 AGENTS.md（Codex 全局規範 - 效率優先版本）
+if exist "%SCRIPT_DIR%codex\AGENTS.md" (
+    copy /Y "%SCRIPT_DIR%codex\AGENTS.md" "%CODEX_DIR%\AGENTS.md" >nul
     if %errorlevel% equ 0 (
-        echo ✓ 已部署 AGENTS.md
+        echo ✓ 已部署 AGENTS.md（Codex 全局規範）
     ) else (
         echo ❌ 部署 AGENTS.md 失敗
     )
 ) else (
-    echo ⊘ 找不到 AGENTS.md，跳過
+    echo ⊘ 找不到 codex\AGENTS.md，跳過
 )
 
-:: 複製 config.toml
+:: [6b] 複製 config.toml（MCP 服務配置 - Serena 全局模式）
 if exist "%SCRIPT_DIR%codex\config.toml" (
     copy /Y "%SCRIPT_DIR%codex\config.toml" "%CODEX_DIR%\config.toml" >nul
     if %errorlevel% equ 0 (
-        echo ✓ 已部署 config.toml
+        echo ✓ 已部署 config.toml（Serena 全局配置）
     ) else (
         echo ❌ 部署 config.toml 失敗
     )
 ) else (
     echo ⊘ 找不到 codex\config.toml，跳過
 )
+
+echo.
+echo CODEX MCP 配置部署完成！
+echo - AGENTS.md：效率優先規範（工具並用、查詢擴展）
+echo - config.toml：10 個 MCP 服務（Serena 全局模式）
 
 echo.
 
@@ -247,7 +252,8 @@ echo.
 echo 📌 MCP 服務需要以下 API Keys：
 echo    1. GitHub Personal Access Token
 echo    2. Firecrawl API Key
-echo    3. 專案路徑（用於 Serena MCP）
+echo.
+echo 📝 注意：Serena MCP 已設定為全局模式，不需要指定專案路徑
 echo.
 set /p SETUP_KEYS="是否現在設定 API Keys？(Y/N，預設 N): "
 
@@ -262,16 +268,12 @@ if /i "%SETUP_KEYS%"=="Y" (
     :: 詢問 Firecrawl Key
     set /p FIRECRAWL_KEY="請輸入 Firecrawl API Key (fc-...): "
 
-    :: 詢問專案路徑
-    set /p PROJECT_PATH="請輸入專案路徑 (例如 C:/Users/XXX/Desktop/Project): "
-
     echo.
     echo 正在更新 config.toml...
 
     :: 使用 PowerShell 替換佔位符
     powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_GITHUB_TOKEN_HERE', '%GITHUB_TOKEN%' | Set-Content '%CODEX_DIR%\config.toml'"
     powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_FIRECRAWL_API_KEY_HERE', '%FIRECRAWL_KEY%' | Set-Content '%CODEX_DIR%\config.toml'"
-    powershell -Command "(Get-Content '%CODEX_DIR%\config.toml') -replace 'YOUR_PROJECT_PATH_HERE', '%PROJECT_PATH%' | Set-Content '%CODEX_DIR%\config.toml'"
 
     echo ✓ API Keys 已設定完成
     set "KEYS_STATUS=已設定"
@@ -279,7 +281,7 @@ if /i "%SETUP_KEYS%"=="Y" (
     echo ✓ 跳過 API Keys 設定
     echo.
     echo 📌 請稍後手動編輯：%CODEX_DIR%\config.toml
-    echo    參考範本：.env.example
+    echo    設定 GitHub Token 與 Firecrawl API Key
     set "KEYS_STATUS=需手動設定"
 )
 

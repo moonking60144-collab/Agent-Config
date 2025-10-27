@@ -35,7 +35,6 @@ startup_timeout_ms = 20000
 [mcp_servers.serena]
 command = "cmd"
 args = ["/c", "uvx", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server","--context","ide-assistant",
-"--project","YOUR_PROJECT_PATH_HERE",
 "--enable-web-dashboard","false",
 "--enable-gui-log-window","false"]
 env = { SystemRoot = 'C:\WINDOWS', COMSPEC = 'C:\WINDOWS\system32\cmd.exe'}
@@ -52,7 +51,7 @@ startup_timeout_ms = 20000
 type = "stdio"
 command = "cmd"
 args = ["/c", "npx", "-y", "@modelcontextprotocol/server-github"]
-env = { SystemRoot = 'C:\WINDOWS', COMSPEC = 'C:\WINDOWS\system32\cmd.exe', GITHUB_PERSONAL_ACCESS_TOKEN = 'YOUR_GITHUB_TOKEN_HERE' }
+env = { SystemRoot = 'C:\WINDOWS', COMSPEC = 'C:\WINDOWS\system32\cmd.exe', GITHUB_PERSONAL_ACCESS_TOKEN = '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' }
 startup_timeout_ms = 20000
 
 [mcp_servers.memory]
@@ -64,5 +63,5 @@ startup_timeout_ms = 20000
 [mcp_servers.firecrawl]
 command = "cmd"
 args = ["/c", "npx", "-y", "firecrawl-mcp"]
-env = { SystemRoot = 'C:\WINDOWS', COMSPEC = 'C:\WINDOWS\system32\cmd.exe',FIRECRAWL_API_KEY = 'YOUR_FIRECRAWL_API_KEY_HERE'}
+env = { SystemRoot = 'C:\WINDOWS', COMSPEC = 'C:\WINDOWS\system32\cmd.exe',FIRECRAWL_API_KEY = 'fc-547d0dcd40044706b5ebe2c28a9df905'}
 startup_timeout_ms = 20000
