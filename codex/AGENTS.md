@@ -353,3 +353,9 @@ AGENTS.md - 全局配置（更新版）
 - 本檔即為現行規範，舊版限制性條款視為移除或被本檔覆蓋。
 - 若有法規/合約/公司合規要求，將以該要求為最高優先（本檔不再額外添加平台外的限制）。
 
+## Serena 自動啟用（本專案）
+
+- 啟動本專案工作區時，自動執行：啟用 Serena、檢查 onboarding。
+- 預設工具優先：Serena 語意檢索與符號級編輯（`find_symbol`、`search_for_pattern`、`insert/replace`）。
+- 作用範圍：`c:\Users\FD0287\Desktop\Javascript.Ragic`。
+- 需要停用時，直接在對話回覆「停用 Serena 自動啟用」即可；欲恢復則回覆「啟用 Serena 自動啟用」。

@@ -26,7 +26,7 @@ AGENTS.md - 全局配置（更新版）
 - 授人以漁 → 解法同時附思路與踩坑提醒。
 
 ## MCP 策略（優先於本檔其他規則）
-
+　請確保啟動 Serena MCP 伺服器後，再在 VS Code 中執行 AI 輔助功能，無倫在執行何種任務都用Serena MCP進行編碼修改。
 - 工具並用：允許單回合同時或串行使用多個 MCP 工具（Serena、Firecrawl、Context7、Memory、Sequential Thinking、GitHub…）。
 - 查詢擴展：不再實施「最小必要」硬限制；可主動擴大關鍵詞、相鄰主題與案例檢索，保障完整度與準確性。
 - 離線優先：能以本地檔案與既有知識完成則離線；需要官方/最新/交叉驗證時主動外呼。
@@ -166,3 +166,10 @@ AGENTS.md - 全局配置（更新版）
 - 本檔即為現行規範，舊版限制性條款視為移除或被本檔覆蓋。
 - 若有法規/合約/公司合規要求，將以該要求為最高優先（本檔不再額外添加平台外的限制）。
 
+## Serena 自動啟用（本專案）
+
+- 啟動專案時，自動啟用 Serena 並檢查 onboarding。
+- 預設優先使用 Serena 工具：`find_symbol`、`search_for_pattern`、`insert/replace` 等。
+- 適用範圍：`c:\Users\FD0287\Desktop\Javascript.Ragic` 專案目錄及其子目錄。
+- 若需暫停自動啟用，請在對話中明確說「停用 Serena 自動啟用」。
+- 如需恢復，說「啟用 Serena 自動啟用」。
