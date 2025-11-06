@@ -166,10 +166,16 @@ AGENTS.md - 全局配置（更新版）
 - 本檔即為現行規範，舊版限制性條款視為移除或被本檔覆蓋。
 - 若有法規/合約/公司合規要求，將以該要求為最高優先（本檔不再額外添加平台外的限制）。
 
-## Serena 自動啟用（本專案）
+## Serena 自動啟用（全域）
 
-- 啟動專案時，自動啟用 Serena 並檢查 onboarding。
-- 預設優先使用 Serena 工具：`find_symbol`、`search_for_pattern`、`insert/replace` 等。
-- 適用範圍：`c:\Users\FD0287\Desktop\Javascript.Ragic` 專案目錄及其子目錄。
-- 若需暫停自動啟用，請在對話中明確說「停用 Serena 自動啟用」。
-- 如需恢復，說「啟用 Serena 自動啟用」。
+- 每次進入任何專案的第一個回合，必須先呼叫 `mcp__serena__activate_project`，`project` 參數設定為當前工作路徑或使用者指定的專案路徑。
+- 啟用後立刻執行 `mcp__serena__check_onboarding_performed`；若回傳未完成，必須接著呼叫 `mcp__serena__onboarding` 完成初始設定。
+- 後續涉及程式碼檢索或編輯時，預設優先使用 Serena 工具（`mcp__serena__find_symbol`、`mcp__serena__search_for_pattern`、`mcp__serena__insert_*` 系列）；若因限制無法使用，需在回覆中註明原因再改採其他方式。
+- 如需暫停自動啟用，請在對話中明確說「停用 Serena 自動啟用」；如要恢復，說「啟用 Serena 自動啟用」。
+
+## Sequential Thinking 自動啟用
+
+- 面對非瑣碎任務時，於回合開頭主動呼叫 `mcp__sequential-thinking__sequentialthinking` 進行思路展開與計畫；若判斷任務極簡（例如只需讀取片段），可跳過並在回覆中註明理由。
+- 初次呼叫時需提供至少兩個思考步驟的預估總數，並在流程中視需要更新；完成任務前，最後一步應回到 Sequential Thinking 確認結論。
+- 若遇到工具限制導致無法呼叫，需在回覆中說明並採用替代方案，同時記錄未能使用的原因。
+
