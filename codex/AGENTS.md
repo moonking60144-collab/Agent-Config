@@ -359,3 +359,23 @@ AGENTS.md - 全局配置（更新版）
 - 預設工具優先：Serena 語意檢索與符號級編輯（`find_symbol`、`search_for_pattern`、`insert/replace`）。
 - 作用範圍：`c:\Users\FD0287\Desktop\Javascript.Ragic`。
 - 需要停用時，直接在對話回覆「停用 Serena 自動啟用」即可；欲恢復則回覆「啟用 Serena 自動啟用」。
+
+## Sequential Thinking / MCP 偏好（本專案）
+
+- sequential_thinking：
+  - auto_plan：true（複雜/多步任務自動開啟計畫面板）
+  - default_total_thoughts：4
+  - when_to_use：跨檔案/跨模組、具不確定性、需要檢查點
+  - rules：允許修正/分支/回退；完成前做「是否完成」檢核
+
+- mcp_auto_invoke：true（可離線工具自動使用）
+  - 可離線工具：Serena、Memory
+  - 需要網路/寫入的外呼依環境策略：
+    - approval=never、network=enabled（目前）：允許自動外呼並揭露來源
+
+- auto_cross_verify：true（關鍵決策並發外呼與來源保留）
+  - 觸發條件：文件歧義/版本差異、錯誤碼不一致、跨系統整合、效能/併發/邊界行為、資料安全/權限/審批流
+  - 提供者：Context7（官方文件/版本）、Firecrawl（頁面原文，必要時保留完整上下文）、DuckDuckGo（公告/入口輔助）
+  - 行為：並發檢索→彙總→列出來源 URL 與抓取時間；有衝突以官方為準並標註差異
+
+- 來源設定：與 Memory `agent_preferences` 同步維護（若有變更，請更新該 Memory）
