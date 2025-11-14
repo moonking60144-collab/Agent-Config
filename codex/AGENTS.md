@@ -316,6 +316,10 @@ AGENTS.md - 全局配置（更新版）
 3. 寫程式：參考官方模式 + 既有範例。
 4. 測試指引：附上測試步驟（表單/欄位/預期 log）。
 
+### 官方參考
+- Ragic JavaScript Workflow Engine 文檔（https://www.ragic.com/intl/zh-TW/doc/29/javascript-workflow-engine）為所有 Ragic JS 開發相關專案的語法與邏輯權威依據，任何 Ragic JS 腳本的欄位操作、事件觸發與流程都必須先對照此說明。
+- 若要驗證最新行為或有公式/範例更新需求，請先透過 Context7 解析對應的 library ID（例如 Ragic 的 JavaScript Workflow 文檔）並使用 `get-library-docs` 取得最新版，再依該文件調整流程與註記來源。
+
 ## 工程實踐
 
 - 聚焦成果：變更最小、語義明確，避免不必要影響面。
