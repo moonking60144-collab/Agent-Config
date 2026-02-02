@@ -33,7 +33,7 @@ deploy-vscode.bat
 |---------|------|---------|
 | Sequential Thinking | 任務規劃與步驟分解 | `@modelcontextprotocol/server-sequential-thinking` |
 | Context7 | 即時程式庫文件查詢 | `@upstash/context7-mcp` |
-| DuckDuckGo | 網路搜尋引擎 | `duckduckgo-mcp-server` |
+| Brave Search | 網路搜尋引擎 | `@brave/brave-search-mcp-server` |
 | Serena | 程式碼語意分析與符號級編輯 | `git+https://github.com/oraios/serena` |
 | DeepWiki | 深度維基百科搜尋 | `mcp-deepwiki` |
 | Firecrawl | 網頁抓取/爬行/抽取 | `firecrawl-mcp` |
@@ -50,6 +50,7 @@ deploy-vscode.bat
 **必要 API Keys**：
 - GitHub Personal Access Token (`GITHUB_PERSONAL_ACCESS_TOKEN`)
 - Firecrawl API Key (`FIRECRAWL_API_KEY`)
+- Brave Search API Key (`BRAVE_API_KEY`)
 
 **注意**：Serena MCP 已設定為全局模式，不需要指定專案路徑。
 
