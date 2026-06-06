@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "effortLevel": "xhigh",
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"__USERPROFILE__/.claude/hooks/check-traditional.ps1\"",
+            "timeout": 20,
+            "statusMessage": "檢查繁體中文"
+          }
+        ]
+      }
+    ]
+  }
+}

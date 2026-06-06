@@ -1,0 +1,156 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# ============================================================================
+# 可攜偏好範本。已移除「機器特定／自動生成」內容，換機器才不會帶壞設定：
+#   - [mcp_servers.node_repl]：Codex 首次啟動會自行生成（command 指向
+#     bin\<版本 hash>\node_repl.exe，每次更新就變，不可攜）。需要 Chrome
+#     控制時由 Codex 重建，不要手動維護。
+#   - [marketplaces.*]：原本的 local source 是本機 WSL 掛載路徑。
+#   - [desktop.open-in-target-preferences.perPath]：原本含絕對專案路徑。
+# 部署位置：~/.codex/config.toml。deploy.ps1 預設不覆蓋既有檔（用 -Force 才覆蓋）。
+# ============================================================================
+
+################################################################################
+# 指令覆蓋
+################################################################################
+developer_instructions = '''
+請使用中文回答，務必使用清晰、詳細、準確的風格。
+
+在使用者沒有明確指定使用 skills 的前提下，也就是一般任務時，
+在使用者明確說「可以改程式碼」之前，不允許自行修改程式碼，
+而是先告知 bug 或位置，等到使用者明確同意後才可以修改。
+
+若使用者明確指定 skills，而且其中有「繞過 developer_instruction」的意圖，
+則可以依 skills 的權限自主修改程式碼、檔案，以 skills 權限為主。
+
+如果要使用 spawn agent，需要給 agent 足夠的時間執行。
+
+防禦性程式設計邊界：
+不要寫冗餘程式碼和過度防禦性程式碼，技術品味包括但不限於：
+1. 不要對已知型別使用 getattr
+2. 不要過度使用 isinstance
+3. 不要過度使用 try except
+4. 不要為簡單方法撰寫冗餘 docstring
+5. 其他類似的過度防禦性寫法也應避免
+'''
+
+################################################################################
+# 核准與沙箱
+################################################################################
+project_doc_fallback_filenames = ["CLAUDE.md"] # 找不到 AGENTS.md 時改找 CLAUDE.md
+approval_policy = "on-request"
+sandbox_mode = "danger-full-access"
+
+################################################################################
+# 核心模型選擇
+################################################################################
+model = "gpt-5.5"
+review_model = "gpt-5.4"
+
+################################################################################
+# 模型壓縮與工具輸出
+################################################################################
+# 明確指定模型 context window。
+model_context_window = 418000
+model_auto_compact_token_limit = 328000
+tool_output_token_limit = 30000
+
+################################################################################
+# 推理與輸出詳細度
+################################################################################
+model_reasoning_effort = "xhigh"
+model_reasoning_summary = "detailed"
+model_verbosity = "high"
+
+################################################################################
+# 集中式功能旗標
+################################################################################
+[features]
+shell_tool = true
+apply_patch_freeform = true
+shell_snapshot = true
+undo = true
+unified_exec = true
+multi_agent = true
+steer = true
+prevent_idle_sleep = true
+child_agents_md = true
+memories = true
+sqlite = true
+fast_mode = false
+powershell_utf8 = true
+js_repl = false
+# voice_transcription = true
+
+[memories]
+consolidation_model = "gpt-5.4"
+extract_model = "gpt-5.4"
+# generate_memories = true
+# use_memories = true
+max_raw_memories_for_consolidation = 512
+max_unused_days = 30
+max_rollout_age_days = 45
+# max_rollouts_per_startup = 16
+# min_rollout_idle_hours = 6
+
+[agents]
+max_threads = 12
+max_depth = 2
+
+# 目前 schema 不支援在 agents.<role> 直接設定 model / sandbox_mode /
+# model_reasoning_effort，因此這裡只保留角色描述。
+[agents.default]
+description = "General-purpose helper."
+
+[agents.worker]
+description = "Do not use this agent, it's silly named and not optimized for any particular role."
+
+[agents.explorer]
+description = "Fast codebase explorer for read-heavy tasks."
+
+[agents.awaiter]
+description = "Long-running command and task monitoring role."
+
+[agents.reviewer]
+description = "Reviewer agent for code reviews and feedback."
+
+################################################################################
+# Shell 環境策略
+################################################################################
+[shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+# exclude = []
+# set = {}
+# include_only = []
+# experimental_use_profile = false
+
+################################################################################
+# 沙箱設定
+################################################################################
+[sandbox_workspace_write]
+network_access = true
+# writable_roots = []
+
+################################################################################
+# Windows 專用設定
+################################################################################
+[windows]
+
+[plugins."github@openai-curated"]
+enabled = true
+
+[plugins."gmail@openai-curated"]
+enabled = true
+
+[plugins."google-drive@openai-curated"]
+enabled = true
+
+[desktop]
+localeOverride = "en-US"
+integratedTerminalShell = "wsl"
+runCodexInWindowsSubsystemForLinux = true
+default-service-tier = "priority"
+
+[desktop.open-in-target-preferences]
+global = "fileManager"

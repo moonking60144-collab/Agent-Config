@@ -1,27 +1,27 @@
-# VSCode-Config .gitignore
-# 私人倉庫用（可保留大部分檔案）
+# === 絕不進版控：憑證與帳號狀態（萬一把 ~/.claude 或 ~/.codex 誤複製進 repo 也擋掉）===
+.credentials.json
+auth.json
+.claude.json
+.env
+*.env
+.sandbox-secrets/
 
-# 系統檔案
+# === 機器特定：由 deploy.ps1 在每臺機器生成，不上傳 ===
+# 範本見 claude/profile.example.md
+claude/profile.md
+
+# === 備份檔（deploy 覆蓋既有設定時產生）===
+*.bak
+*.bak.*
+
+# === 系統檔 ===
 .DS_Store
 Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
-
-# 暫存/備份檔案
-*.bak
 *.tmp
 *.log
 *.old
-
-# Windows 系統檔案
-*.lnk
-*.ini
-
-# 編輯器暫存檔
 *~
 .*.swp
 .*.swo
-
-# 可選：如果未來要公開倉庫，取消以下註解
-# User/settings.json
-# extensions.txt
