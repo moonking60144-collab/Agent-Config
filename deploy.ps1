@@ -113,6 +113,12 @@ Write-Host ''
 Info '[2/4] Codex'
 $codexDir = Join-Path $U '.codex'
 Ensure-Dir $codexDir
+
+$codexAgents = Join-Path $codexDir 'AGENTS.md'
+Backup-IfExists $codexAgents
+Copy-Item (Join-Path $src 'codex\AGENTS.md') $codexAgents -Force
+Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
+
 $codexCfg = Join-Path $codexDir 'config.toml'
 if((Test-Path $codexCfg) -and -not $ForceCodex){
   Skip 'config.toml 已存在，保留現有（含機器特定 node_repl）。要覆蓋請加 -ForceCodex'

@@ -3,8 +3,8 @@
 .SYNOPSIS
   把本機現有設定回寫到本 repo（deploy.ps1 的反方向），方便把某臺機器的調整同步回版控。
 .DESCRIPTION
-  回寫 Claude Code 的 CLAUDE.md / settings.json / hooks，以及 VS Code 的 settings /
-  keybindings / extensions 清單。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
+  回寫 Claude Code 的 CLAUDE.md / settings.json / hooks、Codex AGENTS.md，
+  以及 VS Code 的 settings / keybindings / extensions 清單。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
   還原成佔位符。回寫後請 git diff 檢視再 commit。
   Codex config.toml 與 profile.md 含機器特定內容，不自動回寫。
 #>
@@ -41,6 +41,13 @@ if(Test-Path $hk){
   Copy-Item (Join-Path $hk '*') (Join-Path $src 'claude\hooks') -Recurse -Force
   Ok 'hooks <- ~/.claude/hooks'
 }
+
+# Codex AGENTS.md（可攜全域指令）
+$ca = Join-Path $U '.codex\AGENTS.md'
+if(Test-Path $ca){
+  Copy-Item $ca (Join-Path $src 'codex\AGENTS.md') -Force
+  Ok 'AGENTS.md <- ~/.codex/AGENTS.md'
+} else { Skip "$ca 不存在" }
 
 # VS Code settings（把 GCP 專案 ID 換回佔位符）
 $vs = Join-Path $env:APPDATA 'Code\User\settings.json'
