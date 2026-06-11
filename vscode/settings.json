@@ -5,7 +5,7 @@
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "claudeCode.selectedModel": "default",
   "claudeCode.preferredLocation": "panel",
-  "chatgpt.runCodexInWindowsSubsystemForLinux": true,
+  "chatgpt.runCodexInWindowsSubsystemForLinux": false,
   "chatgpt.localeOverride": null,
   "chatgpt.cliExecutable": "",
   "commit-message-editor.staticTemplate": [

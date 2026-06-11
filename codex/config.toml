@@ -51,8 +51,8 @@ review_model = "gpt-5.4"
 # 模型壓縮與工具輸出
 ################################################################################
 # 明確指定模型 context window。
-model_context_window = 418000
-model_auto_compact_token_limit = 328000
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
 tool_output_token_limit = 30000
 
 ################################################################################
@@ -147,9 +147,9 @@ enabled = true
 enabled = true
 
 [desktop]
-localeOverride = "en-US"
-integratedTerminalShell = "wsl"
-runCodexInWindowsSubsystemForLinux = true
+localeOverride = "zh-TW"
+integratedTerminalShell = "powershell"
+runCodexInWindowsSubsystemForLinux = false
 default-service-tier = "priority"
 
 [desktop.open-in-target-preferences]
