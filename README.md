@@ -38,7 +38,11 @@ config/
 │       └── check-traditional.ps1#   Stop hook：偵測回覆含簡體字就擋下要求改繁體
 ├── codex/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
-│   └── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
+│   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
+│   └── skills/
+│       └── review/              #   Codex review skill（issue-first 審查準則）
+│           ├── SKILL.md
+│           └── agents/openai.yaml
 └── vscode/
     ├── settings.json            # 合併後的 VS Code 設定（GCP 專案 ID 已佔位）
     ├── keybindings.json
@@ -66,12 +70,14 @@ config/
 
 `AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
 
+`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理 `review` skill，用於 issue-first 的 code、architecture、integration、PR/diff 與 system review；deploy 只同步 repo 內存在的 skill 目錄，backup 也只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進版控。
+
 `config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。已**剔除**機器特定 / 自動生成的內容：
 
 - `[mcp_servers.node_repl]` — Codex 首次啟動自行生成，command 指向 `bin\<版本 hash>\node_repl.exe`，每次更新就變。
 - `[marketplaces.*]` 的 local source、`[desktop.open-in-target-preferences.perPath]` 的絕對路徑。
 
-`config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 不含機器特定 runtime 路徑，部署時會直接備份並覆蓋。
+`config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會直接備份並覆蓋。
 
 ### VS Code（`vscode/`）
 
@@ -91,7 +97,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 與 `profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 與 `profile.md` 含機器特定內容，不自動回寫。
 
 ---
 

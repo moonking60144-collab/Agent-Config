@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review"
+  short_description: "問題優先的程式碼、架構與整合審查"
+  default_prompt: "使用 $review 審查這次變更，先界定 scope，再用觸發鏈、嚴重度校準與 test discovery 檢查列出 findings。"

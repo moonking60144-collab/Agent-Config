@@ -32,7 +32,12 @@ function Ensure-Dir($p){ if(-not(Test-Path $p)){ New-Item -ItemType Directory -F
 function Backup-IfExists($p){
   if(Test-Path $p){
     $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
-    Copy-Item $p "$p.bak.$ts" -Force
+    $item = Get-Item $p
+    if($item.PSIsContainer){
+      Copy-Item $p "$p.bak.$ts" -Recurse -Force
+    } else {
+      Copy-Item $p "$p.bak.$ts" -Force
+    }
     Ok "已備份 $(Split-Path $p -Leaf) -> *.bak.$ts"
   }
 }
@@ -118,6 +123,19 @@ $codexAgents = Join-Path $codexDir 'AGENTS.md'
 Backup-IfExists $codexAgents
 Copy-Item (Join-Path $src 'codex\AGENTS.md') $codexAgents -Force
 Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
+
+$codexSkillsSrc = Join-Path $src 'codex\skills'
+if(Test-Path $codexSkillsSrc){
+  $codexSkillsDir = Join-Path $codexDir 'skills'
+  Ensure-Dir $codexSkillsDir
+  Get-ChildItem $codexSkillsSrc -Directory | ForEach-Object {
+    $target = Join-Path $codexSkillsDir $_.Name
+    Backup-IfExists $target
+    Ensure-Dir $target
+    Copy-Item (Join-Path $_.FullName '*') $target -Recurse -Force
+    Ok "skills/$($_.Name) -> ~/.codex/skills/$($_.Name)"
+  }
+}
 
 $codexCfg = Join-Path $codexDir 'config.toml'
 if((Test-Path $codexCfg) -and -not $ForceCodex){
