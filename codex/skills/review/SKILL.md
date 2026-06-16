@@ -19,14 +19,16 @@ description: Issue-first code, architecture, integration, pull request, and chan
    - Branch/PR review：先找 merge-base，再看相對 base 的 diff；使用者給明確命令時照命令。
    - Audit/system review：以使用者指定的系統邊界、資料流、模組或風險面為 scope，不以 diff 為唯一來源。
    - Re-review：驗證修補 diff 是否消除原 finding 的觸發條件，並檢查修補 diff 是否直接引入新的 P0/P1 風險；不要發散新增 P3 或無關 backlog。
-3. 先索引後讀取。用 `rg`、symbol search、test names、route names 或 diff hunk 先定位高風險區，再讀必要檔案；確認高風險後才擴大到完整檔案或完整 caller/downstream。
-4. 讀專案規範與現有模式。優先看 `AGENTS.md`、相關 README、鄰近實作、測試、呼叫端與 downstream。
-5. 追完整路徑。對每個高風險點，至少追 caller -> changed function/module -> downstream consumer/test/UI/API/storage/deploy effect。
-6. 比對使用者意圖與實際行為。確認 edge cases、錯誤處理、快取/並發、狀態同步、資料格式、權限、安全邊界與部署環境。
-7. 能實測就實測，但維持唯讀邊界。可跑 test/build/typecheck/lint；不要跑 formatter `--write`、lint `--fix`、codegen、migration、會改資料的腳本或外部系統寫入。若測試產生檔案或快取，在驗證結果中註明。
-8. 測試先精準 scope；若 runner 無法 scope、pattern 被忽略、glob 不含新測試、custom runner 其實跑全測、或 dist/generated/nested tests 沒被 discovery，要明確回報。測試失敗先歸因：PR/diff/branch/re-review 中，確認失敗是確定性、可隔離、且由本次變更造成，再列為 finding；audit/system review 中，可列確定性的既有失敗，但要標成 `既有順帶發現`；flaky、資源搶佔或既有環境問題要標明，不混進變更風險。
-9. 對外部 API、規格、workflow/automation API、版本行為或產品功能的主張，不憑印象；查官方文件或一手來源後再下結論。
-10. 不確定時明確標示不確定點、原因、驗證方式。不要把猜測包裝成 finding。
+3. 不要把廣義 audit 降格成 diff review。若使用者要求「掃整個系統」、「找所有 bug」、「flag conflicts」、「inconsistencies」、「refactor」、「architecture/integration 全面檢查」或類似語意，預設是 Audit/system review；不能只檢查 uncommitted changes 後宣稱沒有問題。若系統邊界過大到無法一次完成，先提出分區掃描計畫或問一個必要問題。
+4. 先索引後讀取。用 `rg`、symbol search、test names、route names 或 diff hunk 先定位高風險區，再讀必要檔案；確認高風險後才擴大到完整檔案或完整 caller/downstream。
+5. 讀專案規範與現有模式。優先看 `AGENTS.md`、相關 README、鄰近實作、測試、呼叫端與 downstream。
+6. 追完整路徑。對每個高風險點，至少追 caller -> changed function/module -> downstream consumer/test/UI/API/storage/deploy effect。
+7. Audit/system review 要先建立風險地圖，再抽查與追路徑。依 scope 搜尋 feature flags/config/env keys、互斥狀態、重複 source of truth、frontend/backend contract、cache/invalidation、event/SSE/watchers、DB/schema/read model、background jobs、test discovery、deployment scripts 與錯誤處理；不能只用 build/lint 綠燈替代系統審查。
+8. 比對使用者意圖與實際行為。確認 edge cases、錯誤處理、快取/並發、狀態同步、資料格式、權限、安全邊界與部署環境。
+9. 能實測就實測，但維持唯讀邊界。可跑 test/build/typecheck/lint；不要跑 formatter `--write`、lint `--fix`、codegen、migration、會改資料的腳本或外部系統寫入。若測試產生檔案或快取，在驗證結果中註明。
+10. 測試先精準 scope；若 runner 無法 scope、pattern 被忽略、glob 不含新測試、custom runner 其實跑全測、或 dist/generated/nested tests 沒被 discovery，要明確回報。測試失敗先歸因：PR/diff/branch/re-review 中，確認失敗是確定性、可隔離、且由本次變更造成，再列為 finding；audit/system review 中，可列確定性的既有失敗，但要標成 `既有順帶發現`；flaky、資源搶佔或既有環境問題要標明，不混進變更風險。
+11. 對外部 API、規格、workflow/automation API、版本行為或產品功能的主張，不憑印象；查官方文件或一手來源後再下結論。
+12. 不確定時明確標示不確定點、原因、驗證方式。不要把猜測包裝成 finding。
 
 ## Findings 標準
 
@@ -62,6 +64,12 @@ description: Issue-first code, architecture, integration, pull request, and chan
 - PR/diff/branch review：只列 `本次引入` 與 `既有被放大`。
 - Audit/system review：可列 `既有順帶發現`，但要明確標記，避免混成必修 PR blocker。
 
+若使用者明確要求 refactor、inconsistency、cleanup、architecture smell 或 flag conflict：
+
+- 會造成錯誤行為、資料風險、安全風險或部署風險的，仍列 findings。
+- 不足以構成 finding、但會增加維護風險或讓後續 bug 更容易發生的，列在 `改善建議`，不要硬塞 P3，也不要省略。
+- `改善建議` 需要有具體位置、衝突點與整理方向；不要列個人偏好。
+
 停止準則：範圍掃完就停；trigger 證明可達即可；不要為湊數繼續挖無關區，也不要因為找到一個問題就停止看同一風險面的直接 downstream。
 
 ## 輸出格式
@@ -80,6 +88,14 @@ description: Issue-first code, architecture, integration, pull request, and chan
 接著列：
 
 ```text
+審查範圍與覆蓋
+- mode、base/diff 或 audit system boundary。
+- 已索引/抽查/追路徑的區域、關鍵檔案、測試與入口。
+- 未涵蓋區域與原因。Audit/system review 若只看 uncommitted changes，必須明確說「這不是完整 system audit」。
+
+改善建議
+- 只在使用者要求 refactor/inconsistency/cleanup/architecture smell/flag conflict，或審查中看到具體維護風險時列出。
+
 待確認問題
 - 只列會影響判斷或修法的問題；合理但未證實可達的觸發鏈放這裡，不放 findings。
 
@@ -91,7 +107,7 @@ description: Issue-first code, architecture, integration, pull request, and chan
 - 只在最後用 1-3 句補充整體判斷。
 ```
 
-沒有 finding 時，直接說「沒有發現需要阻擋的問題」，再列測試缺口或殘餘風險。不要硬湊問題，不重述 diff。
+沒有 finding 時，直接說「沒有發現需要阻擋的問題」，但仍必須列 `審查範圍與覆蓋`、測試缺口或殘餘風險。若使用者要求的是 Audit/system review，而實際只檢查 diff、少數檔案或只跑 build/lint，不得用「沒有發現需要阻擋的問題」包裝成完整結論；要明確說明目前只完成哪一段掃描。
 
 ## 行內 Comment
 
