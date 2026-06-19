@@ -40,9 +40,9 @@ config/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
 │   └── skills/
-│       └── review/              #   Codex review skill（issue-first 審查準則）
-│           ├── SKILL.md
-│           └── agents/openai.yaml
+│       ├── review/              #   issue-first 審查準則
+│       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
+│       └── repo-onboarding-audit/   # 陌生 repo 的 read-only 偵查與架構盤點流程
 └── vscode/
     ├── settings.json            # 合併後的 VS Code 設定（GCP 專案 ID 已佔位）
     ├── keybindings.json
@@ -70,7 +70,15 @@ config/
 
 `AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
 
-`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理 `review` skill，用於 issue-first 的 code、architecture、integration、PR/diff 與 system review；deploy 只同步 repo 內存在的 skill 目錄，backup 也只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進版控。
+`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理三個 Codex skills：
+
+| Skill | 使用時機 | 重點 |
+|-------|----------|------|
+| `review` | 使用者要求 review、audit、inspect、PR/diff/branch review、architecture/integration/system review | issue-first 審查，先列 bugs、回歸、安全、測試與部署風險 |
+| `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 先記錄 task goal、最後成功步驟、失敗工具/指令、重複模式、環境假設，再分類 root cause，選最小可逆驗證動作 |
+| `repo-onboarding-audit` | 進陌生 repo、開始 review/architecture audit 前缺上下文、要先盤點 stack、entry point、test surface 或 validation commands | 唯讀偵查 package manifest、framework fingerprint、entry points、top-level tree、tooling、tests、資料流、conventions、git history |
+
+`deploy.ps1` 只同步 repo 內存在的 skill 目錄，`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進版控。
 
 `config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。已**剔除**機器特定 / 自動生成的內容：
 

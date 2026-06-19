@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Onboarding Audit"
+  short_description: "陌生專案先盤點技術棧入口資料流測試與驗證命令再開始行動"
+  default_prompt: "使用 $repo-onboarding-audit 盤點這個陌生 repo 的 stack、entry points、資料流與慣例。"

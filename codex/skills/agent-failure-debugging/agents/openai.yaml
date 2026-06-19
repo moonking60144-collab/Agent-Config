@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Failure Debugging"
+  short_description: "同一錯誤重複出現時先捕捉現況診斷根因再執行最小可逆恢復"
+  default_prompt: "使用 $agent-failure-debugging 分析這次 agent/tool 重複失敗，先捕捉現況再給最小驗證動作。"
