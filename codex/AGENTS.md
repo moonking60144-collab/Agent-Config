@@ -93,9 +93,10 @@
   - 當輪 lifecycle、transition reason、tool calls、tool results、scratchpad、abort signal。
 - Tool contract 不可只是任意 function。每個 tool 至少要有名稱、輸入 schema 解析、permission check、唯讀/可並行/破壞性標記、interrupt behavior、timeout、結果大小上限、執行函式與結果標準化。
 - Tool 執行必須 fail-closed：未明確宣告可並行則序列化；未明確宣告唯讀就視為可能寫入；破壞性或權限不明工具必須走攔截或使用者確認。
+- 大型或動態 tool registry 可延遲載入完整 schema，但不能只靠工具名稱就呼叫。必須先透過已載入的 discovery tool 取回完整 schema，且保留 `alwaysLoad` 類機制讓核心工具第一輪即可使用。
 - 同一批 tool call 應先分組：連續 read-only 且 concurrency-safe 的工具可受限並行；任何寫入、shell mutation、外部副作用工具必須序列執行；streaming tool 可以先產生增量輸出，但整合回 transcript 時要保持原始 tool_use 順序。
-- Bash / shell 安全不能只靠字串直覺。read-only 判斷至少要處理 shell metacharacters、redirection、command substitution、Unicode whitespace、brace expansion、wrapper command、path validation；無法解析時視為可能寫入。
-- Tool result 不可無限制塞回模型。大輸出應持久化為 session artifact 或本機檔案，只回傳 preview、路徑、exit code、stdout/stderr 摘要；空輸出也要標準化為成功但無輸出。
+- Bash / PowerShell / shell 安全不能只靠字串直覺。read-only 判斷至少要處理 shell metacharacters、redirection、command substitution / subexpression、Unicode whitespace、brace expansion、wrapper command、cwd-changing compound、provider / UNC path、path validation；無法解析時視為可能寫入。
+- Tool result 不可無限制塞回模型。大輸出應持久化為 session artifact 或本機檔案，只回傳 preview、路徑、exit code、stdout/stderr 摘要；空輸出也要標準化為成功但無輸出。若 tool result replacement 會跨 turn / resume 重播，必須把 replacement 決策寫入 transcript，避免同一 tool_use_id 在 resume 後看到不同內容。
 - Hook contract 要明確分層。若實作 lifecycle hooks，至少區分 `PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionDenied`、`SessionStart`、`Stop/StopFailure`、`PreCompact/PostCompact`、`SessionEnd`；每個 hook 必須有 JSON payload、timeout、是否可阻擋主流程、stdout/stderr 去向與 exit code 語意。觀測型 hook fail-open，安全/permission 型 hook fail-closed 或明確要求使用者確認。
 - 錯誤必須分級處理：
   - Transient：429、rate limit、明確 timeout error、stream idle timeout、ECONNRESET、EPIPE、ETIMEDOUT、EAI_AGAIN、暫時性 5xx，可在底層用 exponential backoff + jitter 重試，預設最多 2 次，並尊重 Retry-After。
@@ -105,6 +106,7 @@
 - Context compactor 不只做摘要。順序應為：限制單一 tool output、限制同一輪 aggregate tool result、剪枝舊讀檔快照、做 micro/snip compact、保留最近完整軌跡，最後才做 summary compact；prompt-too-long 時再做 reactive compact。
 - Compact 完成後必須清理被 compact invalidated 的狀態，例如 microcompact tracker、session/message cache、permission/classifier approvals、speculative checks、context-collapse 或 memory-file cache；但不要無差別清掉仍需跨 compact 保留的 skill content 或使用者明確目標。
 - Session / transcript persistence 必須支援 resume 正確性。Transcript 應 append-only、保留穩定 message id / parent link、記錄 compact boundary、保留最近訊息或 preserved segment 的 relink metadata；compact summary 應提供 full transcript path 供後續讀回細節。Compact 或 session exit 後，要把 session metadata 重新寫到尾端可讀區，避免 resume 只看到過期標題、tag、mode 或第一則 prompt。
+- 多 agent / worker runtime 必須把 worker 身分、cwd/worktree、permission mode、tool pool、abort controller 與 resume metadata 分開保存。不能讓背景 worker 直接卡在無 UI 的權限提示；需要 leader routing、typed mailbox / queue，或 fail-closed。
 - Context 保留白名單：system prompt、全域/專案規範、最近 3 輪完整對話與工具軌跡、仍待處理的 tool result、使用者最後明確目標。
 - Context 優先剪枝黑名單：超過 50 行的舊工具輸出、已被後續寫入覆蓋的檔案快照、重複搜尋結果、已完成且無後續引用的中間診斷。
 - 自動 compact / retry 必須有熔斷：同類失敗連續 3 次後停止自動嘗試，回報已驗證事實與下一個可驗證假設。

@@ -38,10 +38,14 @@ When learning from terminal agent mirrors such as Claude Code source mirrors, ex
 - multi-stage context compaction before summary compaction
 - post-compaction cleanup for caches and tracking state invalidated by compact boundaries
 - append-only transcript persistence with compact boundaries, preserved segment relinks, and resume-safe metadata re-append
-- bash safety based on parsing and conservative fallback, not string intuition
-- large tool output storage with model-visible previews
+- shell safety based on parsing and conservative fallback, not string intuition; treat Bash and PowerShell as separate languages
+- deferred tool schema discovery for large registries, with exact-select and keyword lookup paths
+- large tool output storage with model-visible previews and replay-stable replacement records
+- multi-agent worker/leader coordination with mailbox-backed permission routing
 
 Ignore UI rendering, product telemetry, brand-specific behavior, statusline/voice features, and copied internal naming.
+
+When doing another source-mirror pass, read `references/claude-code-mirror-audit.md` first and update it with any new source-path evidence before changing this skill.
 
 ## Claude Code Mirror Audit
 
@@ -57,10 +61,11 @@ Coverage notes:
 
 - `tanbiralam` and `starkdcc` are substantially the same TypeScript snapshot: `1902` shared `src/` paths; a 300-file hash sample from the shared set matched exactly. Prefer `tanbiralam` for newer A-only files and `starkdcc` for the research README/source map.
 - `tanbiralam` adds relevant A-only SDK/control files such as `src/entrypoints/sdk/controlSchemas.ts`, `src/entrypoints/sdk/coreSchemas.ts`, and stubbed `src/query/transitions.ts`.
+- Query lifecycle guidance comes from `src/QueryEngine.ts`, `src/query/config.ts`, `src/query/deps.ts`, and `src/query/stopHooks.ts`.
 - Tool contract guidance comes from `src/Tool.ts`, `src/tools.ts`, and concrete tools under `src/tools/`, especially `BashTool`, `PowerShellTool`, `FileReadTool`, `FileEditTool`, `AgentTool`, `Task*Tool`, and `ToolSearchTool`.
 - Hook contract guidance comes from `src/schemas/hooks.ts`, `src/utils/hooks.ts`, and settings schema expansion in `src/utils/settings/types.ts`.
-- Permission and shell safety guidance comes from `src/utils/permissions/*`, `src/tools/BashTool/*`, `src/tools/PowerShellTool/*`, and `src/utils/shell/readOnlyCommandValidation.ts`.
-- Context compaction guidance comes from `src/commands/compact/compact.ts`, `src/services/compact/compact.ts`, `src/services/compact/microCompact.ts`, `src/services/compact/reactiveCompact.ts`, `src/services/compact/postCompactCleanup.ts`, and `src/services/compact/autoCompact.ts`.
+- Permission and shell safety guidance comes from `src/utils/permissions/*`, `src/tools/BashTool/*`, `src/tools/PowerShellTool/*`, `src/tools/BashTool/readOnlyValidation.ts`, and `src/tools/PowerShellTool/readOnlyValidation.ts`.
+- Context compaction guidance comes from `src/commands/compact/compact.ts`, `src/services/compact/compact.ts`, `src/services/compact/microCompact.ts`, `src/services/compact/sessionMemoryCompact.ts`, `src/services/compact/postCompactCleanup.ts`, and `src/services/compact/autoCompact.ts`. `src/commands/compact/compact.ts` references a feature-gated `reactiveCompact` path, but `src/services/compact/reactiveCompact.ts` is not present in the audited checkout, so do not cite that missing file as implementation evidence.
 - Transcript/resume guidance comes from `src/bootstrap/state.ts`, `src/utils/sessionStorage.ts`, `src/utils/toolResultStorage.ts`, `src/cli/transports/ccrClient.ts`, `src/cli/print.ts`, and `src/entrypoints/sdk/coreSchemas.ts`.
 - Multi-agent permission and mailbox guidance comes from `src/utils/swarm/*`, `src/tools/AgentTool/*`, `src/utils/teammateMailbox.ts`, and `src/utils/swarm/permissionSync.ts`.
 
@@ -106,6 +111,21 @@ Defaults must fail closed:
 - not concurrency-safe unless explicitly declared
 - not read-only unless explicitly declared
 - destructive operations require explicit permission interception
+- security-relevant tools must override classifier input; default is classifier-hidden
+- model-facing input may be backfilled for observers, but the API-bound input must not be mutated after cache-sensitive serialization
+
+## Deferred Tool Schema Contract
+
+For large or dynamic tool registries, the initial prompt should not always carry every full schema. A deferred tool system should include:
+
+- a small always-loaded discovery tool that is both read-only and concurrency-safe
+- `shouldDefer` / `alwaysLoad` metadata on every tool
+- exact selection by stable tool name for deterministic recovery
+- keyword search with bounded `max_results`
+- a result format that returns callable schema references, not prose instructions
+- pending-provider visibility, so a no-match result can distinguish "missing" from "still connecting"
+
+Never invoke a deferred tool from its name alone. The full schema must be fetched and validated first.
 
 ## Retry Contract
 
@@ -133,6 +153,18 @@ If the runtime supports hooks, define them as typed lifecycle events instead of 
 
 Every hook must declare payload schema, timeout, whether it is blocking, stdout/stderr routing, and exit-code behavior. Observability hooks should fail open. Permission and safety hooks should fail closed or ask the user.
 
+## Shell Permission Contract
+
+Shell permission logic must be parser-driven per shell family:
+
+- Bash and PowerShell need separate parsers, allowlists, path validation, wrapper stripping, and command-injection checks.
+- Do not treat a command as read-only if parsing fails, if a script block/subexpression/nested command is present, or if redirection writes to a file.
+- Strip safe wrappers such as `timeout`, `time`, `nice`, `nohup`, and safe env prefixes only through a validated parser/argv path.
+- Deny and ask rules must be harder to bypass than allow rules. For deny/ask matching, normalize all leading env prefixes and wrappers to a fixed point.
+- PowerShell read-only validation must reject script blocks, subexpressions, expandable strings, splatting, member/static invocations, assignments, stop-parsing, UNC paths, non-filesystem providers, cwd-changing compounds, and unsafe pipeline arguments.
+- Bash validation must reject shell metacharacter ambiguity, command substitution, unsafe wrapper values, redirection/path escapes, compound `cd` plus relative path confusion, and git-operation path bypasses.
+- A synchronous `isReadOnly()` can be a fast conservative prefilter, but the load-bearing permission path must re-parse and re-check before execution.
+
 ## Context Compaction Contract
 
 When context exceeds the configured threshold:
@@ -149,6 +181,22 @@ Compaction and retry loops must have a circuit breaker. After 3 consecutive same
 
 After a successful compaction, run cleanup for state invalidated by the compact boundary: microcompact trackers, session/message caches, permission/classifier approvals, speculative checks, context-collapse state, and memory-file caches. Preserve skill content and the user's active objective unless the implementation has an explicit replacement.
 
+## Tool Result Budget Contract
+
+Large tool outputs need two layers of protection:
+
+- Per-tool output limits: individual tools should persist oversized output and return a model-visible preview plus path.
+- Aggregate message limits: multiple parallel tool results can merge into one model-facing user message, so the runner must budget the normalized wire message, not only each raw result.
+
+Replacement decisions must be stable across turns:
+
+- Track seen tool result IDs and frozen replacement choices in per-thread state.
+- Persist replacement records into the transcript so resume reconstructs the same model-visible preview bytes.
+- Re-apply cached replacements by ID without file I/O when possible.
+- Never later replace a result that the model already saw unreplaced; that breaks prompt-cache and resume consistency.
+- Group candidates the same way the API serializer groups user/tool-result messages, including parallel tool result edge cases.
+- Tools whose output is already self-bounded, such as full file reads, may opt out through an explicit infinite or no-persist limit.
+
 ## Transcript Persistence Contract
 
 For runtimes that support resume, transcript persistence is part of the agent core:
@@ -159,6 +207,32 @@ For runtimes that support resume, transcript persistence is part of the agent co
 - Keep a full transcript path in compact summaries so the agent can recover exact old snippets or error output when needed.
 - Re-append session metadata after compaction and on session exit so tail-window readers still see current title, tag, mode, worktree, PR, and last prompt.
 - Avoid letting deduped preserved messages advance parent pointers past the compact boundary during resume reconstruction.
+
+## Control/Event Schema Contract
+
+If the runtime exposes SDK, structured output, replay, or remote-control events, define schemas for the wire format instead of streaming untyped blobs:
+
+- user, assistant, system, result, error, status, rate-limit, and compact-boundary messages
+- `parent_tool_use_id` on every user/assistant/stream event that can belong to a tool subtree
+- stable `uuid` and `session_id`
+- compact-boundary metadata with trigger, pre-token count, and preserved-segment relink fields
+- permission-denial records with tool name, tool use ID, and original input
+- `transcript_path`, `permission_mode`, `cwd`, active tools, MCP/plugin/skill lists, and model in init/session messages
+
+Compact boundaries and status changes must be first-class events; do not infer them from prose summaries.
+
+## Multi-Agent Coordination Contract
+
+For worker, teammate, fork, or swarm runtimes:
+
+- Worker contexts must have their own identity, abort controller, cwd/worktree metadata, permission mode, and tool pool.
+- Background workers that cannot show UI should avoid direct permission prompts; route permission requests to the leader or fail closed.
+- Worker-to-leader permission requests need typed payloads: request ID, worker ID/name, tool name, tool use ID, input, suggestions, decision, updated input, permission updates, and timestamp.
+- Mailbox or queue writes must be atomic enough for concurrent workers; lock or use an append-only protocol when filesystem-backed.
+- Permission updates approved by the leader must be applied to the shared context deliberately without letting a worker silently change the leader's mode.
+- Prevent recursive team topologies unless the runtime explicitly supports them; flat rosters are easier to reason about and debug.
+- Worktree or remote isolation must persist enough metadata for resume and cleanup.
+- A worker resume path must reconstruct inherited tool-result replacements and permission context before continuing.
 
 ## Template Use
 
