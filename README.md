@@ -45,7 +45,8 @@ config/
 │   └── skills/
 │       ├── review/              #   issue-first 審查準則
 │       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
-│       └── repo-onboarding-audit/   # 陌生 repo 的 read-only 偵查與架構盤點流程
+│       ├── repo-onboarding-audit/   # 陌生 repo 的 read-only 偵查與架構盤點流程
+│       └── agent-core-engine/       # custom agent runtime / tool loop / compactor 設計準則
 └── vscode/
     ├── settings.json            # 合併後的 VS Code 設定（GCP 專案 ID 已佔位）
     ├── keybindings.json
