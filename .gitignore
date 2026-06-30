@@ -13,6 +13,7 @@ claude/profile.md
 # === 備份檔（deploy 覆蓋既有設定時產生）===
 *.bak
 *.bak.*
+codex/tmp/
 
 # === 系統檔 ===
 .DS_Store

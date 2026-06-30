@@ -39,6 +39,7 @@ config/
 ├── codex/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
+│   ├── model-catalog.json       #   Codex model catalog override（讓 gpt-5.5 effective context 對齊 40 萬）
 │   └── skills/
 │       ├── review/              #   issue-first 審查準則
 │       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
@@ -80,12 +81,14 @@ config/
 
 `deploy.ps1` 只同步 repo 內存在的 skill 目錄，`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進版控。
 
-`config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。已**剔除**機器特定 / 自動生成的內容：
+`config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。`model_catalog_json` 使用相對路徑 `model-catalog.json`，部署時會和 catalog 檔一起放在 `~/.codex/`，避免寫死 Windows / macOS 使用者路徑。已**剔除**機器特定 / 自動生成的內容：
 
 - `[mcp_servers.node_repl]` — Codex 首次啟動自行生成，command 指向 `bin\<版本 hash>\node_repl.exe`，每次更新就變。
 - `[marketplaces.*]` 的 local source、`[desktop.open-in-target-preferences.perPath]` 的絕對路徑。
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會直接備份並覆蓋。
+
+目前 repo 版 Codex 預設以 `gpt-5.5` 為主，context / auto compact 使用 40 萬等級安全值：`model_context_window = 400000`、`model_catalog_json = "model-catalog.json"`、`model_auto_compact_token_limit = 360000`。不要把 5.4 的 1M context 設定直接套到 5.5。
 
 ### VS Code（`vscode/`）
 
@@ -105,7 +108,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 與 `profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
 
 ---
 

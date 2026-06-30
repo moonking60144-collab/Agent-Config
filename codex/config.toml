@@ -7,7 +7,7 @@
 #     控制時由 Codex 重建，不要手動維護。
 #   - [marketplaces.*]：原本的 local source 是本機 WSL 掛載路徑。
 #   - [desktop.open-in-target-preferences.perPath]：原本含絕對專案路徑。
-# 部署位置：~/.codex/config.toml。deploy.ps1 預設不覆蓋既有檔（用 -Force 才覆蓋）。
+# 部署位置：~/.codex/config.toml。deploy.ps1 預設不覆蓋既有檔（用 -ForceCodex 才覆蓋）。
 # ============================================================================
 
 ################################################################################
@@ -50,16 +50,18 @@ review_model = "gpt-5.5"
 ################################################################################
 # 模型壓縮與工具輸出
 ################################################################################
-# 明確指定模型 context window。
-model_context_window = 1000000
-tool_output_token_limit = 30000
+# gpt-5.5 目前不是 1M context；壓縮閾值需低於模型上限才會有效提早發動。
+model_context_window = 400000
+model_catalog_json = "model-catalog.json"
+model_auto_compact_token_limit = 360000
+tool_output_token_limit = 12000
 
 ################################################################################
 # 推理與輸出詳細度
 ################################################################################
-model_reasoning_effort = "xhigh"
-model_reasoning_summary = "detailed"
-model_verbosity = "high"
+model_reasoning_effort = "high"
+model_reasoning_summary = "concise"
+model_verbosity = "medium"
 
 ################################################################################
 # 集中式功能旗標

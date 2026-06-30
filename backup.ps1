@@ -6,7 +6,7 @@
   回寫 Claude Code 的 CLAUDE.md / settings.json / hooks、Codex AGENTS.md / repo 管理的 skills，
   以及 VS Code 的 settings / keybindings / extensions 清單。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
   還原成佔位符。回寫後請 git diff 檢視再 commit。
-  Codex config.toml 與 profile.md 含機器特定內容，不自動回寫。
+  Codex config.toml 只回寫可攜模型 / token 行為 key；profile.md 含機器特定內容，不自動回寫。
 #>
 [CmdletBinding()]
 param()
@@ -18,6 +18,55 @@ $enc = New-Object System.Text.UTF8Encoding $false
 
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
+
+function Sync-CodexPortableConfig {
+  param(
+    [Parameter(Mandatory=$true)][string]$LocalPath,
+    [Parameter(Mandatory=$true)][string]$RepoPath
+  )
+
+  if((-not (Test-Path $LocalPath)) -or (-not (Test-Path $RepoPath))){
+    Skip 'Codex config.toml 不完整，略過可攜 key 回寫'
+    return
+  }
+
+  $portableKeys = @(
+    'model',
+    'model_context_window',
+    'model_auto_compact_token_limit',
+    'tool_output_token_limit',
+    'model_reasoning_effort',
+    'model_reasoning_summary',
+    'model_verbosity'
+  )
+
+  $localLines = Get-Content $LocalPath
+  $repoLines = [System.Collections.Generic.List[string]]::new()
+  Get-Content $RepoPath | ForEach-Object { [void]$repoLines.Add($_) }
+
+  foreach($key in $portableKeys){
+    $localLine = $localLines | Where-Object { $_ -match "^\s*$([regex]::Escape($key))\s*=" } | Select-Object -First 1
+    if(-not $localLine){ continue }
+
+    $idx = -1
+    for($i = 0; $i -lt $repoLines.Count; $i++){
+      if($repoLines[$i] -match "^\s*$([regex]::Escape($key))\s*="){ $idx = $i; break }
+    }
+
+    if($idx -ge 0){
+      $repoLines[$idx] = $localLine
+    } elseif($key -eq 'model_auto_compact_token_limit'){
+      $contextIdx = -1
+      for($i = 0; $i -lt $repoLines.Count; $i++){
+        if($repoLines[$i] -match '^\s*model_context_window\s*='){ $contextIdx = $i; break }
+      }
+      if($contextIdx -ge 0){ $repoLines.Insert($contextIdx + 1, $localLine) }
+    }
+  }
+
+  [System.IO.File]::WriteAllText($RepoPath, (($repoLines -join "`n") + "`n"), $enc)
+  Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜模型 / token key）'
+}
 
 # Claude CLAUDE.md（可攜核心，含 @import 行）
 $cm = Join-Path $U '.claude\CLAUDE.md'
@@ -66,6 +115,10 @@ if((Test-Path $repoSkills) -and (Test-Path $localSkills)){
   Skip "$localSkills 不存在"
 }
 
+Sync-CodexPortableConfig `
+  -LocalPath (Join-Path $U '.codex\config.toml') `
+  -RepoPath (Join-Path $src 'codex\config.toml')
+
 # VS Code settings（把 GCP 專案 ID 換回佔位符）
 $vs = Join-Path $env:APPDATA 'Code\User\settings.json'
 if(Test-Path $vs){
@@ -91,5 +144,5 @@ if($code){
 }
 
 Write-Host ''
-Write-Host 'Codex config.toml 與 ~/.claude/profile.md 含機器特定內容，未自動回寫；需要時請手動處理。' -ForegroundColor Yellow
+Write-Host 'Codex config.toml 只回寫可攜模型 / token key；~/.claude/profile.md 含機器特定內容，未自動回寫。' -ForegroundColor Yellow
 Write-Host "完成。請執行  git -C `"$src`" diff  檢視後再 commit。" -ForegroundColor Cyan

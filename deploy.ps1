@@ -124,6 +124,12 @@ Backup-IfExists $codexAgents
 Copy-Item (Join-Path $src 'codex\AGENTS.md') $codexAgents -Force
 Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
 
+$codexCatalogSrc = Join-Path $src 'codex\model-catalog.json'
+if(Test-Path $codexCatalogSrc){
+  Copy-Item $codexCatalogSrc (Join-Path $codexDir 'model-catalog.json') -Force
+  Ok 'model-catalog.json -> ~/.codex/model-catalog.json'
+}
+
 $codexSkillsSrc = Join-Path $src 'codex\skills'
 if(Test-Path $codexSkillsSrc){
   $codexSkillsDir = Join-Path $codexDir 'skills'
