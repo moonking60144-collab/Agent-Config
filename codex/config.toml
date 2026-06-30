@@ -53,8 +53,8 @@ review_model = "gpt-5.5"
 # gpt-5.5 目前不是 1M context；壓縮閾值需低於模型上限才會有效提早發動。
 model_context_window = 400000
 model_catalog_json = "model-catalog.json"
-model_auto_compact_token_limit = 360000
-tool_output_token_limit = 12000
+model_auto_compact_token_limit = 240000
+tool_output_token_limit = 8000
 
 ################################################################################
 # 推理與輸出詳細度

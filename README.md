@@ -90,7 +90,7 @@ config/
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會直接備份並覆蓋。
 
-目前 repo 版 Codex 預設以 `gpt-5.5` 為主，context / auto compact 使用 40 萬等級安全值：`model_context_window = 400000`、`model_catalog_json = "model-catalog.json"`、`model_auto_compact_token_limit = 360000`。不要把 5.4 的 1M context 設定直接套到 5.5。
+目前 repo 版 Codex 預設以 `gpt-5.5` 為主，context 使用 40 萬 catalog override，auto compact 採 24 萬級實務安全線：`model_context_window = 400000`、`model_catalog_json = "model-catalog.json"`、`model_auto_compact_token_limit = 240000`。不要把 5.4 的 1M context 設定直接套到 5.5。
 
 `profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 base config。
 
