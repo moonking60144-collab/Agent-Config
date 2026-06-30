@@ -1,0 +1,4 @@
+# Experimental profile: preserve better handoff summaries during context compaction.
+# Use with: codex --profile compact-preserve
+
+experimental_compact_prompt_file = "compact-prompts/context-preserve.md"

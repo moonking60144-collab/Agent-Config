@@ -115,6 +115,37 @@ if((Test-Path $repoSkills) -and (Test-Path $localSkills)){
   Skip "$localSkills 不存在"
 }
 
+# Codex compact prompts（只回寫 repo 已管理的 prompt 檔）
+$repoCompactPrompts = Join-Path $src 'codex\compact-prompts'
+$localCompactPrompts = Join-Path $U '.codex\compact-prompts'
+if((Test-Path $repoCompactPrompts) -and (Test-Path $localCompactPrompts)){
+  Get-ChildItem $repoCompactPrompts -File | ForEach-Object {
+    $localPrompt = Join-Path $localCompactPrompts $_.Name
+    if(Test-Path $localPrompt){
+      Copy-Item $localPrompt $_.FullName -Force
+      Ok "compact-prompts/$($_.Name) <- ~/.codex/compact-prompts/$($_.Name)"
+    } else {
+      Skip "$localPrompt 不存在"
+    }
+  }
+} elseif(Test-Path $repoCompactPrompts){
+  Skip "$localCompactPrompts 不存在"
+}
+
+# Codex profiles（只回寫 repo 已管理的 profile 檔）
+$repoProfiles = Join-Path $src 'codex\profiles'
+if(Test-Path $repoProfiles){
+  Get-ChildItem $repoProfiles -Filter '*.config.toml' -File | ForEach-Object {
+    $localProfile = Join-Path $U ".codex\$($_.Name)"
+    if(Test-Path $localProfile){
+      Copy-Item $localProfile $_.FullName -Force
+      Ok "profiles/$($_.Name) <- ~/.codex/$($_.Name)"
+    } else {
+      Skip "$localProfile 不存在"
+    }
+  }
+}
+
 Sync-CodexPortableConfig `
   -LocalPath (Join-Path $U '.codex\config.toml') `
   -RepoPath (Join-Path $src 'codex\config.toml')

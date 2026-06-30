@@ -40,6 +40,8 @@ config/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
 │   ├── model-catalog.json       #   Codex model catalog override（讓 gpt-5.5 effective context 對齊 40 萬）
+│   ├── compact-prompts/         #   context compaction prompt 實驗檔
+│   ├── profiles/                #   Codex profile 檔，部署到 ~/.codex/*.config.toml
 │   └── skills/
 │       ├── review/              #   issue-first 審查準則
 │       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
@@ -90,6 +92,8 @@ config/
 
 目前 repo 版 Codex 預設以 `gpt-5.5` 為主，context / auto compact 使用 40 萬等級安全值：`model_context_window = 400000`、`model_catalog_json = "model-catalog.json"`、`model_auto_compact_token_limit = 360000`。不要把 5.4 的 1M context 設定直接套到 5.5。
 
+`profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 base config。
+
 ### VS Code（`vscode/`）
 
 `settings.json` 是本機與舊 repo 版本「合併」後的結果（兩邊各有獨有設定，直接覆蓋會掉設定）。`geminicodeassist.project` 已換成佔位字串 `your-gcp-project-id`，部署後請改回自己的 GCP 專案 ID。
@@ -108,7 +112,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
 
 ---
 

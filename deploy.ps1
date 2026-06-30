@@ -130,6 +130,22 @@ if(Test-Path $codexCatalogSrc){
   Ok 'model-catalog.json -> ~/.codex/model-catalog.json'
 }
 
+$codexCompactPromptsSrc = Join-Path $src 'codex\compact-prompts'
+if(Test-Path $codexCompactPromptsSrc){
+  $codexCompactPromptsDir = Join-Path $codexDir 'compact-prompts'
+  Ensure-Dir $codexCompactPromptsDir
+  Copy-Item (Join-Path $codexCompactPromptsSrc '*') $codexCompactPromptsDir -Recurse -Force
+  Ok 'compact-prompts/* -> ~/.codex/compact-prompts/'
+}
+
+$codexProfilesSrc = Join-Path $src 'codex\profiles'
+if(Test-Path $codexProfilesSrc){
+  Get-ChildItem $codexProfilesSrc -Filter '*.config.toml' -File | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $codexDir $_.Name) -Force
+    Ok "profiles/$($_.Name) -> ~/.codex/$($_.Name)"
+  }
+}
+
 $codexSkillsSrc = Join-Path $src 'codex\skills'
 if(Test-Path $codexSkillsSrc){
   $codexSkillsDir = Join-Path $codexDir 'skills'
