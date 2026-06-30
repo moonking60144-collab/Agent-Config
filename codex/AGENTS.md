@@ -63,6 +63,7 @@
   - 「重構」→ 確認改動前後測試都過。
 - 多步驟任務使用 `update_plan`，每步標記 `pending` / `in_progress` / `completed`，完成一項立即更新。
 - 每回合固定維護計畫；簡單單句問題可用極短 plan 或直接處理。
+- 3 個以上步驟的任務要有明確驗證檢查點；測試失敗、缺檔、依賴缺失、錯誤未解時，不把任務標成 completed。
 
 ### 3.4 唯讀與實作邊界
 
@@ -104,8 +105,9 @@
   - User action required：需要確認、權限授權、互動輸入時停止 loop，不假裝自動完成。
 - Timeout 不應只靠模糊的 `AbortError` 字串判斷。工具 timeout、API request timeout、stream idle timeout 都要轉成可分類的明確錯誤型別或 reason，再進 retry / fallback / tool result 流程。
 - Context compactor 不只做摘要。順序應為：限制單一 tool output、限制同一輪 aggregate tool result、剪枝舊讀檔快照、做 micro/snip compact、保留最近完整軌跡，最後才做 summary compact；prompt-too-long 時再做 reactive compact。
-- Compact 完成後必須清理被 compact invalidated 的狀態，例如 microcompact tracker、session/message cache、permission/classifier approvals、speculative checks、context-collapse 或 memory-file cache；但不要無差別清掉仍需跨 compact 保留的 skill content 或使用者明確目標。
-- Session / transcript persistence 必須支援 resume 正確性。Transcript 應 append-only、保留穩定 message id / parent link、記錄 compact boundary、保留最近訊息或 preserved segment 的 relink metadata；compact summary 應提供 full transcript path 供後續讀回細節。Compact 或 session exit 後，要把 session metadata 重新寫到尾端可讀區，避免 resume 只看到過期標題、tag、mode 或第一則 prompt。
+- Microcompact 要以 API round / assistant response id 分組，不以表面的人類回合分組；保留 tail 時要維持 `tool_use` / `tool_result` 與同一 assistant message chunk 的 API 不變量。
+- Compact 完成後必須清理被 compact invalidated 的狀態，例如 microcompact tracker、session/message cache、permission/classifier approvals、speculative checks、context-collapse 或 memory-file cache；但 cleanup 必須分辨 main thread / subagent，且不要清掉仍需跨 compact 保留的 invoked skill content 或使用者明確目標。
+- Session / transcript persistence 必須支援 resume 正確性。Transcript 應 append-only、保留穩定 message id / parent link、記錄 compact boundary、保留最近訊息或 preserved segment 的 relink metadata；compact summary 應提供 full transcript path 供後續讀回細節。Compact 或 session exit 後，要把 session metadata 重新寫到尾端可讀區，避免 resume 只看到過期標題、tag、mode 或第一則 prompt。若有 snip compact 或平行 tool result，resume loader 必須重播移除範圍並修復同一 provider message id 的 sibling 區塊。
 - 多 agent / worker runtime 必須把 worker 身分、cwd/worktree、permission mode、tool pool、abort controller 與 resume metadata 分開保存。不能讓背景 worker 直接卡在無 UI 的權限提示；需要 leader routing、typed mailbox / queue，或 fail-closed。
 - Context 保留白名單：system prompt、全域/專案規範、最近 3 輪完整對話與工具軌跡、仍待處理的 tool result、使用者最後明確目標。
 - Context 優先剪枝黑名單：超過 50 行的舊工具輸出、已被後續寫入覆蓋的檔案快照、重複搜尋結果、已完成且無後續引用的中間診斷。
@@ -234,6 +236,9 @@
 - 對話提到舊議題、過往決策或「上次那個」時，先查 memory。
 - 使用者明確要求記住、更新偏好、或說「以後都」時，才寫入 memory。
 - 寫入 memory 前依目前環境規則處理；不要把可從程式碼或 git log 推得的資訊寫入 memory。
+- Memory 是跨回合的歷史提示，不是 task list、plan、repo snapshot 或 debug log。當前 repo 架構、檔案路徑、近期 git 變更、可從 log/程式碼查到的解法，應在當回合讀取，不寫成 durable memory。
+- Memory 類型應維持清楚邊界：`user`、`feedback`、`project`、`reference`。`feedback` 要包含 Why / How to apply；`project` 內的相對日期要轉成絕對日期。
+- 使用 memory 取得的檔名、函式、flag、命令或狀態都視為可能過期；行動前先用目前檔案系統、git 或官方來源驗證。若使用者要求忽略 memory，就當 memory 為空處理。
 
 ---
 

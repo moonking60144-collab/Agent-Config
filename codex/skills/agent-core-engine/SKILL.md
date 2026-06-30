@@ -36,11 +36,17 @@ When learning from terminal agent mirrors such as Claude Code source mirrors, ex
 - lifecycle hook contracts with typed JSON payloads, bounded timeout, explicit blocking semantics, and clear stdout/stderr routing
 - retry classification that handles transient errors below the model layer, turns explicit timeout reasons into retryable errors, and returns deterministic errors as tool output
 - multi-stage context compaction before summary compaction
+- API-round grouping and cache-hot/cache-cold distinctions for microcompaction
 - post-compaction cleanup for caches and tracking state invalidated by compact boundaries
 - append-only transcript persistence with compact boundaries, preserved segment relinks, and resume-safe metadata re-append
+- resume reconstruction that handles snipped ranges, stale usage, and parallel tool-result siblings
 - shell safety based on parsing and conservative fallback, not string intuition; treat Bash and PowerShell as separate languages
 - deferred tool schema discovery for large registries, with exact-select and keyword lookup paths
 - large tool output storage with model-visible previews and replay-stable replacement records
+- permission-rule parsing, canonical tool-name aliases, and shadowed-rule detection
+- skill package loading, conditional activation, permission review, and inline/fork invocation
+- persistent memory taxonomy, relevance retrieval, and drift checks
+- current-session task lists with ownership, dependencies, and verification gates
 - multi-agent worker/leader coordination with mailbox-backed permission routing
 
 Ignore UI rendering, product telemetry, brand-specific behavior, statusline/voice features, and copied internal naming.
@@ -68,6 +74,10 @@ Coverage notes:
 - Context compaction guidance comes from `src/commands/compact/compact.ts`, `src/services/compact/compact.ts`, `src/services/compact/microCompact.ts`, `src/services/compact/sessionMemoryCompact.ts`, `src/services/compact/postCompactCleanup.ts`, and `src/services/compact/autoCompact.ts`. `src/commands/compact/compact.ts` references a feature-gated `reactiveCompact` path, but `src/services/compact/reactiveCompact.ts` is not present in the audited checkout, so do not cite that missing file as implementation evidence.
 - Transcript/resume guidance comes from `src/bootstrap/state.ts`, `src/utils/sessionStorage.ts`, `src/utils/toolResultStorage.ts`, `src/cli/transports/ccrClient.ts`, `src/cli/print.ts`, and `src/entrypoints/sdk/coreSchemas.ts`.
 - Multi-agent permission and mailbox guidance comes from `src/utils/swarm/*`, `src/tools/AgentTool/*`, `src/utils/teammateMailbox.ts`, and `src/utils/swarm/permissionSync.ts`.
+- Skill packaging guidance comes from `src/skills/bundledSkills.ts`, `src/skills/loadSkillsDir.ts`, `src/tools/SkillTool/*`, and `src/skills/mcpSkillBuilders.ts`.
+- Persistent memory guidance comes from `src/memdir/*`, `src/services/extractMemories/*`, and `src/services/autoDream/*`.
+- Session task guidance comes from `src/tools/TodoWriteTool/*`, `src/tools/TaskCreateTool/*`, `src/tools/TaskUpdateTool/prompt.ts`, and `src/utils/todo/types.ts`.
+- Streaming execution guidance comes from `src/services/tools/StreamingToolExecutor.ts`, `src/services/tools/toolExecution.ts`, and `src/services/toolUseSummary/toolUseSummaryGenerator.ts`.
 
 When extending this skill from those mirrors, keep a source-path note in the edit or commit message. Do not claim the `nirholas` mirror proves an implementation detail while it remains README-only.
 
@@ -113,6 +123,19 @@ Defaults must fail closed:
 - destructive operations require explicit permission interception
 - security-relevant tools must override classifier input; default is classifier-hidden
 - model-facing input may be backfilled for observers, but the API-bound input must not be mutated after cache-sensitive serialization
+
+## Streaming Tool Execution Contract
+
+If tool calls can start while the model response is still streaming, execution must still preserve deterministic transcript order:
+
+- Parse and validate tool input before asking whether a tool is concurrency-safe. If parsing or safety classification throws, treat the call as not concurrency-safe.
+- Concurrency-safe tools may run together only with other concurrency-safe tools. A non-safe tool must execute exclusively.
+- Progress messages may be yielded immediately, but final tool results must be integrated in the original tool_use order.
+- Unknown tools, interrupted tools, and sibling-cancelled tools must still produce model-visible `tool_result` error blocks tied to the original assistant message/tool_use ID.
+- Shell mutation failures may cancel sibling subprocesses, but read/search/fetch failures should not cancel unrelated siblings.
+- Respect per-tool `interruptBehavior`: user interruption cancels cancellable tools and blocks until non-cancellable tools finish.
+- Context modifiers are a non-concurrent feature unless the runtime explicitly designs merge semantics for concurrent modifiers.
+- Non-critical summaries or labels for tool output must fail soft; a failed summarizer must not turn successful tool execution into a failed turn.
 
 ## Deferred Tool Schema Contract
 
@@ -164,6 +187,9 @@ Shell permission logic must be parser-driven per shell family:
 - PowerShell read-only validation must reject script blocks, subexpressions, expandable strings, splatting, member/static invocations, assignments, stop-parsing, UNC paths, non-filesystem providers, cwd-changing compounds, and unsafe pipeline arguments.
 - Bash validation must reject shell metacharacter ambiguity, command substitution, unsafe wrapper values, redirection/path escapes, compound `cd` plus relative path confusion, and git-operation path bypasses.
 - A synchronous `isReadOnly()` can be a fast conservative prefilter, but the load-bearing permission path must re-parse and re-check before execution.
+- Permission rule strings need a parser, not ad hoc splitting. Support canonical aliases for renamed tools and escape/unescape parentheses in rule content.
+- Detect unreachable allow rules caused by broader ask/deny rules. Deny shadowing is more severe than ask shadowing and should be reported first.
+- Treat shared settings more conservatively than personal session rules; a rule that is safe with one user's sandbox may still be unsafe or confusing for teammates.
 
 ## Context Compaction Contract
 
@@ -180,6 +206,18 @@ When context exceeds the configured threshold:
 Compaction and retry loops must have a circuit breaker. After 3 consecutive same-class failures, stop and report the known facts plus the next verification hypothesis.
 
 After a successful compaction, run cleanup for state invalidated by the compact boundary: microcompact trackers, session/message caches, permission/classifier approvals, speculative checks, context-collapse state, and memory-file caches. Preserve skill content and the user's active objective unless the implementation has an explicit replacement.
+
+Detailed compaction invariants:
+
+- Group message history by API round or assistant response ID, not by the user's apparent turn. Streaming assistant chunks with the same response ID must stay together.
+- When keeping a tail segment, walk backward to include matching tool_use blocks for kept tool_results and prior assistant chunks with the same message ID.
+- Distinguish cache-hot and cache-cold compaction. Cache-hot paths may issue API cache edits without mutating local transcript; cache-cold/time-based paths mutate prompt content because the cache has already expired.
+- Time-based microcompact should trigger on a real idle/cache-TTL gap, run only for main-thread sources, and keep at least one recent round. Avoid `slice(-0)` style bugs that accidentally keep everything.
+- Session-memory compaction should run only when positive thresholds and enough source material exist. Fall back if memory extraction has not completed, no useful memory exists, the template is empty, the summarized ID is missing, or the post-compact estimate is still above threshold.
+- Summary prompts that run without tools must explicitly say tool calls are rejected and waste the turn; otherwise the summary model may spend its only response trying to call tools.
+- After session-memory or cache-cold compaction, reset cache-break baselines so expected token drops are not reported as prompt-cache regressions.
+- Post-compact cleanup must be scoped by query source. Subagent compaction must not reset main-thread module-level state that shares a process with it.
+- Do not reset invoked skill content during cleanup; compaction attachments may need to preserve the full text of a skill across multiple compactions.
 
 ## Tool Result Budget Contract
 
@@ -207,6 +245,12 @@ For runtimes that support resume, transcript persistence is part of the agent co
 - Keep a full transcript path in compact summaries so the agent can recover exact old snippets or error output when needed.
 - Re-append session metadata after compaction and on session exit so tail-window readers still see current title, tag, mode, worktree, PR, and last prompt.
 - Avoid letting deduped preserved messages advance parent pointers past the compact boundary during resume reconstruction.
+- Refresh SDK- or UI-mutable metadata from a tail scan before re-appending cached metadata, so old cache values do not overwrite fresher external writer values.
+- Relink preserved segments only after validating the tail-to-head chain. If the chain is broken or the preserved segment is stale, no-op and log rather than mutating transcript pointers.
+- Zero stale usage on preserved assistant messages after compaction so resume does not immediately trigger another autocompact from old usage numbers.
+- Snip compaction must replay removed UUIDs and relink dangling `parentUuid` pointers through removed ranges; otherwise resume can reconstruct unsnipped history.
+- Parallel tool_use/tool_result streaming forms a DAG even if parentUuid storage is a linked list. Recovery should group assistant chunks by provider message ID and splice off-chain siblings back after the last on-chain member.
+- Add a consistency checkpoint that compares expected message count or latest checkpoint position against the reconstructed chain, and log drift before the mismatch becomes a silent resume bug.
 
 ## Control/Event Schema Contract
 
@@ -221,6 +265,61 @@ If the runtime exposes SDK, structured output, replay, or remote-control events,
 
 Compact boundaries and status changes must be first-class events; do not infer them from prose summaries.
 
+## Agent Definition Contract
+
+If a runtime supports file-defined custom agents, treat the agent registry as configuration parsing, not prompt text concatenation:
+
+- Validate each field independently and keep loading after one invalid custom agent; a bad agent file should not break the whole registry.
+- Markdown agent files should require explicit `name` and `description`. Files that lack `name` may be colocated docs and should be skipped safely.
+- Normalize model inheritance such as `inherit`, trim strings, and validate effort, permission mode, max turns, memory scope, background mode, isolation mode, hooks, and MCP server requirements.
+- Parse allowed and disallowed tools through the same permission-rule parser used by runtime permissions. Disallowed rules should match canonical base tool names.
+- Tool allowlists should support `undefined` or `*` for all tools, then subtract disallowed tools. MCP tools may need a separate allow policy because they are dynamically discovered.
+- Source precedence must be explicit: built-in, plugin, user settings, project settings, flags, and policy should not accidentally merge in nondeterministic order.
+- If an agent declares durable memory and the runtime requires file access to manage it, inject the minimal required file tools only when the agent already has an explicit allowlist.
+- Agent prompts should make context boundaries obvious: a new agent starts without ambient context unless forked; foreground agents are for required results, background agents are for independent work.
+
+## Skill Packaging Contract
+
+Skills are runtime capabilities with permission and context semantics, not just markdown snippets:
+
+- Use a small frontmatter schema: `name`, `description`, `allowed-tools`, `argument-hint`, `when_to_use`, `model`, `disable-model-invocation`, `user-invocable`, `hooks`, `context`, `agent`, `effort`, `shell`, and optional conditional `paths`.
+- Prefer `skill-name/SKILL.md` for user/project skills. Legacy single-file command formats should be compatibility paths, not the primary authoring style.
+- Conditional path skills should stay hidden until touched files match. Normalize patterns carefully; catch-all patterns are effectively unconditional and should not pretend to be selective.
+- Load managed, user, project, additional, and legacy skill roots in a deterministic order; deduplicate by realpath so symlinked or overlapping roots do not register the same skill twice.
+- Dynamic discovery should walk relevant file ancestors and respect ignore rules, especially for nested dependency folders.
+- Bundled reference files should be extracted lazily on first invocation into a deterministic per-skill directory, reject absolute paths or `..`, avoid symlink-following writes, and memoize concurrent extraction.
+- Initial skill listings must have a strict context budget. Show enough description to route invocation, then load full skill content only when the skill is invoked.
+- New prompt-command properties should default to requiring permission review. Maintain a safe-property allowlist so new fields are not silently trusted.
+- Invocation mode must be explicit. Inline skills add model-visible instructions to the current turn; forked skills run isolated work and return summarized result text.
+- Remote/canonical skills must be discovered before invocation, cached with their base directory, substitute declared session/skill-dir variables only in the skill content, and register invoked content so compaction can preserve it.
+
+## Persistent Memory Contract
+
+Durable memory is for user/project facts that outlive the turn. It is not a substitute for reading the current repo:
+
+- Keep a closed memory taxonomy such as `user`, `feedback`, `project`, and `reference`.
+- Do not save code patterns, architecture, file paths, project structure, git history, recent changes, debugging solutions, or anything already governed by repo instructions.
+- Feedback memory should include both corrections and validated non-obvious successes, with `Why:` and `How to apply:` so the next agent can judge edge cases.
+- Project memory should convert relative dates to absolute dates and lead with the durable fact or decision before rationale.
+- Treat memory as historical claims. Before acting on file names, function names, flags, commands, or repo state from memory, verify against the current filesystem or git state.
+- If the user says to ignore or not use memory, proceed as if memory is empty and do not cite it.
+- Keep the memory index short. The index should route to topic files; it should not become a full transcript or dump of every fact.
+- Background memory extraction should be read-mostly and tightly sandboxed to the memory directory for writes. It should not get shell write, remove, MCP, or nested agent powers by default.
+- Memory consolidation needs gates: elapsed time, session count, current-session exclusion, and a lock so two consolidators do not rewrite the same files.
+
+## Session Task Contract
+
+Task lists represent current-session control state. They are not durable memory and they are not a final answer:
+
+- Use a task list for 3+ distinct steps, non-trivial multi-operation work, explicit user request, multiple requested tasks, or newly received requirements.
+- Skip task state for a single straightforward or purely conversational request.
+- At most one task should be `in_progress` at a time unless the runtime has explicit multi-owner task semantics.
+- Mark a task `in_progress` before starting it and `completed` only after the work is genuinely finished, including required tests or verification.
+- Do not mark partial work completed when tests fail, dependencies are missing, files are absent, or errors are unresolved. Keep it in progress or create a blocker task.
+- For 3+ tasks, include a verification/checkpoint task rather than ending with only implementation tasks.
+- In team runtimes, tasks need owner, dependencies, and enough description for another agent to execute without hidden context.
+- Queued commands should preserve isolation: slash commands and shell-mode commands run one at a time; normal prompts may batch only when mode and target context match.
+
 ## Multi-Agent Coordination Contract
 
 For worker, teammate, fork, or swarm runtimes:
@@ -230,6 +329,9 @@ For worker, teammate, fork, or swarm runtimes:
 - Worker-to-leader permission requests need typed payloads: request ID, worker ID/name, tool name, tool use ID, input, suggestions, decision, updated input, permission updates, and timestamp.
 - Mailbox or queue writes must be atomic enough for concurrent workers; lock or use an append-only protocol when filesystem-backed.
 - Permission updates approved by the leader must be applied to the shared context deliberately without letting a worker silently change the leader's mode.
+- Prefer one active team per leader unless the runtime has a robust namespace story for task lists, inboxes, permissions, and cleanup.
+- Team creation should initialize the corresponding task list and persist leader session/model/cwd metadata so external workers can discover the coordination surface.
+- Agent names used for messaging and task ownership must be stable human-facing names, not opaque generated IDs.
 - Prevent recursive team topologies unless the runtime explicitly supports them; flat rosters are easier to reason about and debug.
 - Worktree or remote isolation must persist enough metadata for resume and cleanup.
 - A worker resume path must reconstruct inherited tool-result replacements and permission context before continuing.
