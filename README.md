@@ -39,7 +39,7 @@ config/
 ├── codex/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
-│   ├── model-catalog.json       #   Codex model catalog override（讓 gpt-5.5 effective context 對齊 40 萬）
+│   ├── model-catalog.json       #   Codex model catalog snapshot（預設不由 config.toml 引用）
 │   ├── compact-prompts/         #   context compaction prompt 實驗檔
 │   ├── profiles/                #   Codex profile 檔，部署到 ~/.codex/*.config.toml
 │   └── skills/
@@ -73,24 +73,25 @@ config/
 
 `AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
 
-`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理三個 Codex skills：
+`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理四個 Codex skills：
 
 | Skill | 使用時機 | 重點 |
 |-------|----------|------|
 | `review` | 使用者要求 review、audit、inspect、PR/diff/branch review、architecture/integration/system review | issue-first 審查，先列 bugs、回歸、安全、測試與部署風險 |
 | `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 先記錄 task goal、最後成功步驟、失敗工具/指令、重複模式、環境假設，再分類 root cause，選最小可逆驗證動作 |
 | `repo-onboarding-audit` | 進陌生 repo、開始 review/architecture audit 前缺上下文、要先盤點 stack、entry point、test surface 或 validation commands | 唯讀偵查 package manifest、framework fingerprint、entry points、top-level tree、tooling、tests、資料流、conventions、git history |
+| `agent-core-engine` | 設計、實作、審查或擴充 custom agent runtime、tool loop、compactor、retry engine | 將 agent core 做成 deterministic lifecycle，並提供可複製的 TypeScript skeleton |
 
 `deploy.ps1` 只同步 repo 內存在的 skill 目錄，`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進版控。
 
-`config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。`model_catalog_json` 使用相對路徑 `model-catalog.json`，部署時會和 catalog 檔一起放在 `~/.codex/`，避免寫死 Windows / macOS 使用者路徑。已**剔除**機器特定 / 自動生成的內容：
+`config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。目前不啟用 `model_catalog_json` override，讓 Codex 使用官方 / server 端 catalog。已**剔除**機器特定 / 自動生成的內容：
 
 - `[mcp_servers.node_repl]` — Codex 首次啟動自行生成，command 指向 `bin\<版本 hash>\node_repl.exe`，每次更新就變。
 - `[marketplaces.*]` 的 local source、`[desktop.open-in-target-preferences.perPath]` 的絕對路徑。
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會直接備份並覆蓋。
 
-目前 repo 版 Codex 預設以 `gpt-5.5` 為主，context 使用 40 萬 catalog override，auto compact 採 24 萬級實務安全線：`model_context_window = 400000`、`model_catalog_json = "model-catalog.json"`、`model_auto_compact_token_limit = 240000`。不要把 5.4 的 1M context 設定直接套到 5.5。
+目前 repo 版 Codex 預設以 `gpt-5.5` 為主，不啟用本機 catalog override；可攜 token 行為跟隨 active `~/.codex/config.toml`：`model_context_window = 400000`、`model_auto_compact_token_limit = 240000`、`tool_output_token_limit = 8000`。
 
 `profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 base config。
 
