@@ -29,16 +29,36 @@ function Info($m){ Write-Host $m -ForegroundColor Cyan }
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
 function Ensure-Dir($p){ if(-not(Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
-function Backup-IfExists($p){
+function Backup-IfExists($p, $backupRoot = $null){
   if(Test-Path $p){
     $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
     $item = Get-Item $p
-    if($item.PSIsContainer){
-      Copy-Item $p "$p.bak.$ts" -Recurse -Force
+    if($backupRoot){
+      Ensure-Dir $backupRoot
+      $backupPath = Join-Path $backupRoot "$($item.Name).bak.$ts"
     } else {
-      Copy-Item $p "$p.bak.$ts" -Force
+      $backupPath = "$p.bak.$ts"
     }
-    Ok "已備份 $(Split-Path $p -Leaf) -> *.bak.$ts"
+    if($item.PSIsContainer){
+      Copy-Item $p $backupPath -Recurse -Force
+    } else {
+      Copy-Item $p $backupPath -Force
+    }
+    Ok "已備份 $(Split-Path $p -Leaf) -> $backupPath"
+  }
+}
+
+function Move-CodexSkillBackupsOutOfRegistry($skillsDir, $backupRoot){
+  if(-not(Test-Path $skillsDir)){ return }
+  Ensure-Dir $backupRoot
+  Get-ChildItem $skillsDir -Directory | Where-Object { $_.Name -match '\.bak\.\d{8}_\d{6}$' } | ForEach-Object {
+    $dest = Join-Path $backupRoot $_.Name
+    if(Test-Path $dest){
+      $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+      $dest = Join-Path $backupRoot "$($_.Name).moved.$ts"
+    }
+    Move-Item -LiteralPath $_.FullName -Destination $dest
+    Ok "已移出舊 skill 備份 $($_.Name) -> $dest"
   }
 }
 
@@ -149,10 +169,12 @@ if(Test-Path $codexProfilesSrc){
 $codexSkillsSrc = Join-Path $src 'codex\skills'
 if(Test-Path $codexSkillsSrc){
   $codexSkillsDir = Join-Path $codexDir 'skills'
+  $codexSkillBackupDir = Join-Path $codexDir 'backups\skills'
   Ensure-Dir $codexSkillsDir
+  Move-CodexSkillBackupsOutOfRegistry $codexSkillsDir $codexSkillBackupDir
   Get-ChildItem $codexSkillsSrc -Directory | ForEach-Object {
     $target = Join-Path $codexSkillsDir $_.Name
-    Backup-IfExists $target
+    Backup-IfExists $target $codexSkillBackupDir
     Ensure-Dir $target
     Copy-Item (Join-Path $_.FullName '*') $target -Recurse -Force
     Ok "skills/$($_.Name) -> ~/.codex/skills/$($_.Name)"
