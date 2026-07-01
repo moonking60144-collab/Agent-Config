@@ -32,15 +32,24 @@ function Info($m){ Write-Host $m -ForegroundColor Cyan }
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
 function Ensure-Dir($p){ if(-not(Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function Join-Parts {
+  param(
+    [Parameter(Mandatory=$true)][string]$Base,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$Parts
+  )
+  $path = $Base
+  foreach($part in $Parts){ $path = Join-Path $path $part }
+  return $path
+}
 function Get-HomeDir {
   if($env:USERPROFILE){ return $env:USERPROFILE }
   if($HOME){ return $HOME }
   return [Environment]::GetFolderPath('UserProfile')
 }
 function Get-VSCodeUserDir {
-  if($IsWindowsHost -and $env:APPDATA){ return (Join-Path $env:APPDATA 'Code\User') }
-  if($IsMacOSHost){ return (Join-Path (Get-HomeDir) 'Library/Application Support/Code/User') }
-  return (Join-Path (Get-HomeDir) '.config/Code/User')
+  if($IsWindowsHost -and $env:APPDATA){ return (Join-Parts $env:APPDATA 'Code' 'User') }
+  if($IsMacOSHost){ return (Join-Parts (Get-HomeDir) 'Library' 'Application Support' 'Code' 'User') }
+  return (Join-Parts (Get-HomeDir) '.config' 'Code' 'User')
 }
 function Get-CommandPathOrFallback($names, $fallback){
   foreach($name in $names){
@@ -54,7 +63,7 @@ function Escape-JsonStringValue($value){
   return $json.Substring(1, $json.Length - 2)
 }
 function Get-ClaudeStopHookCommand($homeDir){
-  $hookPath = (Join-Path $homeDir '.claude/hooks/check-traditional.ps1') -replace '\\','/'
+  $hookPath = (Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.ps1') -replace '\\','/'
   if($IsWindowsHost){
     return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$hookPath`""
   }
@@ -247,17 +256,18 @@ Ensure-Dir $claudeDir
 Ensure-Dir (Join-Path $claudeDir 'hooks')
 
 Backup-IfExists (Join-Path $claudeDir 'CLAUDE.md')
-Copy-Item (Join-Path $src 'claude\CLAUDE.md') (Join-Path $claudeDir 'CLAUDE.md') -Force
+Copy-Item (Join-Parts $src 'claude' 'CLAUDE.md') (Join-Path $claudeDir 'CLAUDE.md') -Force
 Ok 'CLAUDE.md -> ~/.claude/CLAUDE.md'
 
-$st = Get-Content (Join-Path $src 'claude\settings.json') -Raw
+$st = Get-Content (Join-Parts $src 'claude' 'settings.json') -Raw
 $st = $st.Replace('__USERPROFILE__', ($U -replace '\\','/'))
 $st = $st.Replace('__CLAUDE_STOP_HOOK_COMMAND__', (Escape-JsonStringValue (Get-ClaudeStopHookCommand $U)))
 Backup-IfExists (Join-Path $claudeDir 'settings.json')
 [System.IO.File]::WriteAllText((Join-Path $claudeDir 'settings.json'), $st, $enc)
 Ok 'settings.json -> ~/.claude/settings.json（已套用本機 hook command）'
 
-Copy-Item (Join-Path $src 'claude\hooks\*') (Join-Path $claudeDir 'hooks') -Recurse -Force
+$claudeHooksSrc = Join-Parts $src 'claude' 'hooks'
+Copy-Item (Join-Path $claudeHooksSrc '*') (Join-Path $claudeDir 'hooks') -Recurse -Force
 Ok 'hooks/* -> ~/.claude/hooks/'
 
 $profileMd = Build-Profile
@@ -272,16 +282,16 @@ Ensure-Dir $codexDir
 
 $codexAgents = Join-Path $codexDir 'AGENTS.md'
 Backup-IfExists $codexAgents
-Copy-Item (Join-Path $src 'codex\AGENTS.md') $codexAgents -Force
+Copy-Item (Join-Parts $src 'codex' 'AGENTS.md') $codexAgents -Force
 Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
 
-$codexCatalogSrc = Join-Path $src 'codex\model-catalog.json'
+$codexCatalogSrc = Join-Parts $src 'codex' 'model-catalog.json'
 if(Test-Path $codexCatalogSrc){
   Copy-Item $codexCatalogSrc (Join-Path $codexDir 'model-catalog.json') -Force
   Ok 'model-catalog.json -> ~/.codex/model-catalog.json'
 }
 
-$codexCompactPromptsSrc = Join-Path $src 'codex\compact-prompts'
+$codexCompactPromptsSrc = Join-Parts $src 'codex' 'compact-prompts'
 if(Test-Path $codexCompactPromptsSrc){
   $codexCompactPromptsDir = Join-Path $codexDir 'compact-prompts'
   Ensure-Dir $codexCompactPromptsDir
@@ -289,7 +299,7 @@ if(Test-Path $codexCompactPromptsSrc){
   Ok 'compact-prompts/* -> ~/.codex/compact-prompts/'
 }
 
-$codexProfilesSrc = Join-Path $src 'codex\profiles'
+$codexProfilesSrc = Join-Parts $src 'codex' 'profiles'
 if(Test-Path $codexProfilesSrc){
   Get-ChildItem $codexProfilesSrc -Filter '*.config.toml' -File | ForEach-Object {
     Copy-Item $_.FullName (Join-Path $codexDir $_.Name) -Force
@@ -297,10 +307,10 @@ if(Test-Path $codexProfilesSrc){
   }
 }
 
-$codexSkillsSrc = Join-Path $src 'codex\skills'
+$codexSkillsSrc = Join-Parts $src 'codex' 'skills'
 if(Test-Path $codexSkillsSrc){
   $codexSkillsDir = Join-Path $codexDir 'skills'
-  $codexSkillBackupDir = Join-Path $codexDir 'backups\skills'
+  $codexSkillBackupDir = Join-Parts $codexDir 'backups' 'skills'
   Ensure-Dir $codexSkillsDir
   Move-CodexSkillBackupsOutOfRegistry $codexSkillsDir $codexSkillBackupDir
   Get-ChildItem $codexSkillsSrc -Directory | ForEach-Object {
@@ -317,7 +327,7 @@ if((Test-Path $codexCfg) -and -not $ForceCodex){
   Skip 'config.toml 已存在，保留現有（含機器特定 node_repl）。要覆蓋請加 -ForceCodex'
 } else {
   Backup-IfExists $codexCfg
-  $codexConfigText = Resolve-CodexConfigTemplate (Join-Path $src 'codex\config.toml')
+  $codexConfigText = Resolve-CodexConfigTemplate (Join-Parts $src 'codex' 'config.toml')
   [System.IO.File]::WriteAllText($codexCfg, $codexConfigText, $enc)
   Ok 'config.toml -> ~/.codex/config.toml（已套用本機 MCP command）'
 }
@@ -329,10 +339,10 @@ $code = Get-Command code -ErrorAction SilentlyContinue
 $vsUser = Get-VSCodeUserDir
 if(Test-Path $vsUser){
   Backup-IfExists (Join-Path $vsUser 'settings.json')
-  Copy-Item (Join-Path $src 'vscode\settings.json') (Join-Path $vsUser 'settings.json') -Force
+  Copy-Item (Join-Parts $src 'vscode' 'settings.json') (Join-Path $vsUser 'settings.json') -Force
   Ok "settings.json -> $vsUser"
   Backup-IfExists (Join-Path $vsUser 'keybindings.json')
-  Copy-Item (Join-Path $src 'vscode\keybindings.json') (Join-Path $vsUser 'keybindings.json') -Force
+  Copy-Item (Join-Parts $src 'vscode' 'keybindings.json') (Join-Path $vsUser 'keybindings.json') -Force
   Ok "keybindings.json -> $vsUser"
 } else {
   Skip "找不到 $vsUser（VS Code 可能未安裝），略過設定"
@@ -346,7 +356,7 @@ if($SkipExtensions){
 } elseif(-not $code){
   Skip '找不到 code 指令，略過擴充安裝'
 } else {
-  $exts = @(Get-Content (Join-Path $src 'vscode\extensions.txt') | Where-Object { $_.Trim() })
+  $exts = @(Get-Content (Join-Parts $src 'vscode' 'extensions.txt') | Where-Object { $_.Trim() })
   $n=0; $okc=0; $fail=0; $failed=@()
   foreach($e in $exts){
     $n++

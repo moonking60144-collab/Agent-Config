@@ -20,15 +20,24 @@ $IsMacOSHost = if(Get-Variable IsMacOS -ErrorAction SilentlyContinue){ $IsMacOS 
 
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
+function Join-Parts {
+  param(
+    [Parameter(Mandatory=$true)][string]$Base,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$Parts
+  )
+  $path = $Base
+  foreach($part in $Parts){ $path = Join-Path $path $part }
+  return $path
+}
 function Get-HomeDir {
   if($env:USERPROFILE){ return $env:USERPROFILE }
   if($HOME){ return $HOME }
   return [Environment]::GetFolderPath('UserProfile')
 }
 function Get-VSCodeUserDir {
-  if($IsWindowsHost -and $env:APPDATA){ return (Join-Path $env:APPDATA 'Code\User') }
-  if($IsMacOSHost){ return (Join-Path (Get-HomeDir) 'Library/Application Support/Code/User') }
-  return (Join-Path (Get-HomeDir) '.config/Code/User')
+  if($IsWindowsHost -and $env:APPDATA){ return (Join-Parts $env:APPDATA 'Code' 'User') }
+  if($IsMacOSHost){ return (Join-Parts (Get-HomeDir) 'Library' 'Application Support' 'Code' 'User') }
+  return (Join-Parts (Get-HomeDir) '.config' 'Code' 'User')
 }
 function Normalize-ClaudeSettingsTemplate {
   param([Parameter(Mandatory=$true)][string]$Text)
@@ -103,38 +112,38 @@ function Sync-CodexPortableConfig {
 }
 
 # Claude CLAUDE.md（可攜核心，含 @import 行）
-$cm = Join-Path $U '.claude\CLAUDE.md'
+$cm = Join-Parts $U '.claude' 'CLAUDE.md'
 if(Test-Path $cm){
-  Copy-Item $cm (Join-Path $src 'claude\CLAUDE.md') -Force
+  Copy-Item $cm (Join-Parts $src 'claude' 'CLAUDE.md') -Force
   Ok 'CLAUDE.md <- ~/.claude/CLAUDE.md'
 } else { Skip "$cm 不存在（尚未 deploy 過？）" }
 
 # Claude settings.json（把實際 hook 路徑換回佔位符）
-$cs = Join-Path $U '.claude\settings.json'
+$cs = Join-Parts $U '.claude' 'settings.json'
 if(Test-Path $cs){
   $t = Get-Content $cs -Raw
   $t = Normalize-ClaudeSettingsTemplate $t
-  [System.IO.File]::WriteAllText((Join-Path $src 'claude\settings.json'), $t, $enc)
+  [System.IO.File]::WriteAllText((Join-Parts $src 'claude' 'settings.json'), $t, $enc)
   Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'
 } else { Skip "$cs 不存在" }
 
 # Claude hooks
-$hk = Join-Path $U '.claude\hooks'
+$hk = Join-Parts $U '.claude' 'hooks'
 if(Test-Path $hk){
-  Copy-Item (Join-Path $hk '*') (Join-Path $src 'claude\hooks') -Recurse -Force
+  Copy-Item (Join-Path $hk '*') (Join-Parts $src 'claude' 'hooks') -Recurse -Force
   Ok 'hooks <- ~/.claude/hooks'
 }
 
 # Codex AGENTS.md（可攜全域指令）
-$ca = Join-Path $U '.codex\AGENTS.md'
+$ca = Join-Parts $U '.codex' 'AGENTS.md'
 if(Test-Path $ca){
-  Copy-Item $ca (Join-Path $src 'codex\AGENTS.md') -Force
+  Copy-Item $ca (Join-Parts $src 'codex' 'AGENTS.md') -Force
   Ok 'AGENTS.md <- ~/.codex/AGENTS.md'
 } else { Skip "$ca 不存在" }
 
 # Codex skills（只回寫 repo 已管理的 skill，避免把系統或外掛 cache 掃進來）
-$repoSkills = Join-Path $src 'codex\skills'
-$localSkills = Join-Path $U '.codex\skills'
+$repoSkills = Join-Parts $src 'codex' 'skills'
+$localSkills = Join-Parts $U '.codex' 'skills'
 if((Test-Path $repoSkills) -and (Test-Path $localSkills)){
   Get-ChildItem $repoSkills -Directory | ForEach-Object {
     $localSkill = Join-Path $localSkills $_.Name
@@ -150,8 +159,8 @@ if((Test-Path $repoSkills) -and (Test-Path $localSkills)){
 }
 
 # Codex compact prompts（只回寫 repo 已管理的 prompt 檔）
-$repoCompactPrompts = Join-Path $src 'codex\compact-prompts'
-$localCompactPrompts = Join-Path $U '.codex\compact-prompts'
+$repoCompactPrompts = Join-Parts $src 'codex' 'compact-prompts'
+$localCompactPrompts = Join-Parts $U '.codex' 'compact-prompts'
 if((Test-Path $repoCompactPrompts) -and (Test-Path $localCompactPrompts)){
   Get-ChildItem $repoCompactPrompts -File | ForEach-Object {
     $localPrompt = Join-Path $localCompactPrompts $_.Name
@@ -167,10 +176,10 @@ if((Test-Path $repoCompactPrompts) -and (Test-Path $localCompactPrompts)){
 }
 
 # Codex profiles（只回寫 repo 已管理的 profile 檔）
-$repoProfiles = Join-Path $src 'codex\profiles'
+$repoProfiles = Join-Parts $src 'codex' 'profiles'
 if(Test-Path $repoProfiles){
   Get-ChildItem $repoProfiles -Filter '*.config.toml' -File | ForEach-Object {
-    $localProfile = Join-Path $U ".codex\$($_.Name)"
+    $localProfile = Join-Parts $U '.codex' $_.Name
     if(Test-Path $localProfile){
       Copy-Item $localProfile $_.FullName -Force
       Ok "profiles/$($_.Name) <- ~/.codex/$($_.Name)"
@@ -181,8 +190,8 @@ if(Test-Path $repoProfiles){
 }
 
 Sync-CodexPortableConfig `
-  -LocalPath (Join-Path $U '.codex\config.toml') `
-  -RepoPath (Join-Path $src 'codex\config.toml')
+  -LocalPath (Join-Parts $U '.codex' 'config.toml') `
+  -RepoPath (Join-Parts $src 'codex' 'config.toml')
 
 # VS Code settings（把 GCP 專案 ID 換回佔位符）
 $vsUser = Get-VSCodeUserDir
@@ -190,14 +199,14 @@ $vs = Join-Path $vsUser 'settings.json'
 if(Test-Path $vs){
   $t = Get-Content $vs -Raw
   $t = [regex]::Replace($t, '("geminicodeassist\.project"\s*:\s*")[^"]*(")', '${1}your-gcp-project-id${2}')
-  [System.IO.File]::WriteAllText((Join-Path $src 'vscode\settings.json'), $t, $enc)
+  [System.IO.File]::WriteAllText((Join-Parts $src 'vscode' 'settings.json'), $t, $enc)
   Ok 'settings.json <- VS Code（已遮蔽 GCP 專案 ID）'
 } else { Skip "$vs 不存在" }
 
 # VS Code keybindings
 $kb = Join-Path $vsUser 'keybindings.json'
 if(Test-Path $kb){
-  Copy-Item $kb (Join-Path $src 'vscode\keybindings.json') -Force
+  Copy-Item $kb (Join-Parts $src 'vscode' 'keybindings.json') -Force
   Ok 'keybindings.json <- VS Code'
 }
 
@@ -205,7 +214,7 @@ if(Test-Path $kb){
 $code = Get-Command code -ErrorAction SilentlyContinue
 if($code){
   $list = @(& code --list-extensions | Where-Object { $_.Trim() })
-  [System.IO.File]::WriteAllText((Join-Path $src 'vscode\extensions.txt'), (($list -join "`n") + "`n"), $enc)
+  [System.IO.File]::WriteAllText((Join-Parts $src 'vscode' 'extensions.txt'), (($list -join "`n") + "`n"), $enc)
   Ok "extensions.txt <- code --list-extensions（$($list.Count) 個）"
 }
 
