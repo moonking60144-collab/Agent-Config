@@ -176,17 +176,18 @@ enabled = true
 enabled = true
 
 [mcp_servers.context7]
-command = 'C:\Program Files\nodejs\npx.cmd'
+command = '__NPX_COMMAND__'
 args = ["-y", "@upstash/context7-mcp"]
 startup_timeout_ms = 40_000
 
 [mcp_servers.context7.env]
-SystemRoot = 'C:\Windows'
-# APPDATA is machine-specific; inherit it from the current Windows session.
+SystemRoot = '__SYSTEM_ROOT__'
+# __NPX_COMMAND__ and __SYSTEM_ROOT__ are replaced by deploy.ps1.
+# On macOS/Linux, deploy.ps1 removes SystemRoot because it is Windows-only.
 
 [desktop]
 localeOverride = "zh-TW"
-integratedTerminalShell = "powershell"
+integratedTerminalShell = "__CODEX_TERMINAL_SHELL__"
 runCodexInWindowsSubsystemForLinux = false
 default-service-tier = "priority"
 

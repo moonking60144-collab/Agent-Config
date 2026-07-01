@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"__USERPROFILE__/.claude/hooks/check-traditional.ps1\"",
+            "command": "__CLAUDE_STOP_HOOK_COMMAND__",
             "timeout": 20,
             "statusMessage": "檢查繁體中文"
           }

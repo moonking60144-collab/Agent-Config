@@ -8,19 +8,37 @@
 
 ## 快速開始
 
+Windows / macOS 都使用 PowerShell 部署；macOS 需要先安裝 PowerShell 7、Git、Node.js。
+
 ```powershell
 git clone https://github.com/moonking60144-collab/config.git
 cd config
 pwsh -File deploy.ps1
 ```
 
-PowerShell 5.1 沒有 `pwsh` 時：
+Windows PowerShell 5.1 沒有 `pwsh` 時：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy.ps1
 ```
 
-`deploy.ps1` 會：把設定還原到正確路徑、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔（`*.bak.<時間戳>`）。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
+要覆蓋既有 Codex config 時：
+
+```powershell
+pwsh -File deploy.ps1 -ForceCodex
+```
+
+`deploy.ps1` 會：依目前 OS 展開路徑與 command，把設定還原到正確位置、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔（`*.bak.<時間戳>`）。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
+
+跨平台部署目標：
+
+| 項目 | Windows | macOS | Linux |
+|------|---------|-------|-------|
+| Claude / Codex | `~/.claude` / `~/.codex` | `~/.claude` / `~/.codex` | `~/.claude` / `~/.codex` |
+| VS Code User | `%APPDATA%\Code\User` | `~/Library/Application Support/Code/User` | `~/.config/Code/User` |
+| Claude hook | `powershell.exe ... check-traditional.ps1` | `pwsh ... check-traditional.ps1` | `pwsh ... check-traditional.ps1` |
+| Context7 MCP | `npx.cmd` / `npx` | `npx` | `npx` |
+| Codex terminal | `powershell` | `zsh` | `bash` |
 
 ---
 
@@ -33,7 +51,7 @@ config/
 ├── claude/                      # Claude Code
 │   ├── CLAUDE.md                #   可攜核心（行為準則 + 程式撰寫準則 + 語言/身份偏好）
 │   ├── profile.example.md       #   機器 profile 範本（硬體/OS/工具/常用指令）
-│   ├── settings.json            #   user settings（hook 路徑用 __USERPROFILE__ 佔位）
+│   ├── settings.json            #   user settings（hook command 由 deploy 依 OS 展開）
 │   └── hooks/
 │       └── check-traditional.ps1#   Stop hook：偵測回覆含簡體字就擋下要求改繁體
 ├── codex/
@@ -94,6 +112,8 @@ config/
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會先備份再覆蓋；skill 備份不放在 `~/.codex/skills/` 底下，避免重複出現在 Codex skill picker。
 
+`config.toml` 裡的 `__NPX_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`deploy.ps1` 會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。
+
 目前 repo 版 Codex 預設以 `gpt-5.5` 為主，不啟用 `model_catalog_json` override；`model-catalog.json` 只保留 Codex 內建 catalog snapshot。可攜 token 行為跟隨 active `~/.codex/config.toml`：`model_context_window = 1000000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。
 
 `profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 base config。
@@ -102,7 +122,7 @@ config/
 
 `settings.json` 是本機與舊 repo 版本「合併」後的結果（兩邊各有獨有設定，直接覆蓋會掉設定）。`geminicodeassist.project` 已換成佔位字串 `your-gcp-project-id`，部署後請改回自己的 GCP 專案 ID。
 
-部署目標 `%APPDATA%\Code\User\`。擴充套件以 `extensions.txt` 為準逐一安裝（`code --install-extension`）。
+部署目標依 OS 決定：Windows 是 `%APPDATA%\Code\User\`，macOS 是 `~/Library/Application Support/Code/User`，Linux 是 `~/.config/Code/User`。擴充套件以 `extensions.txt` 為準逐一安裝（`code --install-extension`）。
 
 ---
 
@@ -116,7 +136,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook 絕對路徑、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook command、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
 
 ---
 

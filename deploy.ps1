@@ -22,13 +22,69 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $src = $PSScriptRoot
-$U   = $env:USERPROFILE
 $enc = New-Object System.Text.UTF8Encoding $false
+
+$IsWindowsHost = if(Get-Variable IsWindows -ErrorAction SilentlyContinue){ $IsWindows } else { $true }
+$IsMacOSHost = if(Get-Variable IsMacOS -ErrorAction SilentlyContinue){ $IsMacOS } else { $false }
+$IsLinuxHost = if(Get-Variable IsLinux -ErrorAction SilentlyContinue){ $IsLinux } else { $false }
 
 function Info($m){ Write-Host $m -ForegroundColor Cyan }
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
 function Ensure-Dir($p){ if(-not(Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function Get-HomeDir {
+  if($env:USERPROFILE){ return $env:USERPROFILE }
+  if($HOME){ return $HOME }
+  return [Environment]::GetFolderPath('UserProfile')
+}
+function Get-VSCodeUserDir {
+  if($IsWindowsHost -and $env:APPDATA){ return (Join-Path $env:APPDATA 'Code\User') }
+  if($IsMacOSHost){ return (Join-Path (Get-HomeDir) 'Library/Application Support/Code/User') }
+  return (Join-Path (Get-HomeDir) '.config/Code/User')
+}
+function Get-CommandPathOrFallback($names, $fallback){
+  foreach($name in $names){
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if($cmd){ return $cmd.Source }
+  }
+  return $fallback
+}
+function Escape-JsonStringValue($value){
+  $json = ConvertTo-Json $value -Compress
+  return $json.Substring(1, $json.Length - 2)
+}
+function Get-ClaudeStopHookCommand($homeDir){
+  $hookPath = (Join-Path $homeDir '.claude/hooks/check-traditional.ps1') -replace '\\','/'
+  if($IsWindowsHost){
+    return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$hookPath`""
+  }
+  $pwsh = Get-CommandPathOrFallback @('pwsh') 'pwsh'
+  return "$pwsh -NoProfile -File `"$hookPath`""
+}
+function Get-NpxCommand {
+  if($IsWindowsHost){
+    return Get-CommandPathOrFallback @('npx.cmd','npx') 'npx.cmd'
+  }
+  return Get-CommandPathOrFallback @('npx') 'npx'
+}
+function Get-CodexTerminalShell {
+  if($IsWindowsHost){ return 'powershell' }
+  if($IsMacOSHost){ return 'zsh' }
+  return 'bash'
+}
+function Resolve-CodexConfigTemplate($templatePath){
+  $text = Get-Content $templatePath -Raw
+  $text = $text.Replace('__NPX_COMMAND__', (Get-NpxCommand))
+  $text = $text.Replace('__CODEX_TERMINAL_SHELL__', (Get-CodexTerminalShell))
+  if($IsWindowsHost){
+    $systemRoot = if($env:SystemRoot){ $env:SystemRoot } else { 'C:\Windows' }
+    $text = $text.Replace('__SYSTEM_ROOT__', $systemRoot)
+  } else {
+    $text = [regex]::Replace($text, "(?m)^SystemRoot\s*=\s*'__SYSTEM_ROOT__'\r?\n?", '')
+    $text = [regex]::Replace($text, "(?m)^runCodexInWindowsSubsystemForLinux\s*=\s*false\r?\n?", '')
+  }
+  return $text
+}
 function Backup-IfExists($p, $backupRoot = $null){
   if(Test-Path $p){
     $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
@@ -62,7 +118,15 @@ function Move-CodexSkillBackupsOutOfRegistry($skillsDir, $backupRoot){
   }
 }
 
-function Build-Profile {
+function Invoke-FirstLine($exe, $argList = @()){
+  try {
+    $out = & $exe @argList 2>&1 | Select-Object -First 1
+    if($out){ return $out.ToString().Trim() }
+  } catch {}
+  return '(未安裝)'
+}
+
+function Build-WindowsProfile {
   $os  = Get-CimInstance Win32_OperatingSystem
   $cs  = Get-CimInstance Win32_ComputerSystem
   $cpu = @(Get-CimInstance Win32_Processor)[0].Name.Trim()
@@ -106,6 +170,72 @@ $diskLines
 "@
 }
 
+function Build-PortableProfile {
+  $homeDir = Get-HomeDir
+  $hostName = [System.Net.Dns]::GetHostName()
+  $date = Get-Date -Format 'yyyy-MM-dd HH:mm'
+  $psv = $PSVersionTable.PSVersion.ToString()
+  $git = Invoke-FirstLine git @('--version')
+  $node = Invoke-FirstLine node @('--version')
+  $py = Invoke-FirstLine python @('--version')
+  if($py -eq '(未安裝)'){ $py = Invoke-FirstLine python3 @('--version') }
+
+  if($IsMacOSHost){
+    $os = (Invoke-FirstLine sw_vers @('-productName')) + ' ' + (Invoke-FirstLine sw_vers @('-productVersion'))
+    $model = Invoke-FirstLine sysctl @('-n','hw.model')
+    $cpu = Invoke-FirstLine sysctl @('-n','machdep.cpu.brand_string')
+    $memRaw = Invoke-FirstLine sysctl @('-n','hw.memsize')
+    $ramGB = if($memRaw -match '^\d+$'){ [math]::Round([double]$memRaw/1GB) } else { '(未探測)' }
+    $diskLines = Invoke-FirstLine df @('-h', $homeDir)
+  } elseif($IsLinuxHost){
+    $os = Invoke-FirstLine uname @('-a')
+    $model = Invoke-FirstLine hostnamectl @('chassis')
+    $cpu = if(Test-Path '/proc/cpuinfo'){ (Select-String -Path '/proc/cpuinfo' -Pattern 'model name' | Select-Object -First 1).ToString().Split(':',2)[1].Trim() } else { '(未探測)' }
+    $ramGB = if(Test-Path '/proc/meminfo'){ [math]::Round(([double]((Select-String -Path '/proc/meminfo' -Pattern '^MemTotal:' | Select-Object -First 1).ToString() -replace '\D+',''))/1MB) } else { '(未探測)' }
+    $diskLines = Invoke-FirstLine df @('-h', $homeDir)
+  } else {
+    $os = "$($PSVersionTable.Platform) $($PSVersionTable.OS)"
+    $model = '(未探測)'
+    $cpu = '(未探測)'
+    $ramGB = '(未探測)'
+    $diskLines = Invoke-FirstLine df @('-h', $homeDir)
+  }
+
+@"
+# 環境 Profile（$hostName）
+
+> 由 deploy.ps1 於 $date 自動探測產生。重跑 deploy.ps1 會覆蓋本檔；
+> 需要常用指令模板時，從 repo 的 claude/profile.example.md 複製進來。
+
+## Hardware
+- **型號**：$model
+- **CPU**：$cpu
+- **RAM**：$ramGB GB
+- **GPU**：(非 Windows deploy 未自動探測)
+
+## Disk
+```text
+$diskLines
+```
+
+## OS & Shell
+- **OS**：$os
+- **PowerShell（執行 deploy 的版本）**：$psv
+
+## Dev Tools
+- **Git**：$git
+- **Node.js**：$node
+- **Python**：$py
+"@
+}
+
+function Build-Profile {
+  if($IsWindowsHost){ return Build-WindowsProfile }
+  return Build-PortableProfile
+}
+
+$U = Get-HomeDir
+
 Info "部署來源: $src"
 Info "目標使用者: $U"
 Write-Host ''
@@ -122,9 +252,10 @@ Ok 'CLAUDE.md -> ~/.claude/CLAUDE.md'
 
 $st = Get-Content (Join-Path $src 'claude\settings.json') -Raw
 $st = $st.Replace('__USERPROFILE__', ($U -replace '\\','/'))
+$st = $st.Replace('__CLAUDE_STOP_HOOK_COMMAND__', (Escape-JsonStringValue (Get-ClaudeStopHookCommand $U)))
 Backup-IfExists (Join-Path $claudeDir 'settings.json')
 [System.IO.File]::WriteAllText((Join-Path $claudeDir 'settings.json'), $st, $enc)
-Ok 'settings.json -> ~/.claude/settings.json（已套用本機 hook 路徑）'
+Ok 'settings.json -> ~/.claude/settings.json（已套用本機 hook command）'
 
 Copy-Item (Join-Path $src 'claude\hooks\*') (Join-Path $claudeDir 'hooks') -Recurse -Force
 Ok 'hooks/* -> ~/.claude/hooks/'
@@ -186,22 +317,23 @@ if((Test-Path $codexCfg) -and -not $ForceCodex){
   Skip 'config.toml 已存在，保留現有（含機器特定 node_repl）。要覆蓋請加 -ForceCodex'
 } else {
   Backup-IfExists $codexCfg
-  Copy-Item (Join-Path $src 'codex\config.toml') $codexCfg -Force
-  Ok 'config.toml -> ~/.codex/config.toml'
+  $codexConfigText = Resolve-CodexConfigTemplate (Join-Path $src 'codex\config.toml')
+  [System.IO.File]::WriteAllText($codexCfg, $codexConfigText, $enc)
+  Ok 'config.toml -> ~/.codex/config.toml（已套用本機 MCP command）'
 }
 Write-Host ''
 
 # ---------------------------------------------------------------------------
 Info '[3/4] VS Code 設定'
 $code = Get-Command code -ErrorAction SilentlyContinue
-$vsUser = Join-Path $env:APPDATA 'Code\User'
+$vsUser = Get-VSCodeUserDir
 if(Test-Path $vsUser){
   Backup-IfExists (Join-Path $vsUser 'settings.json')
   Copy-Item (Join-Path $src 'vscode\settings.json') (Join-Path $vsUser 'settings.json') -Force
-  Ok 'settings.json -> %APPDATA%/Code/User/'
+  Ok "settings.json -> $vsUser"
   Backup-IfExists (Join-Path $vsUser 'keybindings.json')
   Copy-Item (Join-Path $src 'vscode\keybindings.json') (Join-Path $vsUser 'keybindings.json') -Force
-  Ok 'keybindings.json -> %APPDATA%/Code/User/'
+  Ok "keybindings.json -> $vsUser"
 } else {
   Skip "找不到 $vsUser（VS Code 可能未安裝），略過設定"
 }

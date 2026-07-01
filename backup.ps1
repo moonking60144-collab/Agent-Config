@@ -13,11 +13,45 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $src = $PSScriptRoot
-$U   = $env:USERPROFILE
 $enc = New-Object System.Text.UTF8Encoding $false
+
+$IsWindowsHost = if(Get-Variable IsWindows -ErrorAction SilentlyContinue){ $IsWindows } else { $true }
+$IsMacOSHost = if(Get-Variable IsMacOS -ErrorAction SilentlyContinue){ $IsMacOS } else { $false }
 
 function Ok($m){ Write-Host "  [OK] $m" -ForegroundColor Green }
 function Skip($m){ Write-Host "  [跳過] $m" -ForegroundColor Yellow }
+function Get-HomeDir {
+  if($env:USERPROFILE){ return $env:USERPROFILE }
+  if($HOME){ return $HOME }
+  return [Environment]::GetFolderPath('UserProfile')
+}
+function Get-VSCodeUserDir {
+  if($IsWindowsHost -and $env:APPDATA){ return (Join-Path $env:APPDATA 'Code\User') }
+  if($IsMacOSHost){ return (Join-Path (Get-HomeDir) 'Library/Application Support/Code/User') }
+  return (Join-Path (Get-HomeDir) '.config/Code/User')
+}
+function Normalize-ClaudeSettingsTemplate {
+  param([Parameter(Mandatory=$true)][string]$Text)
+
+  $homeDir = Get-HomeDir
+  $normalized = $Text.Replace(($homeDir -replace '\\','/'), '__USERPROFILE__').Replace($homeDir, '__USERPROFILE__')
+  try {
+    $obj = $normalized | ConvertFrom-Json
+    foreach($stop in @($obj.hooks.Stop)){
+      foreach($hook in @($stop.hooks)){
+        if(($hook.command -as [string]) -match 'check-traditional\.ps1'){
+          $hook.command = '__CLAUDE_STOP_HOOK_COMMAND__'
+          $hook.statusMessage = '檢查繁體中文'
+        }
+      }
+    }
+    return (($obj | ConvertTo-Json -Depth 20) + "`n")
+  } catch {
+    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.ps1', '__CLAUDE_STOP_HOOK_COMMAND__')
+  }
+}
+
+$U = Get-HomeDir
 
 function Sync-CodexPortableConfig {
   param(
@@ -79,9 +113,9 @@ if(Test-Path $cm){
 $cs = Join-Path $U '.claude\settings.json'
 if(Test-Path $cs){
   $t = Get-Content $cs -Raw
-  $t = $t.Replace(($U -replace '\\','/'), '__USERPROFILE__').Replace($U, '__USERPROFILE__')
+  $t = Normalize-ClaudeSettingsTemplate $t
   [System.IO.File]::WriteAllText((Join-Path $src 'claude\settings.json'), $t, $enc)
-  Ok 'settings.json <- ~/.claude/settings.json（已還原佔位符）'
+  Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'
 } else { Skip "$cs 不存在" }
 
 # Claude hooks
@@ -151,7 +185,8 @@ Sync-CodexPortableConfig `
   -RepoPath (Join-Path $src 'codex\config.toml')
 
 # VS Code settings（把 GCP 專案 ID 換回佔位符）
-$vs = Join-Path $env:APPDATA 'Code\User\settings.json'
+$vsUser = Get-VSCodeUserDir
+$vs = Join-Path $vsUser 'settings.json'
 if(Test-Path $vs){
   $t = Get-Content $vs -Raw
   $t = [regex]::Replace($t, '("geminicodeassist\.project"\s*:\s*")[^"]*(")', '${1}your-gcp-project-id${2}')
@@ -160,7 +195,7 @@ if(Test-Path $vs){
 } else { Skip "$vs 不存在" }
 
 # VS Code keybindings
-$kb = Join-Path $env:APPDATA 'Code\User\keybindings.json'
+$kb = Join-Path $vsUser 'keybindings.json'
 if(Test-Path $kb){
   Copy-Item $kb (Join-Path $src 'vscode\keybindings.json') -Force
   Ok 'keybindings.json <- VS Code'
