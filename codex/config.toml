@@ -154,6 +154,36 @@ enabled = true
 [plugins."google-drive@openai-curated"]
 enabled = true
 
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."template-creator@openai-primary-runtime"]
+enabled = true
+
+[mcp_servers.context7]
+command = 'C:\Program Files\nodejs\npx.cmd'
+args = ["-y", "@upstash/context7-mcp"]
+startup_timeout_ms = 40_000
+
+[mcp_servers.context7.env]
+SystemRoot = 'C:\Windows'
+# APPDATA is machine-specific; inherit it from the current Windows session.
+
 [desktop]
 localeOverride = "zh-TW"
 integratedTerminalShell = "powershell"
