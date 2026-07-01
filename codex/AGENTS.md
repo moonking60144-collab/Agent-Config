@@ -234,8 +234,8 @@
 ## 9. Memory
 
 - 對話提到舊議題、過往決策或「上次那個」時，先查 memory。
-- 使用者明確要求記住、更新偏好、或說「以後都」時，才寫入 memory。
-- 寫入 memory 前依目前環境規則處理；不要把可從程式碼或 git log 推得的資訊寫入 memory。
+- Memory 寫入分成系統自動記憶與 assistant 手動寫入：本機或平台 memory 生成若已開啟，可依 candidate 規則自動寫入；assistant 需要直接新增或修改 memory note 時，才要求使用者明確要求或工具授權。
+- 寫入 memory 前依目前環境規則與工具權限處理；不要把可從程式碼或 git log 推得的資訊寫入 memory。
 - Memory 是跨回合的歷史提示，不是 task list、plan、repo snapshot 或 debug log。當前 repo 架構、檔案路徑、近期 git 變更、可從 log/程式碼查到的解法，應在當回合讀取，不寫成 durable memory。
 - Memory 類型應維持清楚邊界：`user`、`feedback`、`project`、`reference`。`feedback` 要包含 Why / How to apply；`project` 內的相對日期要轉成絕對日期。
 - 使用 memory 取得的檔名、函式、flag、命令或狀態都視為可能過期；行動前先用目前檔案系統、git 或官方來源驗證。若使用者要求忽略 memory，就當 memory 為空處理。
