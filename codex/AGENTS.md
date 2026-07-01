@@ -79,7 +79,27 @@
 - 修改 CI/CD、共享設定、外部 API 呼叫策略。
 - 任何不可逆、影響他人、或覆寫未提交變更的動作。
 
-### 3.6 Agentic Loop 與自訂 Agent 引擎
+### 3.6 日常任務 Lightweight Agent Discipline
+
+- 本節把 `agent-core` 的可用部分整合進日常任務；它是工作紀律，不是要求每次都啟動完整 agent runtime。
+- 簡單問答、單一小改動、明確一行設定，不套流程，直接處理。
+- 只要符合下列任一條件，就啟用 lightweight loop：跨檔修改、3 個以上步驟、設定改了但行為沒變、同類工具/假設失敗第 2 次、需要多來源查證、context/token/compact 行為異常、涉及權限/破壞性/外部副作用、或需要 commit/push。
+- Lightweight loop 固定為：
+
+```text
+Observe -> Scope -> Plan -> Act -> Verify -> Report
+```
+
+- `Observe`：先確認目前目標、cwd/repo、可變更檔案、已知限制、是否有本機/遠端/執行期快取差異。
+- `Scope`：明確分出本回合會碰的檔案與不會碰的檔案；全域 Codex 設定只改 `~/.codex` 與 config repo，不誤放到業務專案。
+- `Plan`：多步驟任務用 `update_plan`；每一步要有可驗證完成條件，不把「已開始」當「已完成」。
+- `Act`：讀取與搜尋可並行；寫入、shell mutation、git、外部副作用必須保持順序；只有獨立 read-only 工具才並行。
+- `Verify`：以最小成本驗證真正生效來源。設定問題要分清 config、catalog、profile、session snapshot、app-server cache、state DB、log；不要只看檔案值就下結論。
+- `Report`：回報實際改了什麼、驗證看到什麼、仍可能受哪個 runtime/cache 影響；如果需要重啟 app/server/thread 才生效，要明確說。
+- 同類失敗第 2 次要分類原因：logic、state、environment、tool、policy、context、runtime drift。第 3 次前必須停止盲試，回報已驗證事實與下一個最小驗證。
+- 大輸出與長診斷不要整段塞回 context；優先保留路徑、摘要與可重跑命令。能用 artifact / log / transcript path 表示的，不用全文貼回。
+
+### 3.7 Agentic Loop 與自訂 Agent 引擎
 
 - 本節是全域 Codex 行為規範，不是任一業務專案的 src 規格。建立或修改自訂 agent runtime、tool loop、compactor、retry engine 時，優先使用本機 `agent-core-engine` skill / template；只有使用者明確指定目標 repo 時，才把 runtime skeleton 寫入該 repo。
 - 參考終端 Agent 架構時，只吸收核心 loop、tool contract、permission、retry、compaction、streaming 與 transcript 管理；不要搬運 React/Ink UI、品牌遙測、voice/statusline、內部產品命名或不可驗證的 vendor-specific 邏輯。

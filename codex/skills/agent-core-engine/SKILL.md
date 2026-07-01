@@ -7,6 +7,8 @@ description: Design, implement, review, or extend a production-ready custom agen
 
 Use this skill when the user asks to build, integrate, optimize, or review an agent runtime, tool loop, compactor, retry engine, or production-grade autonomous coding agent core.
 
+For ordinary Codex tasks, do not invoke the full runtime template by default. The day-to-day integration of this skill lives in `AGENTS.md` as the lightweight loop `Observe -> Scope -> Plan -> Act -> Verify -> Report`. Use that lightweight discipline for multi-step work, repeated failures, config/runtime drift, context pressure, and commit/push tasks; use this full skill only when the task is about agent/runtime architecture itself.
+
 This is a global Codex skill. Do not write `src/agent-core` into the current business repo unless the user explicitly names that repo as the target runtime implementation. If the user asks to improve "Codex settings", update global AGENTS/skills/templates instead of project source.
 
 ## Required Workflow
@@ -23,6 +25,13 @@ If no target repo is specified, stop at the global layer:
 2. Update this skill for reusable workflow.
 3. Update `templates/` for copyable implementation skeletons.
 4. Report any project-level files that look like prior mistaken placement, but do not delete them without explicit user approval.
+
+When integrating agent-core into normal Codex behavior rather than implementing a runtime, keep the change at the global layer:
+
+1. Add or adjust lightweight daily rules in `AGENTS.md`.
+2. Keep this skill focused on full agent/runtime work.
+3. Update `config.toml` only with short routing instructions, not the whole architecture contract.
+4. Do not copy `templates/typescript-agent-core/` into a project unless the user explicitly asks for a runtime implementation there.
 
 ## Reference Extraction
 
