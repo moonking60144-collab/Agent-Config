@@ -26,7 +26,7 @@
       "shell_type": "shell_command",
       "visibility": "list",
       "supported_in_api": true,
-      "priority": 9,
+      "priority": 7,
       "additional_speed_tiers": [
         "fast"
       ],
@@ -62,8 +62,9 @@
       },
       "supports_parallel_tool_calls": true,
       "supports_image_detail_original": true,
-      "context_window": 400000,
-      "max_context_window": 400000,
+      "context_window": 272000,
+      "max_context_window": 272000,
+      "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -138,6 +139,7 @@
       "supports_image_detail_original": true,
       "context_window": 1000000,
       "max_context_window": 1000000,
+      "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -201,6 +203,7 @@
       "supports_image_detail_original": true,
       "context_window": 272000,
       "max_context_window": 272000,
+      "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -264,6 +267,7 @@
       "supports_image_detail_original": false,
       "context_window": 128000,
       "max_context_window": 128000,
+      "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -324,7 +328,7 @@
       },
       "supports_parallel_tool_calls": true,
       "supports_image_detail_original": true,
-      "context_window": 272000,
+      "context_window": 1000000,
       "max_context_window": 1000000,
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],

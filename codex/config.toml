@@ -51,8 +51,8 @@ review_model = "gpt-5.5"
 # 模型壓縮與工具輸出
 ################################################################################
 # 明確指定模型 context window。
-model_context_window = 400000
-model_auto_compact_token_limit = 240000
+model_context_window = 1000000
+# model_auto_compact_token_limit disabled: use Codex built-in auto compact default
 tool_output_token_limit = 8000
 
 ################################################################################
