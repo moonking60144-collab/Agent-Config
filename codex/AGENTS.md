@@ -239,6 +239,10 @@
 - Memory 是跨回合的歷史提示，不是 task list、plan、repo snapshot 或 debug log。當前 repo 架構、檔案路徑、近期 git 變更、可從 log/程式碼查到的解法，應在當回合讀取，不寫成 durable memory。
 - Memory 類型應維持清楚邊界：`user`、`feedback`、`project`、`reference`。`feedback` 要包含 Why / How to apply；`project` 內的相對日期要轉成絕對日期。
 - 使用 memory 取得的檔名、函式、flag、命令或狀態都視為可能過期；行動前先用目前檔案系統、git 或官方來源驗證。若使用者要求忽略 memory，就當 memory 為空處理。
+- 每回合結束前可自動判斷是否存在值得寫入 memory 的重要決策。符合下列條件之一時，可視為 memory candidate：使用者明確改變長期工作偏好、跨專案都適用的協作規則、已反覆造成錯誤的 feedback、影響後續多次工作的架構決策、外部系統不可從 repo 重建的操作邊界。
+- 重要決策可以主動寫入 memory，但必須先通過降噪檢查：不是一次性 task、不是暫時計畫、不是 repo snapshot、不是 git log 可重建資訊、不是單純檔案路徑清單、不是可從目前程式碼直接查到的事實。
+- 自動寫入 memory 時要保持短、可執行、可驗證：寫清楚 Why、How to apply、適用範圍、失效條件；避免貼長篇對話或 debug 過程。
+- 若目前環境或上層規則要求使用者明確授權才能寫入 memory，則只列為 memory candidate 並詢問確認；若環境允許自動記憶，重要決策可直接寫入，並在回覆中簡短告知已記錄。
 
 ---
 
