@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
   把本 repo 的 Claude Code / Codex / VS Code 設定部署到目前這臺機器。

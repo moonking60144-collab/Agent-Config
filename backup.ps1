@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
   把本機現有設定回寫到本 repo（deploy.ps1 的反方向），方便把某臺機器的調整同步回版控。
