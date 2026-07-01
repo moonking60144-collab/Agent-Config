@@ -72,8 +72,8 @@
   "window.restoreWindows": "all",
   "diffEditor.codeLens": true,
   "diffEditor.ignoreTrimWhitespace": false,
-  "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font Mono",
-  "editor.fontFamily": "JetBrainsMono Nerd Font, Cascadia Code, Consolas, 'Courier New', monospace",
+  "terminal.integrated.fontFamily": "JetBrainsMono NFM, JetBrainsMono Nerd Font Mono, monospace",
+  "editor.fontFamily": "JetBrainsMono NF, JetBrainsMono Nerd Font, Cascadia Code, Consolas, 'Courier New', monospace",
   "redhat.telemetry.enabled": true,
   "remote.otherPortsAttributes": {
     "onAutoForward": "openBrowser"
