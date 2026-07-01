@@ -9,6 +9,8 @@
   不安裝 vscode/extensions.txt 列出的 VS Code 擴充套件。
 .PARAMETER ForceCodex
   覆蓋既有的 ~/.codex/config.toml（預設不覆蓋，避免蓋掉機器特定的 node_repl）。
+.PARAMETER BackupRetention
+  每個被部署目標保留的備份數量；設為 0 可停用舊備份清理。
 .EXAMPLE
   pwsh -File deploy.ps1
 .EXAMPLE
@@ -17,7 +19,8 @@
 [CmdletBinding()]
 param(
   [switch]$SkipExtensions,
-  [switch]$ForceCodex
+  [switch]$ForceCodex,
+  [int]$BackupRetention = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -110,6 +113,40 @@ function Backup-IfExists($p, $backupRoot = $null){
       Copy-Item $p $backupPath -Force
     }
     Ok "已備份 $(Split-Path $p -Leaf) -> $backupPath"
+    Prune-Backups $p $backupRoot
+  }
+}
+
+function Test-IsPathInside($childPath, $parentPath){
+  $parentFull = [System.IO.Path]::GetFullPath($parentPath) -replace '[\\/]+$',''
+  $childFull = [System.IO.Path]::GetFullPath($childPath)
+  $comparison = if($IsWindowsHost){ [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+  return $childFull.StartsWith(($parentFull + [System.IO.Path]::DirectorySeparatorChar), $comparison)
+}
+
+function Prune-Backups($p, $backupRoot = $null){
+  if($BackupRetention -lt 1){ return }
+
+  $backupDir = if($backupRoot){ $backupRoot } else { Split-Path $p -Parent }
+  if(-not(Test-Path $backupDir)){ return }
+
+  $itemName = Split-Path $p -Leaf
+  $escapedName = [regex]::Escape($itemName)
+  $backupNamePattern = "^$escapedName\.bak\.\d{8}_\d{6}(\.moved\.\d{8}_\d{6})?$"
+  $backupDirFull = (Resolve-Path -LiteralPath $backupDir).ProviderPath
+
+  $oldBackups = Get-ChildItem -LiteralPath $backupDir -Force |
+    Where-Object { $_.Name -match $backupNamePattern } |
+    Sort-Object Name -Descending |
+    Select-Object -Skip $BackupRetention
+
+  foreach($backup in $oldBackups){
+    $backupFull = (Resolve-Path -LiteralPath $backup.FullName).ProviderPath
+    if(-not(Test-IsPathInside $backupFull $backupDirFull)){
+      throw "拒絕清理非預期備份路徑：$backupFull"
+    }
+    Remove-Item -LiteralPath $backup.FullName -Recurse -Force
+    Skip "已清理舊備份 $backupFull"
   }
 }
 

@@ -28,7 +28,7 @@ powershell -ExecutionPolicy Bypass -File deploy.ps1
 pwsh -File deploy.ps1 -ForceCodex
 ```
 
-`deploy.ps1` 會：依目前 OS 展開路徑與 command，把設定還原到正確位置、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔（`*.bak.<時間戳>`）。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
+`deploy.ps1` 會：依目前 OS 展開路徑與 command，把設定還原到正確位置、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔（`*.bak.<時間戳>`）。每個目標預設保留最近 5 份備份，可用 `-BackupRetention` 調整，設為 `0` 可停用清理。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
 
 跨平台部署目標：
 
@@ -46,8 +46,11 @@ pwsh -File deploy.ps1 -ForceCodex
 
 ```
 config/
+├── .gitattributes               # 固定跨平台文字檔換行策略
 ├── deploy.ps1                   # 主部署：repo -> 本機
 ├── backup.ps1                   # 反向同步：本機 -> repo
+├── scripts/
+│   └── validate-config.ps1      # 檢查 repo template、active config、skill 同步與 Context7
 ├── claude/                      # Claude Code
 │   ├── CLAUDE.md                #   可攜核心（行為準則 + 程式撰寫準則 + 語言/身份偏好）
 │   ├── profile.example.md       #   機器 profile 範本（硬體/OS/工具/常用指令）
@@ -124,6 +127,20 @@ config/
 
 部署目標依 OS 決定：Windows 是 `%APPDATA%\Code\User\`，macOS 是 `~/Library/Application Support/Code/User`，Linux 是 `~/.config/Code/User`。擴充套件以 `extensions.txt` 為準逐一安裝（`code --install-extension`）。
 
+### 驗證
+
+部署或同步前後可執行：
+
+```powershell
+pwsh -File scripts/validate-config.ps1
+```
+
+新機器尚未部署 active 設定時可先只驗 repo：
+
+```powershell
+pwsh -File scripts/validate-config.ps1 -SkipActive
+```
+
 ---
 
 ## 在某臺機器調整後同步回 repo
@@ -137,6 +154,12 @@ git push
 ```
 
 `backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook command、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜模型 / token 行為 key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
+
+VS Code extensions 清單預設不回寫，避免某臺機器的臨時擴充污染 repo。確定要更新 `vscode/extensions.txt` 時才執行：
+
+```powershell
+pwsh -File backup.ps1 -IncludeExtensions
+```
 
 ---
 

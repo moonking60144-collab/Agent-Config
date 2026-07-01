@@ -4,12 +4,16 @@
   把本機現有設定回寫到本 repo（deploy.ps1 的反方向），方便把某臺機器的調整同步回版控。
 .DESCRIPTION
   回寫 Claude Code 的 CLAUDE.md / settings.json / hooks、Codex AGENTS.md / repo 管理的 skills，
-  以及 VS Code 的 settings / keybindings / extensions 清單。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
+  以及 VS Code 的 settings / keybindings。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
   還原成佔位符。回寫後請 git diff 檢視再 commit。
   Codex config.toml 只回寫可攜模型 / token 行為 key；profile.md 含機器特定內容，不自動回寫。
+.PARAMETER IncludeExtensions
+  同步 `code --list-extensions` 到 vscode/extensions.txt。預設略過，避免某臺機器的臨時擴充污染 repo。
 #>
 [CmdletBinding()]
-param()
+param(
+  [switch]$IncludeExtensions
+)
 
 $ErrorActionPreference = 'Stop'
 $src = $PSScriptRoot
@@ -211,11 +215,17 @@ if(Test-Path $kb){
 }
 
 # VS Code extensions
-$code = Get-Command code -ErrorAction SilentlyContinue
-if($code){
-  $list = @(& code --list-extensions | Where-Object { $_.Trim() })
-  [System.IO.File]::WriteAllText((Join-Parts $src 'vscode' 'extensions.txt'), (($list -join "`n") + "`n"), $enc)
-  Ok "extensions.txt <- code --list-extensions（$($list.Count) 個）"
+if($IncludeExtensions){
+  $code = Get-Command code -ErrorAction SilentlyContinue
+  if($code){
+    $list = @(& code --list-extensions | Where-Object { $_.Trim() })
+    [System.IO.File]::WriteAllText((Join-Parts $src 'vscode' 'extensions.txt'), (($list -join "`n") + "`n"), $enc)
+    Ok "extensions.txt <- code --list-extensions（$($list.Count) 個）"
+  } else {
+    Skip '找不到 code 指令，略過 extensions.txt 回寫'
+  }
+} else {
+  Skip '未指定 -IncludeExtensions，略過 extensions.txt 回寫'
 }
 
 Write-Host ''
