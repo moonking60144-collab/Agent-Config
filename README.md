@@ -46,7 +46,8 @@ config/
 │       ├── review/              #   issue-first 審查準則
 │       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
 │       ├── repo-onboarding-audit/   # 陌生 repo 的 read-only 偵查與架構盤點流程
-│       └── agent-core-engine/       # custom agent runtime / tool loop / compactor 設計準則
+│       ├── agent-core-engine/       # custom agent runtime / tool loop / compactor 設計準則
+│       └── frontend-ui-designer/    # Product Design 取向的前端視覺、prototype 與 design QA 流程
 └── vscode/
     ├── settings.json            # 合併後的 VS Code 設定（GCP 專案 ID 已佔位）
     ├── keybindings.json
@@ -74,7 +75,7 @@ config/
 
 `AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
 
-`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理四個 Codex skills：
+`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理五個 Codex skills：
 
 | Skill | 使用時機 | 重點 |
 |-------|----------|------|
@@ -82,6 +83,7 @@ config/
 | `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 先記錄 task goal、最後成功步驟、失敗工具/指令、重複模式、環境假設，再分類 root cause，選最小可逆驗證動作 |
 | `repo-onboarding-audit` | 進陌生 repo、開始 review/architecture audit 前缺上下文、要先盤點 stack、entry point、test surface 或 validation commands | 唯讀偵查 package manifest、framework fingerprint、entry points、top-level tree、tooling、tests、資料流、conventions、git history |
 | `agent-core-engine` | 設計、實作、審查或擴充 custom agent runtime、tool loop、compactor、retry engine | 將 agent core 做成 deterministic lifecycle，並提供可複製的 TypeScript skeleton |
+| `frontend-ui-designer` | 新 UI、視覺改版、prototype、URL/image-to-code、landing page、dashboard、產品畫面 polish | 先鎖定 design brief 與 visual target，沿用既有 design system，補齊互動狀態、asset fidelity、responsive 與 evidence-based design QA |
 
 `deploy.ps1` 只同步 repo 內存在的 skill 目錄，並會把既有 `~/.codex/skills/*.bak.*` 備份移出 skill registry；`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統、外掛 cache 或備份目錄掃進版控。
 
