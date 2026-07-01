@@ -20,6 +20,7 @@ developer_instructions = '''
 當任務跨檔、超過 3 個步驟、需要 commit/push、設定改了但行為沒變、同類工具/假設失敗第 2 次、context/token/compact 異常、或涉及外部副作用時，使用 Observe -> Scope -> Plan -> Act -> Verify -> Report。
 工具使用時只並行獨立 read-only 操作；寫入、shell mutation、git 與外部副作用保持順序。設定問題要分清 config、catalog、profile、session snapshot、app-server cache、state DB 與 log，不只看檔案值。
 完整 agent-core-engine skill 只用於自訂 agent runtime、tool loop、compactor、retry engine、transcript/resume 等 agent 架構任務。
+背景記憶策略：保持 Chronicle 與自動 memory generation 關閉；只讀取既有 memory。若對話中出現重要長期決策，可在同一回合用 one-shot 方式寫入短 memory note，且必須回報已記錄。
 
 在使用者沒有明確指定使用 skills 的前提下，也就是一般任務時，
 在使用者明確說「可以改程式碼」之前，不允許自行修改程式碼，
@@ -81,6 +82,7 @@ steer = true
 prevent_idle_sleep = true
 child_agents_md = true
 memories = true
+chronicle = false
 sqlite = true
 fast_mode = false
 powershell_utf8 = true
@@ -90,8 +92,9 @@ js_repl = false
 [memories]
 consolidation_model = "gpt-5.4"
 extract_model = "gpt-5.4"
-# generate_memories = true
-# use_memories = true
+generate_memories = false
+use_memories = true
+disable_on_external_context = false
 max_raw_memories_for_consolidation = 512
 max_unused_days = 30
 max_rollout_age_days = 45

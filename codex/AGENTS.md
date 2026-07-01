@@ -262,7 +262,8 @@ Observe -> Scope -> Plan -> Act -> Verify -> Report
 - 每回合結束前可自動判斷是否存在值得寫入 memory 的重要決策。符合下列條件之一時，可視為 memory candidate：使用者明確改變長期工作偏好、跨專案都適用的協作規則、已反覆造成錯誤的 feedback、影響後續多次工作的架構決策、外部系統不可從 repo 重建的操作邊界。
 - 重要決策可以主動寫入 memory，但必須先通過降噪檢查：不是一次性 task、不是暫時計畫、不是 repo snapshot、不是 git log 可重建資訊、不是單純檔案路徑清單、不是可從目前程式碼直接查到的事實。
 - 自動寫入 memory 時要保持短、可執行、可驗證：寫清楚 Why、How to apply、適用範圍、失效條件；避免貼長篇對話或 debug 過程。
-- 若目前環境或上層規則要求使用者明確授權才能寫入 memory，則只列為 memory candidate 並詢問確認；若環境允許自動記憶，重要決策可直接寫入，並在回覆中簡短告知已記錄。
+- 使用者已授權「重要決策 one-shot memory」：符合 memory candidate 且通過降噪檢查時，可在當前回合直接新增一筆短 memory note，並在回覆中告知已記錄。這不代表可以啟用 Chronicle 或背景 automatic memory generation。
+- 若目前環境或上層規則禁止 assistant 直接寫 memory，則只列為 memory candidate 並詢問確認；不要改用 Chronicle、螢幕錄影或背景模型來繞過限制。
 
 ---
 
