@@ -88,6 +88,7 @@ function Resolve-CodexConfigTemplate($templatePath){
   $text = Get-Content $templatePath -Raw
   $text = $text.Replace('__NPX_COMMAND__', (Get-NpxCommand))
   $text = $text.Replace('__CODEX_TERMINAL_SHELL__', (Get-CodexTerminalShell))
+  $text = $text.Replace('__CODEX_HOME__', ((Join-Path $U '.codex') -replace '\\','/'))
   if($IsWindowsHost){
     $systemRoot = if($env:SystemRoot){ $env:SystemRoot } else { 'C:\Windows' }
     $text = $text.Replace('__SYSTEM_ROOT__', $systemRoot)
@@ -321,6 +322,12 @@ $codexAgents = Join-Path $codexDir 'AGENTS.md'
 Backup-IfExists $codexAgents
 Copy-Item (Join-Parts $src 'codex' 'AGENTS.md') $codexAgents -Force
 Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
+
+$codexBaseInstructionsSrc = Join-Parts $src 'codex' 'base-instructions.md'
+if(Test-Path $codexBaseInstructionsSrc){
+  Copy-Item $codexBaseInstructionsSrc (Join-Path $codexDir 'base-instructions.md') -Force
+  Ok 'base-instructions.md -> ~/.codex/base-instructions.md'
+}
 
 $codexCatalogSrc = Join-Parts $src 'codex' 'model-catalog.json'
 if(Test-Path $codexCatalogSrc){
