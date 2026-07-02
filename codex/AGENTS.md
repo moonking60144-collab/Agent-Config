@@ -79,59 +79,30 @@
 - 修改 CI/CD、共享設定、外部 API 呼叫策略。
 - 任何不可逆、影響他人、或覆寫未提交變更的動作。
 
-### 3.6 日常任務 Lightweight Agent Discipline
+### 3.6 Skill-first 工作流程觸發
 
-- 本節把 `agent-core` 的可用部分整合進日常任務；它是工作紀律，不是要求每次都啟動完整 agent runtime。
-- 簡單問答、單一小改動、明確一行設定，不套流程，直接處理。
-- 只要符合下列任一條件，就啟用 lightweight loop：跨檔修改、3 個以上步驟、設定改了但行為沒變、同類工具/假設失敗第 2 次、需要多來源查證、context/token/compact 行為異常、涉及權限/破壞性/外部副作用、或需要 commit/push。
-- Lightweight loop 固定為：
+- 本節是全域 skill routing 的唯一 canonical；`config.toml` 與 skill body 不重複維護 dispatch table。
+- process skill 先決定方法，domain skill 再執行內容。
 
-```text
-Observe -> Scope -> Plan -> Act -> Verify -> Report
-```
+| 任務形態 | 第一個入口 |
+| --- | --- |
+| 簡單問答、翻譯、單一明確設定 | 直接回答；只有使用者明確要求修改時才改檔 |
+| review / audit / inspect / double check / list issues | `review` |
+| 陌生 repo、新子系統、需要先建立專案地圖 | `repo-onboarding-audit` |
+| 大型 repo、跨檔、3 步以上、sync/deploy/commit/push | `agent-core-lite` |
+| 設定改了但行為沒變、token/context/compact 異常、runtime/cache mismatch | `agent-core-lite` |
+| 同類錯誤、同一假設或同一工具失敗第 2 次 | `agent-failure-debugging` |
+| 自訂 agent runtime、tool loop、compactor、retry、transcript/resume | `agent-core-engine` |
 
-- `Observe`：先確認目前目標、cwd/repo、可變更檔案、已知限制、是否有本機/遠端/執行期快取差異。
-- `Scope`：明確分出本回合會碰的檔案與不會碰的檔案；全域 Codex 設定只改 `~/.codex` 與 config repo，不誤放到業務專案。
-- `Plan`：多步驟任務用 `update_plan`；每一步要有可驗證完成條件，不把「已開始」當「已完成」。
-- `Act`：讀取與搜尋可並行；寫入、shell mutation、git、外部副作用必須保持順序；只有獨立 read-only 工具才並行。
-- `Verify`：以最小成本驗證真正生效來源。設定問題要分清 config、catalog、profile、session snapshot、app-server cache、state DB、log；不要只看檔案值就下結論。
-- `Report`：回報實際改了什麼、驗證看到什麼、仍可能受哪個 runtime/cache 影響；如果需要重啟 app/server/thread 才生效，要明確說。
-- 同類失敗第 2 次要分類原因：logic、state、environment、tool、policy、context、runtime drift。第 3 次前必須停止盲試，回報已驗證事實與下一個最小驗證。
-- 大輸出與長診斷不要整段塞回 context；優先保留路徑、摘要與可重跑命令。能用 artifact / log / transcript path 表示的，不用全文貼回。
+- `agent-core-lite` 固定使用 `Observe -> Scope -> Plan -> Act -> Verify -> Report`。
+- 明確 read-only / review / 先分析時不改檔；明確「修、改、implement、直接做、同步、push」才進入實作或 git 動作。
 
 ### 3.7 Agentic Loop 與自訂 Agent 引擎
 
-- 本節是全域 Codex 行為規範，不是任一業務專案的 src 規格。建立或修改自訂 agent runtime、tool loop、compactor、retry engine 時，優先使用本機 `agent-core-engine` skill / template；只有使用者明確指定目標 repo 時，才把 runtime skeleton 寫入該 repo。
-- 參考終端 Agent 架構時，只吸收核心 loop、tool contract、permission、retry、compaction、streaming 與 transcript 管理；不要搬運 React/Ink UI、品牌遙測、voice/statusline、內部產品命名或不可驗證的 vendor-specific 邏輯。
-- Query/session 啟動時必須 snapshot immutable config，例如 model、permission mode、tool registry、budget、feature flags。每輪 tick 只能透過 transition 產生下一個 state，不允許散落式改全域狀態。
-- 禁止用無狀態 `while (true)` 盲目呼叫模型與工具。Agent loop 必須有明確生命週期狀態，至少涵蓋：`Observe`、`Plan`、`Act`、`AwaitTool`、`Integrate`、`CheckStop`、`Compact/Retry`、`Next`。
-- 每次狀態轉移都要記錄 transition reason、前後 lifecycle、觸發來源與關鍵輸入摘要。若後續要 debug，必須能從 transcript 還原為何進入下一步。
-- 每輪 tick 必須維護強型別 context，至少追蹤：
-  - `iterationId` / `maxIterations`
-  - `timeBudget.startTime` / `timeBudget.deadline`
-  - `tokenBudget.maxContextTokens` / `tokenBudget.currentUsage` / compact threshold
-  - `lastProgressMarker.workspaceHash` / `lastProgressMarker.consecutiveFailures`
-  - 當輪 lifecycle、transition reason、tool calls、tool results、scratchpad、abort signal。
-- Tool contract 不可只是任意 function。每個 tool 至少要有名稱、輸入 schema 解析、permission check、唯讀/可並行/破壞性標記、interrupt behavior、timeout、結果大小上限、執行函式與結果標準化。
-- Tool 執行必須 fail-closed：未明確宣告可並行則序列化；未明確宣告唯讀就視為可能寫入；破壞性或權限不明工具必須走攔截或使用者確認。
-- 大型或動態 tool registry 可延遲載入完整 schema，但不能只靠工具名稱就呼叫。必須先透過已載入的 discovery tool 取回完整 schema，且保留 `alwaysLoad` 類機制讓核心工具第一輪即可使用。
-- 同一批 tool call 應先分組：連續 read-only 且 concurrency-safe 的工具可受限並行；任何寫入、shell mutation、外部副作用工具必須序列執行；streaming tool 可以先產生增量輸出，但整合回 transcript 時要保持原始 tool_use 順序。
-- Bash / PowerShell / shell 安全不能只靠字串直覺。read-only 判斷至少要處理 shell metacharacters、redirection、command substitution / subexpression、Unicode whitespace、brace expansion、wrapper command、cwd-changing compound、provider / UNC path、path validation；無法解析時視為可能寫入。
-- Tool result 不可無限制塞回模型。大輸出應持久化為 session artifact 或本機檔案，只回傳 preview、路徑、exit code、stdout/stderr 摘要；空輸出也要標準化為成功但無輸出。若 tool result replacement 會跨 turn / resume 重播，必須把 replacement 決策寫入 transcript，避免同一 tool_use_id 在 resume 後看到不同內容。
-- Hook contract 要明確分層。若實作 lifecycle hooks，至少區分 `PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionDenied`、`SessionStart`、`Stop/StopFailure`、`PreCompact/PostCompact`、`SessionEnd`；每個 hook 必須有 JSON payload、timeout、是否可阻擋主流程、stdout/stderr 去向與 exit code 語意。觀測型 hook fail-open，安全/permission 型 hook fail-closed 或明確要求使用者確認。
-- 錯誤必須分級處理：
-  - Transient：429、rate limit、明確 timeout error、stream idle timeout、ECONNRESET、EPIPE、ETIMEDOUT、EAI_AGAIN、暫時性 5xx，可在底層用 exponential backoff + jitter 重試，預設最多 2 次，並尊重 Retry-After。
-  - Deterministic：schema 錯、路徑不存在、權限不足、語法錯、exit code 明確失敗，不自動重試，直接封裝成 tool output 交回模型或 caller。
-  - User action required：需要確認、權限授權、互動輸入時停止 loop，不假裝自動完成。
-- Timeout 不應只靠模糊的 `AbortError` 字串判斷。工具 timeout、API request timeout、stream idle timeout 都要轉成可分類的明確錯誤型別或 reason，再進 retry / fallback / tool result 流程。
-- Context compactor 不只做摘要。順序應為：限制單一 tool output、限制同一輪 aggregate tool result、剪枝舊讀檔快照、做 micro/snip compact、保留最近完整軌跡，最後才做 summary compact；prompt-too-long 時再做 reactive compact。
-- Microcompact 要以 API round / assistant response id 分組，不以表面的人類回合分組；保留 tail 時要維持 `tool_use` / `tool_result` 與同一 assistant message chunk 的 API 不變量。
-- Compact 完成後必須清理被 compact invalidated 的狀態，例如 microcompact tracker、session/message cache、permission/classifier approvals、speculative checks、context-collapse 或 memory-file cache；但 cleanup 必須分辨 main thread / subagent，且不要清掉仍需跨 compact 保留的 invoked skill content 或使用者明確目標。
-- Session / transcript persistence 必須支援 resume 正確性。Transcript 應 append-only、保留穩定 message id / parent link、記錄 compact boundary、保留最近訊息或 preserved segment 的 relink metadata；compact summary 應提供 full transcript path 供後續讀回細節。Compact 或 session exit 後，要把 session metadata 重新寫到尾端可讀區，避免 resume 只看到過期標題、tag、mode 或第一則 prompt。若有 snip compact 或平行 tool result，resume loader 必須重播移除範圍並修復同一 provider message id 的 sibling 區塊。
-- 多 agent / worker runtime 必須把 worker 身分、cwd/worktree、permission mode、tool pool、abort controller 與 resume metadata 分開保存。不能讓背景 worker 直接卡在無 UI 的權限提示；需要 leader routing、typed mailbox / queue，或 fail-closed。
-- Context 保留白名單：system prompt、全域/專案規範、最近 3 輪完整對話與工具軌跡、仍待處理的 tool result、使用者最後明確目標。
-- Context 優先剪枝黑名單：超過 50 行的舊工具輸出、已被後續寫入覆蓋的檔案快照、重複搜尋結果、已完成且無後續引用的中間診斷。
-- 自動 compact / retry 必須有熔斷：同類失敗連續 3 次後停止自動嘗試，回報已驗證事實與下一個可驗證假設。
+- `agent-core-engine` 只用於建立、修改、審查完整自訂 agent runtime、tool loop、compactor、retry engine、transcript/resume 或 typed tick context。
+- 不把 runtime skeleton 寫進業務專案，除非使用者明確指定該 repo 是目標 runtime implementation。
+- 參考終端 Agent 架構時，只吸收核心 loop、tool contract、permission、retry、compaction、streaming、transcript、memory 與 multi-agent 協調；不要搬 React/Ink UI、品牌遙測、voice/statusline、內部命名或不可驗證邏輯。
+- 完整 runtime 契約、工具契約、compaction、transcript、memory、multi-agent 細節維護在 `agent-core-engine` skill，不放在本 AGENTS.md。
 
 ---
 
@@ -302,6 +273,7 @@ Observe -> Scope -> Plan -> Act -> Verify -> Report
 ### Serena
 
 - 適合大型程式庫語意查找與精準修改。
+- Serena 是全域 MCP，不在 config 寫死 `--project`；使用前先 activate 當前 repo / project。
 - 若工具不可用，改用 `rg` / shell / IDE 可用上下文替代，並回報替代方式。
 
 ---

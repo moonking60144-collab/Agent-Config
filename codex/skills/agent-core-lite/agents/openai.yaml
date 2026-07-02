@@ -1,0 +1,4 @@
+name: agent-core-lite
+display_name: Agent Core Lite
+short_description: Structured workflow guardrails for large, risky, or multi-step Codex tasks.
+default_prompt: Use agent-core-lite to scope, plan, execute, verify, and report this task without drifting.
