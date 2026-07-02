@@ -206,7 +206,6 @@
 - 變更摘要與影響面。
 - 測試步驟。
 - 回滾方式。
-- 若修改 Ragic workflow，確認未造成循環觸發；必要時使用 `setIfExecuteWorkflow(false)`。
 
 ---
 
@@ -278,17 +277,7 @@
 
 ---
 
-## 11. Ragic 專案規則
-
-- Ragic Workflow JS API 必須嚴格遵守官方文件：
-  - https://www.ragic.com/intl/en/doc/15/javascript-workflow-engine
-- 官方文件明確定義的 API 直接用，不加過度存在性檢查。
-- 專案既有寫法與官方範例不同時，優先沿用專案大宗寫法。
-- 欄位 ID、表單路徑、workflow 範例與專案狀態應放在專案文件或 memory，不污染全域規則。
-
----
-
-## 12. 備註
+## 11. 備註
 
 - 本檔為現行 Codex 全域規範；舊版限制性條款視為移除或被本檔覆蓋。
 - 若有法規、合約或公司合規要求，該要求優先於本檔。

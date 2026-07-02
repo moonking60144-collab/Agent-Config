@@ -86,7 +86,6 @@ Apply these gates when writing or reviewing code:
 - Treat SQL injection, XSS, command injection, auth bypass, data loss, migration drift, and source-of-truth conflicts as blocker risks.
 - For frontend work, verify actual rendered/user behavior when the task depends on layout, interaction, accessibility, or browser state.
 - For external APIs, product limits, versions, specs, legal/financial/medical facts, or latest behavior, use official or primary sources.
-- For Ragic workflow work, follow official Ragic JS docs and project dominant style; avoid over-defensive wrappers around official API calls.
 
 ## Good / Bad Patterns
 
