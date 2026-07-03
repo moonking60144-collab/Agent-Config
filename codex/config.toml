@@ -81,7 +81,7 @@ js_repl = false
 [memories]
 consolidation_model = "gpt-5.4"
 extract_model = "gpt-5.4"
-generate_memories = false
+generate_memories = true
 use_memories = true
 disable_on_external_context = false
 max_raw_memories_for_consolidation = 512
