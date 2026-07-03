@@ -5,8 +5,6 @@ codeium.codeium
 dbaeumer.vscode-eslint
 flyfly6.terminal-in-status-bar
 github.vscode-github-actions
-google.gemini-cli-vscode-ide-companion
-google.geminicodeassist
 marceloxp.statusbartext
 mechatroner.rainbow-csv
 meshintelligenttechnologiesinc.pieces-vscode

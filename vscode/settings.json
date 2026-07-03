@@ -1,5 +1,4 @@
 {
-  "geminicodeassist.project": "your-gcp-project-id",
   "chat.mcp.gallery.enabled": true,
   "explorer.confirmDelete": false,
   "terminal.integrated.defaultProfile.windows": "PowerShell",
@@ -18,11 +17,6 @@
     "請一律使用「繁體中文」回答以下內容，說明時盡量條列式、簡潔清楚。  以下是我要你處理的內容：",
     "Explain in zh-TW"
   ],
-  "geminicodeassist.enableTelemetry": false,
-  "geminicodeassist.chat.automaticScrolling": false,
-  "geminicodeassist.agentDebugMode": true,
-  "geminicodeassist.chat.changeView": "Default diff view",
-  "geminicodeassist.chat.enableStreaming": false,
   "gitlens.ai.model": "vscode",
   "gitlens.ai.vscode.model": "copilot:gpt-4.1",
   "gitlens.views.commitDetails.files.layout": "list",

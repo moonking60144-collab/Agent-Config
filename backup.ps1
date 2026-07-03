@@ -4,8 +4,8 @@
   把本機現有設定回寫到本 repo（deploy.ps1 的反方向），方便把某臺機器的調整同步回版控。
 .DESCRIPTION
   回寫 Claude Code 的 CLAUDE.md / settings.json / hooks、Codex AGENTS.md / repo 管理的 skills，
-  以及 VS Code 的 settings / keybindings。會自動把機器特定值（hook 絕對路徑、GCP 專案 ID）
-  還原成佔位符。回寫後請 git diff 檢視再 commit。
+  以及 VS Code 的 settings / keybindings。會自動把機器特定 hook 絕對路徑還原成佔位符，
+  並剔除已停用的 Gemini Code Assist 設定。回寫後請 git diff 檢視再 commit。
   Codex config.toml 只回寫可攜模型 / token 行為 key；profile.md 含機器特定內容，不自動回寫。
 .PARAMETER IncludeExtensions
   同步 `code --list-extensions` 到 vscode/extensions.txt。預設略過，避免某臺機器的臨時擴充污染 repo。
@@ -197,14 +197,22 @@ Sync-CodexPortableConfig `
   -LocalPath (Join-Parts $U '.codex' 'config.toml') `
   -RepoPath (Join-Parts $src 'codex' 'config.toml')
 
-# VS Code settings（把 GCP 專案 ID 換回佔位符）
+# VS Code settings（剔除已停用的 Gemini Code Assist 設定）
 $vsUser = Get-VSCodeUserDir
 $vs = Join-Path $vsUser 'settings.json'
 if(Test-Path $vs){
   $t = Get-Content $vs -Raw
-  $t = [regex]::Replace($t, '("geminicodeassist\.project"\s*:\s*")[^"]*(")', '${1}your-gcp-project-id${2}')
+  try {
+    $settings = $t | ConvertFrom-Json
+    @($settings.PSObject.Properties | Where-Object { $_.Name -like 'geminicodeassist.*' }) | ForEach-Object {
+      $settings.PSObject.Properties.Remove($_.Name)
+    }
+    $t = ($settings | ConvertTo-Json -Depth 20) + "`n"
+  } catch {
+    $t = [regex]::Replace($t, '(?m)^\s*"geminicodeassist\.[^"]+"\s*:\s*("[^"]*"|true|false|null|[0-9]+)\s*,?\r?\n?', '')
+  }
   [System.IO.File]::WriteAllText((Join-Parts $src 'vscode' 'settings.json'), $t, $enc)
-  Ok 'settings.json <- VS Code（已遮蔽 GCP 專案 ID）'
+  Ok 'settings.json <- VS Code（已剔除 Gemini Code Assist 設定）'
 } else { Skip "$vs 不存在" }
 
 # VS Code keybindings

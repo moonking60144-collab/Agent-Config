@@ -416,4 +416,3 @@ Write-Host ''
 Info '部署完成。'
 Write-Host '  1. 完全重啟 Claude Code 與 VS Code 以套用設定' -ForegroundColor White
 Write-Host '  2. 首次啟動 Claude Code 會跳出 profile.md 的 import 批准對話，按核准' -ForegroundColor White
-Write-Host '  3. VS Code 的 geminicodeassist.project 目前是佔位字串，請改回你的 GCP 專案 ID' -ForegroundColor White

@@ -123,7 +123,7 @@ config/
 
 ### VS Code（`vscode/`）
 
-`settings.json` 是本機與舊 repo 版本「合併」後的結果（兩邊各有獨有設定，直接覆蓋會掉設定）。`geminicodeassist.project` 已換成佔位字串 `your-gcp-project-id`，部署後請改回自己的 GCP 專案 ID。
+`settings.json` 是本機與舊 repo 版本「合併」後的結果（兩邊各有獨有設定，直接覆蓋會掉設定）。Gemini Code Assist / Gemini CLI companion 已從 managed extensions 與 settings 中移除；若單機臨時安裝，不要用 `backup.ps1 -IncludeExtensions` 回寫進 repo。
 
 部署目標依 OS 決定：Windows 是 `%APPDATA%\Code\User\`，macOS 是 `~/Library/Application Support/Code/User`，Linux 是 `~/.config/Code/User`。擴充套件以 `extensions.txt` 為準逐一安裝（`code --install-extension`）。
 
