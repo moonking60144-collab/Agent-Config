@@ -6,5 +6,9 @@
             "text": "\\\r\n"
         },
         "when": "terminalFocus"
+    },
+    {
+        "key": "insert",
+        "command": "-editor.action.toggleOvertypeInsertMode"
     }
 ]
