@@ -33,7 +33,6 @@ AGENTS.md 只保留全域常數與 skill routing；詳細 Observe -> Scope -> Pl
 ################################################################################
 # 核准與沙箱
 ################################################################################
-project_doc_fallback_filenames = ["CLAUDE.md"] # 找不到 AGENTS.md 時改找 CLAUDE.md
 approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 

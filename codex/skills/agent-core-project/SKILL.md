@@ -1,0 +1,157 @@
+---
+name: agent-core-project
+description: Use only when an engineering task spans 3+ independently verifiable subsystems, cannot fit safely in one context, requires a durable plan and ledger across compaction/resume/handoff, involves irreversible or high-blast-radius changes such as schema migration, data backfill, or production deploy, or needs audit-first discovery with an unknown worklist followed by prioritized multi-phase implementation.
+---
+
+# Agent Core Project
+
+## Role
+
+Use this skill only as the project-grade escalation target above `agent-core-lite`. Keep `agent-core-lite` for ordinary implementation, config, sync, commit/push, and cross-file work that fits in one context with `update_plan`.
+
+## Intake Gate
+
+Before creating files or doing project-grade work, confirm at least one trigger is true:
+
+- The task spans 3+ subsystems that each need independent verification.
+- The task cannot fit safely in one context or must survive compaction, resume, or handoff.
+- The task has irreversible or high-blast-radius effects, such as schema migration, data backfill, production deploy, or broad data rewrite.
+- The task needs audit-first discovery with an unknown worklist followed by prioritized multi-phase implementation.
+
+If no trigger remains true after inspection, say so and downgrade to `agent-core-lite`; do not force this skill's six phases.
+
+## Routing Priority
+
+Respect global routing before continuing:
+
+- Pure review / audit / inspect / list issues -> switch to `review`.
+- First contact with an unfamiliar repo or subsystem -> switch to `repo-onboarding-audit`.
+- Same failure, mismatch, hypothesis, or tool issue appears twice -> switch to `agent-failure-debugging`.
+- Custom agent runtime, tool loop, compactor, retry, transcript, resume, or typed tick context -> switch to `agent-core-engine`.
+- Only true project-grade execution stays here.
+
+## Do Not Use This Skill For
+
+- A single known bug with clear scope.
+- Small config edits.
+- Ordinary cross-file changes that fit in one context.
+- Pure review/audit with no implementation request.
+- Simple commit/push work.
+- One-shot refactors with clear validation.
+- Tasks where `update_plan` is enough.
+
+## Artifact Location
+
+Default to user-level durable artifacts outside business repos:
+
+```text
+~/.codex/projects/<repo-slug>/plans/
+~/.codex/projects/<repo-slug>/ledgers/
+```
+
+Use `<repo-slug>` from the git root basename when available; if collision or ambiguity matters, append a short sanitized path or hash. Create directories only after the Intake Gate passes.
+
+Only write inside the business repo, such as `docs/codex/`, when the user explicitly asks for repo-local artifacts and gitignore/commit intent has been handled.
+
+For projectless chats, write artifacts under:
+
+```text
+/Users/wyden/Documents/Codex/<date>/<thread>/outputs/
+```
+
+## Required Phases
+
+### 1. Map & Decompose
+
+Identify affected subsystems, source-of-truth surfaces, data/control flow edges, dependency order, consumes/produces relationships, blast radius, and ordered sub-tasks. Each sub-task must be independently verifiable and name dependencies when order matters.
+
+### 2. Plan to File
+
+Write a durable plan before implementation. Each task entry must include:
+
+- Task id and goal.
+- Files/modules expected to change.
+- Preconditions and dependencies.
+- Implementation steps.
+- Verification commands or artifacts.
+- Acceptance criteria.
+- Rollback/recovery note for irreversible or high-blast-radius steps.
+- Blocked condition.
+
+No placeholders such as `TBD`, `later`, or `etc.` in task definitions.
+
+### 3. Progress Ledger
+
+Create or update a ledger beside the plan. The ledger is the source of truth after resume or compaction.
+
+Each ledger must start with a searchable status header:
+
+```text
+project_status: active | blocked | complete | archived
+repo_path: <absolute repo path or projectless workspace path>
+plan_path: <absolute plan path>
+ledger_path: <absolute ledger path>
+active_task: <task id or none>
+last_verified_task: <task id or none>
+updated_at: <ISO-8601 timestamp with timezone>
+next_instruction: Read <ledger path> first, then continue from <task id>.
+```
+
+Use `active` or `blocked` for unfinished work. Set `complete` only after verification evidence is recorded. Set `archived` only when the user intentionally closes the project.
+
+Allowed task states:
+
+```text
+pending
+in_progress
+done_verified
+blocked
+skipped
+```
+
+Each `done_verified` entry must include evidence: command, output summary, artifact path, git commit if available, or direct runtime/UI proof. Never redo a `done_verified` task unless the ledger says the evidence is invalid or the user asks.
+
+Keep an `Eliminated` section for debug or discovery work. Record one eliminated hypothesis per line with the evidence that ruled it out, so resume does not repeat dead paths:
+
+```text
+## Eliminated
+- <hypothesis> — evidence: <command/output/artifact>
+```
+
+### 4. Execute Per Task
+
+Execute one task at a time. Update the ledger after every task state change. Use fresh subagents only for independent read-only exploration or clearly isolated work; the main agent owns writes, git actions, and final verification unless the user explicitly delegates otherwise.
+
+Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply `AGENTS.md` §3.5 confirmation requirements; do not rely on post-run verification to invent the rollback path.
+
+If execution shows the plan is wrong, dependencies changed, or discovery expanded the worklist, pause execution, return to Map & Decompose, then update the plan and ledger before continuing.
+
+If a task becomes blocked, mark it `blocked` with evidence and dependency impact. Continue only with tasks proven independent of the blocked chain; mark dependent tasks `blocked` or `pending` in the ledger. If the same failure, mismatch, hypothesis, or tool issue appears twice, switch to `agent-failure-debugging`.
+
+### 5. Verify Before Complete
+
+Apply `agent-core-lite`'s verification gate by reference. Additionally produce a requirement evidence table:
+
+```text
+Requirement | Evidence | Status
+```
+
+For irreversible or high-blast-radius steps, include rollback or recovery path evidence before claiming completion.
+
+### 6. Handoff / Resume Contract
+
+When context pressure is rising, compaction is likely, or the task may pause for a long time, checkpoint proactively: update the ledger, write eliminated hypotheses, produce the handoff, and stop cleanly instead of pushing until state is lost.
+
+Before any stop or final report, update the ledger and include:
+
+- Plan path.
+- Ledger path.
+- Current task state.
+- Completed `done_verified` tasks that must not be repeated.
+- Blockers or residual risks.
+- Next task to run.
+- Exact first instruction for the next turn: `Read <ledger path> first, then continue from <task id>.`
+
+The ledger path must also be visible in the final response so the global AGENTS.md resume hook can recover it after compaction.
+
+Before final report, run `git diff --stat` when inside a git repo. Base the changed-file summary on the actual diff, not memory.

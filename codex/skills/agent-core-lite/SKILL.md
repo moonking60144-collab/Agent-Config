@@ -27,6 +27,7 @@ This skill is not the canonical dispatch table. The canonical routing rules live
 - If this is first contact with an unfamiliar repo or subsystem, switch to `repo-onboarding-audit`.
 - If the same failure, mismatch, or hypothesis has appeared twice, switch to `agent-failure-debugging`.
 - If the task is about a custom runtime, tool loop, retry engine, compactor, transcript, resume, or typed tick context, switch to `agent-core-engine`.
+- If the task exceeds lite scope because it spans 3+ independently verifiable subsystems, cannot fit safely in one context, requires a durable plan/ledger across compaction/resume/handoff, has irreversible or high-blast-radius effects such as schema migration, data backfill, or production deploy, or needs audit-first discovery with an unknown worklist followed by prioritized multi-phase implementation, switch to `agent-core-project`.
 
 ## Required Loop
 
