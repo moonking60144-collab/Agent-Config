@@ -20,6 +20,16 @@ Before creating files or doing project-grade work, confirm at least one trigger 
 
 If no trigger remains true after inspection, say so and downgrade to `agent-core-lite`; do not force this skill's six phases.
 
+## Resume Gate
+
+Before creating a new plan or ledger, search for an existing unfinished ledger for the current repo or project under:
+
+```text
+~/.codex/projects/<repo-slug>/ledgers/
+```
+
+If a matching `active` or `blocked` ledger exists for the current objective, read that ledger first and continue from its `next_instruction` instead of creating a duplicate project. If multiple ledgers plausibly match, summarize the candidates and ask the user which one to resume before writing new project artifacts.
+
 ## Routing Priority
 
 Respect global routing before continuing:
@@ -53,11 +63,14 @@ Use `<repo-slug>` from the git root basename when available; if collision or amb
 
 Only write inside the business repo, such as `docs/codex/`, when the user explicitly asks for repo-local artifacts and gitignore/commit intent has been handled.
 
-For projectless chats, write artifacts under:
+For projectless chats, prefer user-level durable artifacts rather than a hardcoded OS-specific scratch path:
 
 ```text
-/Users/wyden/Documents/Codex/<date>/<thread>/outputs/
+~/.codex/projects/projectless-<thread-id>/plans/
+~/.codex/projects/projectless-<thread-id>/ledgers/
 ```
+
+If the current cwd is already a Codex scratch workspace and the artifact is a user-visible deliverable rather than project control state, it may be written under `<current-cwd>/outputs/`. Keep plans and ledgers under `~/.codex/projects/` unless the user explicitly asks for visible repo-local or scratch-local artifacts.
 
 ## Required Phases
 
@@ -121,6 +134,8 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 ### 4. Execute Per Task
 
 Execute one task at a time. Update the ledger after every task state change. Use fresh subagents only for independent read-only exploration or clearly isolated work; the main agent owns writes, git actions, and final verification unless the user explicitly delegates otherwise.
+
+Subagent findings are leads, not verification evidence. Before marking any task `done_verified`, the main agent must directly verify referenced files, commands, logs, diffs, runtime state, or artifacts and record that direct evidence in the ledger.
 
 Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply `AGENTS.md` §3.5 confirmation requirements; do not rely on post-run verification to invent the rollback path.
 

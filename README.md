@@ -61,10 +61,16 @@ config/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
 │   ├── model-catalog.json       #   Codex model catalog snapshot（預設不由 config.toml 引用）
+│   ├── policies/
+│   │   └── risk-matrix.md       #   高風險操作的一頁式判斷規則
+│   ├── evals/
+│   │   └── read-only-boundary.cases.jsonl # read-only / destructive smoke cases
 │   ├── compact-prompts/         #   context compaction prompt 實驗檔
 │   ├── profiles/                #   Codex profile 檔，部署到 ~/.codex/*.config.toml
 │   └── skills/
 │       ├── review/              #   issue-first 審查準則
+│       ├── agent-core-lite/      #   日常跨檔、同步、驗證、commit/push 工作流程
+│       ├── agent-core-project/   #   長任務 plan / ledger / resume 工作流程
 │       ├── agent-failure-debugging/ # 重複失敗時的 capture / diagnosis / 最小恢復流程
 │       ├── repo-onboarding-audit/   # 陌生 repo 的 read-only 偵查與架構盤點流程
 │       ├── agent-core-engine/       # custom agent runtime / tool loop / compactor 設計準則
@@ -96,17 +102,56 @@ config/
 
 `AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
 
-`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理五個 Codex skills：
+`skills/` 部署到 `~/.codex/skills/`。目前 repo 管理七個 Codex skills：
 
 | Skill | 使用時機 | 重點 |
 |-------|----------|------|
 | `review` | 使用者要求 review、audit、inspect、PR/diff/branch review、architecture/integration/system review | issue-first 審查，先列 bugs、回歸、安全、測試與部署風險 |
+| `agent-core-lite` | 大型 repo、跨檔、3 步以上、config/runtime mismatch、sync/deploy/commit/push | 固定使用 Observe → Scope → Plan → Act → Verify → Report，避免沒有 scope、證據或停止條件就動手 |
+| `agent-core-project` | 跨 3+ 可獨立驗證子系統、長任務、需要 plan/ledger/resume、或高爆炸半徑變更 | 用 Intake Gate、project plan、progress ledger、`done_verified`、`next_instruction` 保證可續接與可驗證 |
 | `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 先記錄 task goal、最後成功步驟、失敗工具/指令、重複模式、環境假設，再分類 root cause，選最小可逆驗證動作 |
 | `repo-onboarding-audit` | 進陌生 repo、開始 review/architecture audit 前缺上下文、要先盤點 stack、entry point、test surface 或 validation commands | 唯讀偵查 package manifest、framework fingerprint、entry points、top-level tree、tooling、tests、資料流、conventions、git history |
 | `agent-core-engine` | 設計、實作、審查或擴充 custom agent runtime、tool loop、compactor、retry engine | 將 agent core 做成 deterministic lifecycle，並提供可複製的 TypeScript skeleton |
 | `frontend-ui-designer` | 新 UI、視覺改版、prototype、URL/image-to-code、landing page、dashboard、產品畫面 polish | 先鎖定 design brief 與 visual target，沿用既有 design system，補齊互動狀態、asset fidelity、responsive 與 evidence-based design QA |
 
 `deploy.ps1` 只同步 repo 內存在的 skill 目錄，並會把既有 `~/.codex/skills/*.bak.*` 備份移出 skill registry；`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統、外掛 cache 或備份目錄掃進版控。
+
+#### Codex workflow 架構
+
+目前架構刻意凍結在四層：routing、execution、verification、risk rules。除非真實重複失敗至少 2 次，且會造成檔案、git、設定、外部服務或長任務狀態損害，否則不新增 trace schema、typed ledger schema、MCP/plugin governance matrix、workflow DAG 或完整 agent framework。
+
+```mermaid
+flowchart TD
+  A["User request"] --> B["AGENTS.md §3.6 routing"]
+  B --> C{"Task type"}
+  C --> D["review"]
+  C --> E["repo-onboarding-audit"]
+  C --> F["agent-failure-debugging"]
+  C --> G["agent-core-lite"]
+  C --> H["agent-core-project"]
+  C --> I["agent-core-engine"]
+  C --> J["frontend-ui-designer"]
+
+  D --> K["Read-only findings"]
+  E --> L["Project map / validation surface"]
+  F --> M["Evidence / hypothesis / stop blind retry"]
+  G --> N["Observe / Scope / Plan / Act / Verify / Report"]
+  H --> O["Intake Gate / Plan / Ledger / Resume / Verify"]
+  I --> P["Runtime / tool contract / compaction design"]
+  J --> Q["Design brief / implementation / QA"]
+
+  K --> R["Risk Matrix"]
+  L --> R
+  M --> R
+  N --> R
+  O --> R
+  P --> R
+  Q --> R
+  R --> S["validate-config.ps1"]
+  S --> T["deploy / backup / git sync"]
+```
+
+風險規則維護在 `codex/policies/risk-matrix.md`，只保留 `read_only`、`local_reversible_write`、`local_destructive`、`git_shared_or_irreversible`、`external_side_effect`、`secret_bearing` 六類。Read-only 邊界與 destructive 操作的 smoke cases 維護在 `codex/evals/read-only-boundary.cases.jsonl`；目前它是人工 / 未來腳本化的 contract，不接入 `validate-config.ps1`。
 
 `config.toml` 只保留可攜偏好（`developer_instructions`、model 選擇、sandbox/approval 策略、features、agents 等）。目前不啟用 `model_catalog_json` override，讓 Codex 使用官方 / server 端 catalog。已**剔除**機器特定 / 自動生成的內容：
 
