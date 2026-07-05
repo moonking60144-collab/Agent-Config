@@ -100,7 +100,7 @@ config/
 
 ### Codex（`codex/`）
 
-`AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規則；目前主要保存 Windows / WSL 路徑歸屬規則，避免 agent 因 shell 環境誤判目標檔案系統。
+`AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規範與 canonical skill routing；可攜行為規則進版控，機器特定 runtime 路徑、帳號狀態與自動生成內容不放入此檔。
 
 `skills/` 部署到 `~/.codex/skills/`。目前 repo 管理七個 Codex skills：
 
@@ -147,8 +147,9 @@ flowchart TD
   O --> R
   P --> R
   Q --> R
-  R --> S["validate-config.ps1"]
-  S --> T["deploy / backup / git sync"]
+  R --> S["Human / agent contract"]
+  U["validate-config.ps1"] --> V["config / active sync verification"]
+  V --> W["deploy / backup / git sync"]
 ```
 
 風險規則維護在 `codex/policies/risk-matrix.md`，只保留 `read_only`、`local_reversible_write`、`local_destructive`、`git_shared_or_irreversible`、`external_side_effect`、`secret_bearing` 六類。Read-only 邊界與 destructive 操作的 smoke cases 維護在 `codex/evals/read-only-boundary.cases.jsonl`；目前它是人工 / 未來腳本化的 contract，不接入 `validate-config.ps1`。
