@@ -216,7 +216,28 @@ function Test-DirectorySync($repoDir, $activeDir, $label){
   }
 }
 
+function Test-FileSync($repoFile, $activeFile, $label){
+  if(-not(Test-Path -LiteralPath $repoFile)){
+    Warn "$label repo 檔案不存在"
+    return
+  }
+  if(-not(Test-Path -LiteralPath $activeFile)){
+    Fail "$label active 檔案不存在：$activeFile"
+    return
+  }
+  $repoHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $repoFile).Hash
+  $activeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $activeFile).Hash
+  if($repoHash -eq $activeHash){
+    Ok "$label 與 active 內容一致"
+  } else {
+    Fail "$label 與 active 不一致：repo=$($repoHash.Substring(0,12)) active=$($activeHash.Substring(0,12))"
+  }
+}
+
 $repoCodexConfig = Join-Parts $RepoRoot 'codex' 'config.toml'
+$repoCodexAgents = Join-Parts $RepoRoot 'codex' 'AGENTS.md'
+$repoCodexBaseInstructions = Join-Parts $RepoRoot 'codex' 'base-instructions.md'
+$repoCodexModelCatalog = Join-Parts $RepoRoot 'codex' 'model-catalog.json'
 $repoClaudeSettings = Join-Parts $RepoRoot 'claude' 'settings.json'
 $repoPowerShellFiles = @(
   (Join-Path $RepoRoot 'deploy.ps1'),
@@ -225,7 +246,7 @@ $repoPowerShellFiles = @(
   (Join-Parts $RepoRoot 'claude' 'hooks' 'check-traditional.ps1')
 )
 
-Info '[1/5] Repo 檔案格式'
+Info '[1/6] Repo 檔案格式'
 foreach($file in $repoPowerShellFiles){
   Test-Utf8Bom $file (Split-Path $file -Leaf)
   Test-PowerShellParse $file (Split-Path $file -Leaf)
@@ -234,13 +255,13 @@ Test-JsonParse $repoClaudeSettings 'claude/settings.json'
 Test-TomlParse $repoCodexConfig 'codex/config.toml'
 Write-Host ''
 
-Info '[2/5] Repo template 邊界'
+Info '[2/6] Repo template 邊界'
 Test-TextContains $repoCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') 'codex/config.toml'
 Test-TextContains $repoClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') 'claude/settings.json'
 Test-TextDoesNotContain $repoCodexConfig @('model_catalog_json','model_auto_compact_token_limit =') 'codex/config.toml'
 Write-Host ''
 
-Info '[3/5] Context7'
+Info '[3/6] Context7'
 Test-Context7Smoke
 Write-Host ''
 
@@ -249,10 +270,13 @@ if($SkipActive){
 } else {
   $homeDir = Get-HomeDir
   $activeCodexConfig = Join-Parts $homeDir '.codex' 'config.toml'
+  $activeCodexAgents = Join-Parts $homeDir '.codex' 'AGENTS.md'
+  $activeCodexBaseInstructions = Join-Parts $homeDir '.codex' 'base-instructions.md'
+  $activeCodexModelCatalog = Join-Parts $homeDir '.codex' 'model-catalog.json'
   $activeClaudeSettings = Join-Parts $homeDir '.claude' 'settings.json'
   $activeClaudeHook = Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.ps1'
 
-  Info '[4/5] Active 設定展開狀態'
+  Info '[4/6] Active 設定展開狀態'
   Test-TomlParse $activeCodexConfig '~/.codex/config.toml'
   Test-JsonParse $activeClaudeSettings '~/.claude/settings.json'
   Test-Utf8Bom $activeClaudeHook '~/.claude/hooks/check-traditional.ps1'
@@ -260,7 +284,13 @@ if($SkipActive){
   Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'
   Write-Host ''
 
-  Info '[5/5] Repo-managed Codex skills'
+  Info '[5/6] Active Codex prompt surface'
+  Test-FileSync $repoCodexAgents $activeCodexAgents 'codex/AGENTS.md'
+  Test-FileSync $repoCodexBaseInstructions $activeCodexBaseInstructions 'codex/base-instructions.md'
+  Test-FileSync $repoCodexModelCatalog $activeCodexModelCatalog 'codex/model-catalog.json'
+  Write-Host ''
+
+  Info '[6/6] Repo-managed Codex skills'
   Get-ChildItem -LiteralPath (Join-Parts $RepoRoot 'codex' 'skills') -Directory | ForEach-Object {
     Test-DirectorySync $_.FullName (Join-Parts $homeDir '.codex' 'skills' $_.Name) "skills/$($_.Name)"
   }

@@ -80,7 +80,6 @@ function Sync-CodexPortableConfig {
   $portableKeys = @(
     'model',
     'model_context_window',
-    'model_auto_compact_token_limit',
     'tool_output_token_limit',
     'model_reasoning_effort',
     'model_reasoning_summary',
@@ -102,12 +101,6 @@ function Sync-CodexPortableConfig {
 
     if($idx -ge 0){
       $repoLines[$idx] = $localLine
-    } elseif($key -eq 'model_auto_compact_token_limit'){
-      $contextIdx = -1
-      for($i = 0; $i -lt $repoLines.Count; $i++){
-        if($repoLines[$i] -match '^\s*model_context_window\s*='){ $contextIdx = $i; break }
-      }
-      if($contextIdx -ge 0){ $repoLines.Insert($contextIdx + 1, $localLine) }
     }
   }
 

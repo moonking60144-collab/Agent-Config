@@ -49,11 +49,8 @@
 
 - `AGENTS.md` §3.6 是唯一 canonical skill routing；不要在本檔維護 dispatch table。
 - 使用 skill 時，先讀完整 `SKILL.md` 再行動。
-- 大型 repo、跨檔、多步驟、config/runtime/token/context、commit/push 類任務走 `agent-core-lite`。
-- review / audit / inspect / list issues 類任務走 `review`。
-- 陌生 repo 或新子系統走 `repo-onboarding-audit`。
-- 同一錯誤、同一假設或同一工具失敗第二次後走 `agent-failure-debugging`。
-- 自訂 agent runtime、tool loop、compactor、retry、transcript/resume 類任務才走 `agent-core-engine`。
+- Process skill 依 `AGENTS.md` §3.6 觸發；domain skill 依 skill metadata 與使用者明確指定觸發。
+- 不要在本檔重列 process / domain skill 清單，避免 routing source-of-truth 漂移。
 
 ## 驗證
 

@@ -19,7 +19,7 @@ model_instructions_file = "__CODEX_HOME__/base-instructions.md"
 developer_instructions = '''
 請使用繁體中文回答，務必保持清晰、準確、技術導向、可執行。
 
-全域 skill routing 的唯一 canonical 是 AGENTS.md §3.6。不要在 config.toml 或 skill body 重複維護 dispatch table；依 AGENTS.md §3.6 選擇 review、repo-onboarding-audit、agent-core-lite、agent-failure-debugging 或 agent-core-engine。
+全域 skill routing 的唯一 canonical 是 AGENTS.md §3.6。不要在 config.toml 或 skill body 重複維護 dispatch table；process skill 依 AGENTS.md §3.6 觸發，domain skill 依 skill metadata 與使用者明確指定觸發。
 
 AGENTS.md 只保留全域常數與 skill routing；詳細 Observe -> Scope -> Plan -> Act -> Verify -> Report、品質閘門、失敗煞車與 completion gate 維護在 skills。簡單問答或單一明確設定不要儀式化，但一旦範圍擴大就切回對應 skill。
 
