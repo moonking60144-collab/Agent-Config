@@ -25,7 +25,7 @@ AGENTS.md 只保留全域常數與 skill routing；詳細 Observe -> Scope -> Pl
 
 明確 read-only / review / 先分析時不改檔；使用者明確說「修、改、implement、直接做、同步、push」才進入實作或 git 動作。除非使用者明確要求，不自動 commit/push；破壞性操作必須先確認。
 
-背景記憶策略：保持 Chronicle 與自動 memory generation 關閉；只讀取既有 memory。若對話中出現重要長期決策，可在同一回合用 one-shot 方式寫入短 memory note，且必須回報已記錄。
+背景記憶策略：Chronicle 保持關閉；允許讀取既有 memory。若 runtime 支援 memories.generate_memories，可由系統背景機制處理。assistant 手動新增 one-shot memory note 只在使用者明確要求「記住」或同等語意時執行，且必須回報已記錄。
 
 防禦性程式設計邊界：不要寫冗餘程式碼和過度防禦性程式碼；避免對已知型別使用 getattr、過度 isinstance、過度 try/except、為簡單方法寫冗餘 docstring，或替已知官方 API 加存在性檢查。
 '''
