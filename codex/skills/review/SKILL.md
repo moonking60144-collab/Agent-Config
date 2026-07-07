@@ -129,12 +129,14 @@ description: Issue-first code, architecture, integration, pull request, and chan
 
 ## 子 Agent 使用
 
-子 agent 由主 agent 依審查範圍與風險自動判斷，不需要等使用者明確說「使用 subagent」。但不要為了形式感分派；只有分工能提高覆蓋率、降低主 context 壓力、或提供獨立驗證時才使用。
+子 agent 由主 agent 依審查範圍與風險自動判斷，不需要等使用者明確說「使用 subagent」，也不需要逐次詢問。不要為了形式感分派；只有分工能提高覆蓋率、降低主 context 壓力、或提供獨立驗證時才使用。
 
 符合下列任一條件時，主 agent 應優先考慮使用子 agent：
 
 - 審查範圍很大，且可切成互不污染的 frontend/backend/security/data-flow 子問題。
+- 需要快速掃描大型 codebase 的多個互不相依區域，且本地單一路徑閱讀會壓縮覆蓋率。
 - 已有 P0/P1 候選 finding，需要第二個獨立 pass 依 `觸發鏈` 欄位標準驗證路徑與機制。
+- 需要對抗式檢查主 agent 的根因假設、payload contract、黑盒 API 行為或高風險寫入邊界。
 - 使用者明確要求多 agent 或獨立交叉審查。
 - 使用者要求完整 system audit、找所有 bug、跨模組 architecture/integration review，且單一 agent 會被 context 或時間壓縮影響覆蓋率。
 
@@ -144,7 +146,7 @@ description: Issue-first code, architecture, integration, pull request, and chan
 - 任務需要立即互動判斷、使用者剛要求先不要發散，或分派會比本地檢查更慢。
 - 沒有可用子 agent 工具；此時回報「子 agent 工具不可用」，並用本地索引、`rg`、分區閱讀替代。
 
-使用子 agent 時，傳 raw artifact、diff、檔案路徑與任務，不傳自己的結論、預期答案或懷疑點。要求子 agent 使用本 skill 做獨立 review，回收結果後再由主 agent 去重、校準嚴重度與決定是否上報。
+使用子 agent 時，傳 raw artifact、diff、檔案路徑與任務，不傳自己的結論、預期答案或懷疑點。要求子 agent 使用本 skill 做獨立 review，回收結果後再由主 agent 去重、校準嚴重度、直接驗證證據，最後決定是否上報。
 
 ## 回覆約束
 

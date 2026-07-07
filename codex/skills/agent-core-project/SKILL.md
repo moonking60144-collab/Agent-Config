@@ -133,7 +133,7 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 
 ### 4. Execute Per Task
 
-Execute one task at a time. Update the ledger after every task state change. Use fresh subagents only for independent read-only exploration or clearly isolated work; the main agent owns writes, git actions, and final verification unless the user explicitly delegates otherwise.
+Execute one task at a time. Update the ledger after every task state change. Use fresh subagents when independent read-only exploration, adversarial verification, or clearly isolated work will improve coverage or reduce main-context pressure. No per-use permission is required for those bounded reads. The main agent owns writes, git actions, external side effects, and final verification unless the user explicitly delegates otherwise.
 
 Subagent findings are leads, not verification evidence. Before marking any task `done_verified`, the main agent must directly verify referenced files, commands, logs, diffs, runtime state, or artifacts and record that direct evidence in the ledger.
 

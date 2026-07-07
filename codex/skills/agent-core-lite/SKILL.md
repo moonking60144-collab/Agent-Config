@@ -53,6 +53,8 @@ For 3+ steps, cross-file changes, review sweeps, or commit/push work, use `updat
 
 Parallelize independent read-only checks. Keep writes, shell mutations, git, MCP side effects, and external calls sequential. Treat unknown tools as write-capable until proven otherwise. Avoid broad file dumps; keep large outputs as paths, summaries, or reproducible commands.
 
+Use subagents when they are expected to improve coverage, reduce main-context pressure, or provide independent verification for large codebase scans, review/audit work, adversarial checks, or isolated project tasks. No per-use permission is required for bounded read-only subagent investigation, but the main agent owns scope, synthesis, writes, git actions, external side effects, and final verification.
+
 ### Verify
 
 Verify the real source of truth for the task, not the easiest proxy. Code changes normally need the relevant lint/build/test or a stated reason if not run. Config changes need the active consumer or a clear reload/restart boundary. Review findings need a reachable trigger chain. Do not mark work complete with missing files, failed tests, stale state, or indirect evidence.

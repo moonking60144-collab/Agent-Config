@@ -137,6 +137,15 @@ BEGIN.
 - 參考終端 Agent 架構時，只吸收核心 loop、tool contract、permission、retry、compaction、streaming、transcript、memory 與 multi-agent 協調；不要搬 React/Ink UI、品牌遙測、voice/statusline、內部命名或不可驗證邏輯。
 - 完整 runtime 契約、工具契約、compaction、transcript、memory、multi-agent 細節維護在 `agent-core-engine` skill，不放在本 AGENTS.md。
 
+### 3.8 子 Agent 協作政策
+
+- 子 agent 是覆蓋率與隔離工具，不是日常預設流程；小任務、單檔修改、簡單問答、單一路徑 bug 預設由主 agent 本地分區完成。
+- 當 review / audit / large codebase scan / 對抗式驗證 / `agent-core-project` 級任務會因分派而提升覆蓋率、降低主 context 壓力、或提供獨立驗證時，主 agent 可自動判斷使用子 agent，不需要使用者逐次明確允許。
+- 子 agent 預設只做 read-only investigation、獨立驗證、isolated draft、或互不相依的子系統掃描；主 agent 必須給清楚任務邊界，傳 raw artifact / diff / 檔案路徑，不把自己的結論、預期答案或懷疑點餵給子 agent。
+- 主 agent 必須整合、去重、校準嚴重度，並直接驗證子 agent 引用的檔案、命令、log、diff、runtime 狀態或 artifact；子 agent 回報只是 leads，不是最終證據。
+- 寫檔、git、push、破壞性操作、外部副作用與最終驗證仍由主 agent 負責，除非使用者明確要求或明確授權轉交。
+- 若子 agent 工具不可用、分派比本地檢查更慢、任務需要即時互動判斷、或使用者要求先不要發散，改用 `rg`、本地索引與分區閱讀替代。
+
 ---
 
 ## 4. 程式撰寫風格
