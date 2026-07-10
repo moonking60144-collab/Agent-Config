@@ -11,10 +11,10 @@
 # ============================================================================
 
 ################################################################################
-# 指令覆蓋
+# 補充指令
 ################################################################################
-# deploy.ps1 會展開成該機器的 ~/.codex/base-instructions.md。
-model_instructions_file = "__CODEX_HOME__/base-instructions.md"
+# 保留各模型內建 instructions；全域行為規範維護在 AGENTS.md。
+# 此處只放會額外注入 session 的短 developer instructions。
 
 developer_instructions = '''
 請使用繁體中文回答，務必保持清晰、準確、技術導向、可執行。
@@ -25,7 +25,7 @@ AGENTS.md 只保留全域常數與 skill routing；詳細 Observe -> Scope -> Pl
 
 明確 read-only / review / 先分析時不改檔；使用者明確說「修、改、implement、直接做、同步、push」才進入實作或 git 動作。除非使用者明確要求，不自動 commit/push；破壞性操作必須先確認。
 
-背景記憶策略：Chronicle 保持關閉；允許讀取既有 memory。若 runtime 支援 memories.generate_memories，可由系統背景機制處理。assistant 手動新增 one-shot memory note 只在使用者明確要求「記住」或同等語意時執行，且必須回報已記錄。
+背景記憶策略：Chronicle 保持關閉；允許讀取既有 memory。若 runtime 支援 memories.generate_memories，可由系統背景機制處理。assistant 手動新增或修改 memory note 只在使用者明確要求「記住」或同等語意，或工具明確授權時執行，且必須回報已記錄。
 
 防禦性程式設計邊界：不要寫冗餘程式碼和過度防禦性程式碼；避免對已知型別使用 getattr、過度 isinstance、過度 try/except、為簡單方法寫冗餘 docstring，或替已知官方 API 加存在性檢查。
 '''
@@ -39,8 +39,8 @@ sandbox_mode = "danger-full-access"
 ################################################################################
 # 核心模型選擇
 ################################################################################
-model = "gpt-5.5"
-review_model = "gpt-5.5"
+# 不固定 model；新 task 使用 Codex 當下的 recommended model。
+# 不固定 review_model；/review 跟隨目前 task 的模型。
 
 ################################################################################
 # 模型壓縮與工具輸出
@@ -53,34 +53,26 @@ tool_output_token_limit = 8000
 ################################################################################
 # 推理與輸出詳細度
 ################################################################################
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 model_reasoning_summary = "detailed"
 model_verbosity = "high"
+personality = "pragmatic"
 
 ################################################################################
 # 集中式功能旗標
 ################################################################################
 [features]
 shell_tool = true
-apply_patch_freeform = true
 shell_snapshot = true
-undo = true
 unified_exec = true
 multi_agent = true
-steer = true
 prevent_idle_sleep = true
-child_agents_md = true
 memories = true
 chronicle = false
-sqlite = true
 fast_mode = false
-powershell_utf8 = true
-js_repl = false
 # voice_transcription = true
 
 [memories]
-consolidation_model = "gpt-5.4"
-extract_model = "gpt-5.4"
 generate_memories = true
 use_memories = true
 disable_on_external_context = false
@@ -98,9 +90,6 @@ max_depth = 2
 # model_reasoning_effort，因此這裡只保留角色描述。
 [agents.default]
 description = "General-purpose helper."
-
-[agents.worker]
-description = "Do not use this agent, it's silly named and not optimized for any particular role."
 
 [agents.explorer]
 description = "Fast codebase explorer for read-heavy tasks."
@@ -133,6 +122,7 @@ network_access = true
 # Windows 專用設定
 ################################################################################
 [windows]
+sandbox = "unelevated"
 
 [plugins."github@openai-curated"]
 enabled = true
@@ -164,9 +154,17 @@ enabled = true
 [plugins."template-creator@openai-primary-runtime"]
 enabled = true
 
+[plugins."sites@openai-bundled"]
+enabled = true
+
+[plugins."visualize@openai-bundled"]
+enabled = true
+
+[plugins."computer-use@openai-bundled"]
+enabled = true
+
 # MCP server versions are pinned; review upstream changelogs before bumping.
 [mcp_servers.context7]
-type = "stdio"
 command = '__NPX_COMMAND__'
 args = ["-y", "@upstash/context7-mcp@3.2.2"]
 startup_timeout_ms = 40_000
@@ -178,14 +176,12 @@ SystemRoot = '__SYSTEM_ROOT__'
 # On macOS/Linux, deploy.ps1 removes SystemRoot because it is Windows-only.
 
 [mcp_servers.sequential-thinking]
-type = "stdio"
 command = '__NPX_COMMAND__'
 args = ["-y", "@modelcontextprotocol/server-sequential-thinking@2025.12.18"]
 startup_timeout_ms = 40_000
 enabled = true
 
 [mcp_servers.serena]
-type = "stdio"
 command = "uvx"
 args = [
   "--from", "git+https://github.com/oraios/serena@v1.5.3",
@@ -199,7 +195,6 @@ enabled = true
 # Global MCP mode: do not pass --project here. Activate the current repo/project through Serena before use.
 
 [mcp_servers.playwright]
-type = "stdio"
 command = '__NPX_COMMAND__'
 args = ["-y", "@playwright/mcp@0.0.77"]
 startup_timeout_ms = 60_000
@@ -209,7 +204,8 @@ enabled = true
 localeOverride = "zh-TW"
 integratedTerminalShell = "__CODEX_TERMINAL_SHELL__"
 runCodexInWindowsSubsystemForLinux = false
-default-service-tier = "priority"
+followUpQueueMode = "queue"
+conversationDetailMode = "STEPS_COMMANDS"
 
 [desktop.open-in-target-preferences]
 global = "fileManager"

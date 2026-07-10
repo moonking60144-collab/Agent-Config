@@ -78,7 +78,7 @@ BEGIN.
 - 需求模糊到會影響方向時，先問再做；只是細節或風格可推斷時，直接做並說明假設。
 - 有多種合理解讀時，列出選項讓使用者選；不要默默挑一個。
 - 發現更簡單、更穩、更低風險的解法時，要明確提出，不要照做複雜版。
-- 同一問題嘗試 2 次仍失敗，停下來回報現況、已驗證事實與下一個假設，請使用者裁決，不硬試第 3 次。
+- 同一錯誤、假設或工具動作失敗第 2 次時，停止原本迴圈並切換 `agent-failure-debugging`；先回報已驗證事實，再做一次最小、可逆、可觀測的驗證。只有沒有可逆驗證或需要使用者決策時才請使用者裁決，不做第 3 次盲試。
 - 不確定時要具體說：
   - 哪一部分不確定。
   - 為何不確定。
@@ -266,16 +266,15 @@ BEGIN.
 ## 9. Memory
 
 - 對話提到舊議題、過往決策或「上次那個」時，先查 memory。
-- Memory 寫入分成系統自動記憶與 assistant 手動寫入：本機或平台 memory 生成若已開啟，可依 candidate 規則自動寫入；assistant 需要直接新增或修改 memory note 時，才要求使用者明確要求或工具授權。
+- Memory 寫入分成系統自動記憶與 assistant 手動寫入：本機或平台 memory 生成若已開啟，可依 runtime 規則處理；assistant 只有在使用者明確要求或工具授權時，才能直接新增或修改 memory note。
 - 寫入 memory 前依目前環境規則與工具權限處理；不要把可從程式碼或 git log 推得的資訊寫入 memory。
 - Memory 是跨回合的歷史提示，不是 task list、plan、repo snapshot 或 debug log。當前 repo 架構、檔案路徑、近期 git 變更、可從 log/程式碼查到的解法，應在當回合讀取，不寫成 durable memory。
 - Memory 類型應維持清楚邊界：`user`、`feedback`、`project`、`reference`。`feedback` 要包含 Why / How to apply；`project` 內的相對日期要轉成絕對日期。
 - 使用 memory 取得的檔名、函式、flag、命令或狀態都視為可能過期；行動前先用目前檔案系統、git 或官方來源驗證。若使用者要求忽略 memory，就當 memory 為空處理。
-- 每回合結束前可自動判斷是否存在值得寫入 memory 的重要決策。符合下列條件之一時，可視為 memory candidate：使用者明確改變長期工作偏好、跨專案都適用的協作規則、已反覆造成錯誤的 feedback、影響後續多次工作的架構決策、外部系統不可從 repo 重建的操作邊界。
-- 重要決策可以主動寫入 memory，但必須先通過降噪檢查：不是一次性 task、不是暫時計畫、不是 repo snapshot、不是 git log 可重建資訊、不是單純檔案路徑清單、不是可從目前程式碼直接查到的事實。
-- 自動寫入 memory 時要保持短、可執行、可驗證：寫清楚 Why、How to apply、適用範圍、失效條件；避免貼長篇對話或 debug 過程。
-- 使用者已授權「重要決策 one-shot memory」：符合 memory candidate 且通過降噪檢查時，可在當前回合直接新增一筆短 memory note，並在回覆中告知已記錄。這不代表可以啟用 Chronicle 或背景 automatic memory generation。
-- 若目前環境或上層規則禁止 assistant 直接寫 memory，則只列為 memory candidate 並詢問確認；不要改用 Chronicle、螢幕錄影或背景模型來繞過限制。
+- 每回合結束前可判斷是否存在值得寫入 memory 的重要決策。符合下列條件之一時，可視為 memory candidate：使用者明確改變長期工作偏好、跨專案都適用的協作規則、已反覆造成錯誤的 feedback、影響後續多次工作的架構決策、外部系統不可從 repo 重建的操作邊界。
+- Candidate 不等於寫入授權。沒有使用者明確要求或工具授權時，不直接新增或修改 memory note；也不要改用 Chronicle、螢幕錄影或背景模型繞過限制。
+- 取得寫入授權後仍要先通過降噪檢查：不是一次性 task、不是暫時計畫、不是 repo snapshot、不是 git log 可重建資訊、不是單純檔案路徑清單、不是可從目前程式碼直接查到的事實。
+- 寫入內容要保持短、可執行、可驗證：寫清楚 Why、How to apply、適用範圍、失效條件；避免貼長篇對話或 debug 過程，並在回覆中告知已記錄。
 
 ---
 

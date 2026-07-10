@@ -132,9 +132,9 @@ function Test-TextContains($path, $tokens, $label){
   $text = Get-Content -LiteralPath $path -Raw
   $missing = @($tokens | Where-Object { -not $text.Contains($_) })
   if($missing.Count -eq 0){
-    Ok "$label template tokens 保留完整"
+    Ok "$label 必要 token/key 保留完整"
   } else {
-    Fail "$label 缺少 template token：$($missing -join ', ')"
+    Fail "$label 缺少必要 token/key：$($missing -join ', ')"
   }
 }
 
@@ -146,6 +146,90 @@ function Test-TextDoesNotContain($path, $tokens, $label){
     Ok "$label 未含不應出現的 token/key"
   } else {
     Fail "$label 含不應出現的 token/key：$($found -join ', ')"
+  }
+}
+
+function Test-TextDoesNotMatch($path, $patterns, $label){
+  if(-not(Test-RequiredFile $path $label)){ return }
+  $text = Get-Content -LiteralPath $path -Raw
+  $found = @($patterns | Where-Object { [regex]::IsMatch($text, $_) })
+  if($found.Count -eq 0){
+    Ok "$label 未含禁止的 pattern"
+  } else {
+    Fail "$label 含禁止的 pattern：$($found -join ', ')"
+  }
+}
+
+function Get-TomlFeatureKeys($path){
+  $keys = @()
+  $inFeatures = $false
+  foreach($line in Get-Content -LiteralPath $path){
+    if($line -match '^\s*\[features\]\s*$'){
+      $inFeatures = $true
+      continue
+    }
+    if($inFeatures -and $line -match '^\s*\['){ break }
+    if($inFeatures -and $line -match '^\s*([A-Za-z0-9_.-]+)\s*='){
+      $keys += $Matches[1]
+    }
+  }
+  return $keys
+}
+
+function Get-CodexCommand {
+  if($IsWindowsHost -and $env:LOCALAPPDATA){
+    $binRoot = Join-Parts $env:LOCALAPPDATA 'OpenAI' 'Codex' 'bin'
+    if(Test-Path -LiteralPath $binRoot){
+      $candidate = Get-ChildItem -LiteralPath $binRoot -Recurse -File -Filter 'codex.exe' |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+      if($candidate){ return $candidate.FullName }
+    }
+  }
+
+  $command = Get-Command codex -ErrorAction SilentlyContinue
+  if($command){ return $command.Source }
+  return $null
+}
+
+function Test-CodexFeatureLifecycle($path, $label){
+  if(-not(Test-RequiredFile $path $label)){ return }
+  $codex = Get-CodexCommand
+  if(-not $codex){
+    Warn "$label feature lifecycle 未執行：找不到 Codex CLI"
+    return
+  }
+
+  $output = & $codex features list 2>&1
+  if($LASTEXITCODE -ne 0){
+    Warn "$label feature lifecycle 未執行：$($output -join ' ')"
+    return
+  }
+
+  $removed = @{}
+  $deprecated = @{}
+  foreach($line in $output){
+    if($line -match '^\s*(\S+)\s+(removed|deprecated)\s+(true|false)\s*$'){
+      if($Matches[2] -eq 'removed'){
+        $removed[$Matches[1]] = $true
+      } else {
+        $deprecated[$Matches[1]] = $true
+      }
+    }
+  }
+
+  $featureKeys = @(Get-TomlFeatureKeys $path)
+  $removedConfigured = @($featureKeys | Where-Object { $removed.ContainsKey($_) })
+  $deprecatedConfigured = @($featureKeys | Where-Object { $deprecated.ContainsKey($_) })
+
+  if($removedConfigured.Count -gt 0){
+    Fail "$label 含 Codex 已移除 feature：$($removedConfigured -join ', ')"
+  } else {
+    Ok "$label 未設定 Codex 已移除 feature"
+  }
+
+  if($deprecatedConfigured.Count -gt 0){
+    Warn "$label 含 deprecated feature：$($deprecatedConfigured -join ', ')"
   }
 }
 
@@ -167,9 +251,18 @@ function Test-Context7Smoke {
     Fail '找不到 npx，Context7 MCP 無法啟動'
     return
   }
-  $output = & $npx -y '@upstash/context7-mcp' --version 2>&1
+
+  $configPath = Join-Parts $RepoRoot 'codex' 'config.toml'
+  $configText = Get-Content -LiteralPath $configPath -Raw
+  if($configText -notmatch '@upstash/context7-mcp@[^"\s]+'){
+    Fail 'codex/config.toml 找不到 pinned Context7 package'
+    return
+  }
+
+  $package = $Matches[0]
+  $output = & $npx -y $package --version 2>&1
   if($LASTEXITCODE -eq 0){
-    Ok "Context7 MCP smoke test OK：$($output | Select-Object -First 1)"
+    Ok "Context7 MCP smoke test OK：$package -> $($output | Select-Object -First 1)"
   } else {
     Fail "Context7 MCP smoke test 失敗：$($output -join ' ')"
   }
@@ -216,6 +309,63 @@ function Test-DirectorySync($repoDir, $activeDir, $label){
   }
 }
 
+function Test-CodexConfigSchema($path, $label){
+  if(-not(Test-RequiredFile $path $label)){ return }
+  $python = Get-PythonCommand
+  if(-not $python){
+    Warn "$label schema validation 未執行：找不到 python/python3"
+    return
+  }
+
+  $code = @'
+import json
+import pathlib
+import sys
+import urllib.request
+
+try:
+    import tomllib
+    import jsonschema
+except ModuleNotFoundError as exc:
+    print(f"DEPENDENCY_UNAVAILABLE: {exc.name}", file=sys.stderr)
+    sys.exit(2)
+
+config_path = pathlib.Path(sys.argv[1])
+schema_url = sys.argv[2]
+
+try:
+    with urllib.request.urlopen(schema_url, timeout=30) as response:
+        schema = json.load(response)
+except Exception as exc:
+    print(f"SCHEMA_UNAVAILABLE: {exc}", file=sys.stderr)
+    sys.exit(3)
+
+config = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+errors = sorted(
+    jsonschema.Draft7Validator(schema).iter_errors(config),
+    key=lambda error: list(error.path),
+)
+
+if errors:
+    for error in errors[:8]:
+        location = ".".join(str(part) for part in error.path) or "<root>"
+        print(f"{location}: {error.message}", file=sys.stderr)
+    sys.exit(1)
+'@
+
+  $schemaUrl = 'https://developers.openai.com/codex/config-schema.json'
+  $output = $code | & $python - $path $schemaUrl 2>&1
+  if($LASTEXITCODE -eq 0){
+    Ok "$label official schema validation OK"
+  } elseif($LASTEXITCODE -eq 2) {
+    Warn "$label schema validation 未執行：$($output -join ' ')"
+  } elseif($LASTEXITCODE -eq 3) {
+    Warn "$label schema 暫時無法取得：$($output -join ' ')"
+  } else {
+    Fail "$label official schema validation 失敗：$($output -join ' ')"
+  }
+}
+
 function Test-FileSync($repoFile, $activeFile, $label){
   if(-not(Test-Path -LiteralPath $repoFile)){
     Warn "$label repo 檔案不存在"
@@ -236,8 +386,6 @@ function Test-FileSync($repoFile, $activeFile, $label){
 
 $repoCodexConfig = Join-Parts $RepoRoot 'codex' 'config.toml'
 $repoCodexAgents = Join-Parts $RepoRoot 'codex' 'AGENTS.md'
-$repoCodexBaseInstructions = Join-Parts $RepoRoot 'codex' 'base-instructions.md'
-$repoCodexModelCatalog = Join-Parts $RepoRoot 'codex' 'model-catalog.json'
 $repoClaudeSettings = Join-Parts $RepoRoot 'claude' 'settings.json'
 $repoPowerShellFiles = @(
   (Join-Path $RepoRoot 'deploy.ps1'),
@@ -253,12 +401,17 @@ foreach($file in $repoPowerShellFiles){
 }
 Test-JsonParse $repoClaudeSettings 'claude/settings.json'
 Test-TomlParse $repoCodexConfig 'codex/config.toml'
+Test-CodexConfigSchema $repoCodexConfig 'codex/config.toml'
+Test-CodexFeatureLifecycle $repoCodexConfig 'codex/config.toml'
 Write-Host ''
 
 Info '[2/6] Repo template 邊界'
 Test-TextContains $repoCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') 'codex/config.toml'
+Test-TextContains $repoCodexConfig @('model_context_window = 1000000') 'codex/config.toml'
+Test-TextContains $repoCodexAgents @('[MODE: UNRESTRICTED]','CORE DIRECTIVES:','SANDBOX CONTEXT:') 'codex/AGENTS.md'
 Test-TextContains $repoClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') 'claude/settings.json'
-Test-TextDoesNotContain $repoCodexConfig @('model_catalog_json','model_auto_compact_token_limit =') 'codex/config.toml'
+Test-TextDoesNotContain $repoCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') 'codex/config.toml'
+Test-TextDoesNotMatch $repoCodexConfig @('(?m)^\s*model\s*=','(?m)^\s*review_model\s*=') 'codex/config.toml'
 Write-Host ''
 
 Info '[3/6] Context7'
@@ -271,23 +424,24 @@ if($SkipActive){
   $homeDir = Get-HomeDir
   $activeCodexConfig = Join-Parts $homeDir '.codex' 'config.toml'
   $activeCodexAgents = Join-Parts $homeDir '.codex' 'AGENTS.md'
-  $activeCodexBaseInstructions = Join-Parts $homeDir '.codex' 'base-instructions.md'
-  $activeCodexModelCatalog = Join-Parts $homeDir '.codex' 'model-catalog.json'
   $activeClaudeSettings = Join-Parts $homeDir '.claude' 'settings.json'
   $activeClaudeHook = Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.ps1'
 
   Info '[4/6] Active 設定展開狀態'
   Test-TomlParse $activeCodexConfig '~/.codex/config.toml'
+  Test-CodexConfigSchema $activeCodexConfig '~/.codex/config.toml'
+  Test-CodexFeatureLifecycle $activeCodexConfig '~/.codex/config.toml'
   Test-JsonParse $activeClaudeSettings '~/.claude/settings.json'
   Test-Utf8Bom $activeClaudeHook '~/.claude/hooks/check-traditional.ps1'
   Test-TextDoesNotContain $activeCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') '~/.codex/config.toml'
+  Test-TextContains $activeCodexConfig @('model_context_window = 1000000') '~/.codex/config.toml'
+  Test-TextDoesNotContain $activeCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') '~/.codex/config.toml'
+  Test-TextDoesNotMatch $activeCodexConfig @('(?m)^\s*model\s*=','(?m)^\s*review_model\s*=') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'
   Write-Host ''
 
-  Info '[5/6] Active Codex prompt surface'
+  Info '[5/6] Active Codex instruction surface'
   Test-FileSync $repoCodexAgents $activeCodexAgents 'codex/AGENTS.md'
-  Test-FileSync $repoCodexBaseInstructions $activeCodexBaseInstructions 'codex/base-instructions.md'
-  Test-FileSync $repoCodexModelCatalog $activeCodexModelCatalog 'codex/model-catalog.json'
   Write-Host ''
 
   Info '[6/6] Repo-managed Codex skills'

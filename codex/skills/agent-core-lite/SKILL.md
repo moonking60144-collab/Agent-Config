@@ -1,15 +1,15 @@
 ---
 name: agent-core-lite
-description: Superpowers-style entry workflow for everyday Codex engineering quality. Use before file exploration, code edits, config diagnosis, or tool actions when a task touches a large repo, cross-file change, 3+ steps, repeated failure, config/runtime mismatch, token/context/compact abnormality, external side effect, destructive/permission-sensitive action, commit/push, implementation, refactor, architecture, data flow, production, sync, deploy, or verification work.
+description: "Scoped Codex engineering workflow. Use when AGENTS.md section 3.6 routes a task here: large repo, cross-file change, 3+ steps, config/runtime mismatch, token/context/compact abnormality, sync, deploy, commit/push, or an external/destructive/permission-sensitive side effect. Do not trigger for simple questions or single-file/single-step edits."
 ---
 
 # Agent Core Lite
 
-## Non-Negotiable Trigger Rule
+## Trigger Rule
 
-Invoke this skill before doing anything else when the description may apply, including before asking clarifying questions, searching files, reading git state, or running tools. If it later proves unnecessary, state that and continue with the lighter path.
+Invoke this skill only when the canonical routing in `AGENTS.md` section 3.6 matches. If the same failure or hypothesis has already appeared twice, route directly to `agent-failure-debugging` instead.
 
-Do not rationalize skipping the skill because the first step looks small. Large-project drift usually starts with one quick unchecked action.
+Do not trigger this skill solely because a task involves implementation, refactoring, architecture, data flow, production, or verification. Simple questions and single-file/single-step edits stay on the direct path.
 
 ## Iron Law
 
@@ -112,7 +112,7 @@ These thoughts mean stop and take the required action:
 
 | Thought | Required action |
 | --- | --- |
-| "I will just inspect one file first." | Trigger skill routing and scope the read |
+| "This involves implementation, so Lite must apply." | Check `AGENTS.md` section 3.6; simple single-file/single-step work stays on the direct path |
 | "The config value changed, so behavior must have changed." | Identify and verify the live consumer |
 | "The test/build passed, so the user-facing flow is fine." | Verify the actual user-facing path if behavior depends on UI/runtime |
 | "This is probably a cache issue." | Name the cache/state layer and the reload boundary |
