@@ -6,7 +6,7 @@
   回寫 Claude Code 的 CLAUDE.md / settings.json / hooks、Codex AGENTS.md / repo 管理的 skills，
   以及 VS Code 的 settings / keybindings。會自動把機器特定 hook 絕對路徑還原成佔位符，
   並剔除已停用的 Gemini Code Assist 設定。回寫後請 git diff 檢視再 commit。
-  Codex config.toml 只回寫可攜 reasoning / personality / token 行為 key；profile.md 含機器特定內容，不自動回寫。
+  Codex config.toml 只回寫可攜 summary / verbosity / personality / token 行為 key；目前模型與 reasoning effort 視為 runtime 選擇，不自動回寫。
 .PARAMETER IncludeExtensions
   同步 `code --list-extensions` 到 vscode/extensions.txt。預設略過，避免某臺機器的臨時擴充污染 repo。
 #>
@@ -80,7 +80,6 @@ function Sync-CodexPortableConfig {
   $portableKeys = @(
     'model_context_window',
     'tool_output_token_limit',
-    'model_reasoning_effort',
     'model_reasoning_summary',
     'model_verbosity',
     'personality'
@@ -105,7 +104,7 @@ function Sync-CodexPortableConfig {
   }
 
   [System.IO.File]::WriteAllText($RepoPath, (($repoLines -join "`n") + "`n"), $enc)
-  Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜 reasoning / personality / token key）'
+  Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜 summary / verbosity / personality / token key）'
 }
 
 # Claude CLAUDE.md（可攜核心，含 @import 行）
@@ -230,5 +229,5 @@ if($IncludeExtensions){
 }
 
 Write-Host ''
-Write-Host 'Codex config.toml 只回寫可攜 reasoning / personality / token key；~/.claude/profile.md 含機器特定內容，未自動回寫。' -ForegroundColor Yellow
+Write-Host 'Codex config.toml 只回寫可攜 summary / verbosity / personality / token key；目前模型、reasoning effort 與 ~/.claude/profile.md 未自動回寫。' -ForegroundColor Yellow
 Write-Host "完成。請執行  git -C `"$src`" diff  檢視後再 commit。" -ForegroundColor Cyan

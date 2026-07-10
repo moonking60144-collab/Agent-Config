@@ -151,7 +151,7 @@ flowchart TD
   V --> W["deploy / backup / git sync"]
 ```
 
-風險規則維護在 `codex/policies/risk-matrix.md`，只保留 `read_only`、`local_reversible_write`、`local_destructive`、`git_shared_or_irreversible`、`external_side_effect`、`secret_bearing` 六類。Read-only 邊界與 destructive 操作的 smoke cases 維護在 `codex/evals/read-only-boundary.cases.jsonl`；目前它是人工 / 未來腳本化的 contract，不接入 `validate-config.ps1`。
+風險規則維護在 `codex/policies/risk-matrix.md`，只保留 `read_only`、`local_reversible_write`、`local_destructive`、`git_shared_or_irreversible`、`external_side_effect`、`secret_bearing` 六類。Read-only 邊界與 destructive 操作的 smoke cases 維護在 `codex/evals/read-only-boundary.cases.jsonl`；`validate-config.ps1` 只驗證 JSONL 語法，case 行為仍是人工 / 未來腳本化的 contract。
 
 `config.toml` 只保留可攜偏好（短版 additive `developer_instructions`、reasoning/personality、sandbox/approval 策略、features、agents 等）。不設定 `model_instructions_file`，讓 GPT-5.6 與後續模型保留各自的內建 instructions，再額外載入 `AGENTS.md`。不固定 `model` 與 `review_model`：新 task 使用 Codex 當下的 recommended model，`/review` 跟隨目前 task 的模型。也不啟用或保存 `model_catalog_json` snapshot，模型清單與能力由官方 / server 端 catalog 管理。已**剔除**機器特定 / 自動生成的內容：
 
@@ -162,7 +162,7 @@ flowchart TD
 
 `config.toml` 裡的 `__NPX_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`deploy.ps1` 會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。
 
-目前 repo 版 Codex 不固定模型版本，避免每次模型更新都要修改 repo；可攜 token 行為維持 `model_context_window = 1000000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。日常 reasoning 預設為 `high`，`Max` / `Ultra` 由 task 需要時再從模型選擇器調整。
+目前 repo 版 Codex 不固定模型版本，避免每次模型更新都要修改 repo；Codex Desktop 寫入 active `~/.codex/config.toml` 的目前模型與 `model_reasoning_effort` 視為 runtime 狀態，不會由 `backup.ps1` 回寫 repo。`model_reasoning_summary`、`model_verbosity`、`personality` 仍屬可攜偏好。可攜 token 行為維持 `model_context_window = 1000000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。日常 reasoning 預設為 `high`，`Max` / `Ultra` 由 task 需要時再從模型選擇器調整。
 
 `profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 `config.toml`。
 
@@ -186,6 +186,8 @@ pwsh -File scripts/validate-config.ps1
 pwsh -File scripts/validate-config.ps1 -SkipActive
 ```
 
+驗證器也會檢查 repo-managed Codex skills 的 frontmatter／目錄結構，以及 `codex/evals/read-only-boundary.cases.jsonl` 的 JSONL 語法。JSONL 檢查只驗證 contract 檔可讀，不會啟動模型或建立額外 eval runtime。
+
 ---
 
 ## 在某臺機器調整後同步回 repo
@@ -198,7 +200,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook command、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 token / reasoning / personality key，避免把 `notify`、`projects.*`、本機絕對路徑等機器特定內容帶進 repo；`profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook command、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 token / reasoning summary / verbosity / personality key；目前模型與 `model_reasoning_effort` 不回寫，避免單一 task 的選擇污染 repo 預設，也不會帶入 `notify`、`projects.*`、本機絕對路徑等機器特定內容。`profile.md` 含機器特定內容，不自動回寫。
 
 VS Code extensions 清單預設不回寫，避免某臺機器的臨時擴充污染 repo。確定要更新 `vscode/extensions.txt` 時才執行：
 

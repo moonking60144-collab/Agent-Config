@@ -86,12 +86,79 @@ function Test-JsonParse($path, $label){
   }
 }
 
+function Test-JsonLinesParse($path, $label){
+  if(-not(Test-RequiredFile $path $label)){ return }
+  $lineNumber = 0
+  $caseCount = 0
+  try {
+    [System.IO.File]::ReadAllLines($path, [System.Text.Encoding]::UTF8) | ForEach-Object {
+      $lineNumber++
+      if(-not [string]::IsNullOrWhiteSpace($_)){
+        $_ | ConvertFrom-Json -ErrorAction Stop | Out-Null
+        $caseCount++
+      }
+    }
+    if($caseCount -eq 0){
+      Fail "$label 沒有任何 JSONL case"
+    } else {
+      Ok "$label JSONL parse OK（$caseCount cases）"
+    }
+  } catch {
+    Fail "$label JSONL parse 失敗（line $lineNumber）：$($_.Exception.Message)"
+  }
+}
+
 function Get-PythonCommand {
   foreach($name in @('python','python3')){
     $cmd = Get-Command $name -ErrorAction SilentlyContinue
     if($cmd){ return $cmd.Source }
   }
   return $null
+}
+
+function Test-CodexSkills($skillsRoot, $label){
+  if(-not(Test-Path -LiteralPath $skillsRoot -PathType Container)){
+    Fail "$label 目錄不存在：$skillsRoot"
+    return
+  }
+
+  $python = Get-PythonCommand
+  if(-not $python){
+    Warn "$label skill validation 未執行：找不到 python/python3"
+    return
+  }
+
+  $validator = Join-Parts (Get-HomeDir) '.codex' 'skills' '.system' 'skill-creator' 'scripts' 'quick_validate.py'
+  if(-not(Test-Path -LiteralPath $validator -PathType Leaf)){
+    Warn "$label skill validation 未執行：找不到 bundled quick_validate.py"
+    return
+  }
+
+  $skills = @(Get-ChildItem -LiteralPath $skillsRoot -Directory | Sort-Object Name)
+  if($skills.Count -eq 0){
+    Fail "$label 沒有 repo-managed skill"
+    return
+  }
+
+  $hadPythonUtf8 = Test-Path Env:PYTHONUTF8
+  $previousPythonUtf8 = $env:PYTHONUTF8
+  try {
+    $env:PYTHONUTF8 = '1'
+    foreach($skill in $skills){
+      $output = & $python $validator $skill.FullName 2>&1
+      if($LASTEXITCODE -eq 0){
+        Ok "$label/$($skill.Name) structure valid"
+      } else {
+        Fail "$label/$($skill.Name) structure invalid：$($output -join ' ')"
+      }
+    }
+  } finally {
+    if($hadPythonUtf8){
+      $env:PYTHONUTF8 = $previousPythonUtf8
+    } else {
+      Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue
+    }
+  }
 }
 
 function Test-TomlParse($path, $label){
@@ -160,7 +227,7 @@ function Test-TextDoesNotMatch($path, $patterns, $label){
   }
 }
 
-function Get-TomlFeatureKeys($path){
+function Get-TomlFeatureKeys($path, [switch]$EnabledOnly){
   $keys = @()
   $inFeatures = $false
   foreach($line in Get-Content -LiteralPath $path){
@@ -169,8 +236,10 @@ function Get-TomlFeatureKeys($path){
       continue
     }
     if($inFeatures -and $line -match '^\s*\['){ break }
-    if($inFeatures -and $line -match '^\s*([A-Za-z0-9_.-]+)\s*='){
-      $keys += $Matches[1]
+    if($inFeatures -and $line -match '^\s*([A-Za-z0-9_.-]+)\s*=\s*(true|false)\s*(?:#.*)?$'){
+      if(-not $EnabledOnly -or $Matches[2] -eq 'true'){
+        $keys += $Matches[1]
+      }
     }
   }
   return $keys
@@ -192,7 +261,7 @@ function Get-CodexCommand {
   return $null
 }
 
-function Test-CodexFeatureLifecycle($path, $label){
+function Test-CodexFeatureLifecycle($path, $label, [switch]$EnabledOnly){
   if(-not(Test-RequiredFile $path $label)){ return }
   $codex = Get-CodexCommand
   if(-not $codex){
@@ -218,14 +287,14 @@ function Test-CodexFeatureLifecycle($path, $label){
     }
   }
 
-  $featureKeys = @(Get-TomlFeatureKeys $path)
+  $featureKeys = @(Get-TomlFeatureKeys $path -EnabledOnly:$EnabledOnly)
   $removedConfigured = @($featureKeys | Where-Object { $removed.ContainsKey($_) })
   $deprecatedConfigured = @($featureKeys | Where-Object { $deprecated.ContainsKey($_) })
 
   if($removedConfigured.Count -gt 0){
     Fail "$label 含 Codex 已移除 feature：$($removedConfigured -join ', ')"
   } else {
-    Ok "$label 未設定 Codex 已移除 feature"
+    Ok "$label 未啟用 Codex 已移除 feature"
   }
 
   if($deprecatedConfigured.Count -gt 0){
@@ -386,6 +455,8 @@ function Test-FileSync($repoFile, $activeFile, $label){
 
 $repoCodexConfig = Join-Parts $RepoRoot 'codex' 'config.toml'
 $repoCodexAgents = Join-Parts $RepoRoot 'codex' 'AGENTS.md'
+$repoCodexSkills = Join-Parts $RepoRoot 'codex' 'skills'
+$repoReadOnlyCases = Join-Parts $RepoRoot 'codex' 'evals' 'read-only-boundary.cases.jsonl'
 $repoClaudeSettings = Join-Parts $RepoRoot 'claude' 'settings.json'
 $repoPowerShellFiles = @(
   (Join-Path $RepoRoot 'deploy.ps1'),
@@ -400,9 +471,11 @@ foreach($file in $repoPowerShellFiles){
   Test-PowerShellParse $file (Split-Path $file -Leaf)
 }
 Test-JsonParse $repoClaudeSettings 'claude/settings.json'
+Test-JsonLinesParse $repoReadOnlyCases 'codex/evals/read-only-boundary.cases.jsonl'
 Test-TomlParse $repoCodexConfig 'codex/config.toml'
 Test-CodexConfigSchema $repoCodexConfig 'codex/config.toml'
 Test-CodexFeatureLifecycle $repoCodexConfig 'codex/config.toml'
+Test-CodexSkills $repoCodexSkills 'codex/skills'
 Write-Host ''
 
 Info '[2/6] Repo template 邊界'
@@ -430,13 +503,13 @@ if($SkipActive){
   Info '[4/6] Active 設定展開狀態'
   Test-TomlParse $activeCodexConfig '~/.codex/config.toml'
   Test-CodexConfigSchema $activeCodexConfig '~/.codex/config.toml'
-  Test-CodexFeatureLifecycle $activeCodexConfig '~/.codex/config.toml'
+  Test-CodexFeatureLifecycle $activeCodexConfig '~/.codex/config.toml' -EnabledOnly
   Test-JsonParse $activeClaudeSettings '~/.claude/settings.json'
   Test-Utf8Bom $activeClaudeHook '~/.claude/hooks/check-traditional.ps1'
   Test-TextDoesNotContain $activeCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') '~/.codex/config.toml'
   Test-TextContains $activeCodexConfig @('model_context_window = 1000000') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') '~/.codex/config.toml'
-  Test-TextDoesNotMatch $activeCodexConfig @('(?m)^\s*model\s*=','(?m)^\s*review_model\s*=') '~/.codex/config.toml'
+  Test-TextDoesNotMatch $activeCodexConfig @('(?m)^\s*review_model\s*=') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'
   Write-Host ''
 
@@ -445,7 +518,7 @@ if($SkipActive){
   Write-Host ''
 
   Info '[6/6] Repo-managed Codex skills'
-  Get-ChildItem -LiteralPath (Join-Parts $RepoRoot 'codex' 'skills') -Directory | ForEach-Object {
+  Get-ChildItem -LiteralPath $repoCodexSkills -Directory | ForEach-Object {
     Test-DirectorySync $_.FullName (Join-Parts $homeDir '.codex' 'skills' $_.Name) "skills/$($_.Name)"
   }
   Write-Host ''
