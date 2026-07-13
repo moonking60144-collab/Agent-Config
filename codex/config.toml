@@ -54,7 +54,6 @@ tool_output_token_limit = 8000
 # 推理與輸出詳細度
 ################################################################################
 model_reasoning_effort = "high"
-model_reasoning_summary = "detailed"
 model_verbosity = "high"
 personality = "pragmatic"
 
