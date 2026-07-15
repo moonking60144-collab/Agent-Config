@@ -353,6 +353,40 @@ if(Test-Path $codexSkillsSrc){
   }
 }
 
+$codexCustomAgentsSrc = Join-Parts $src 'codex' 'agents'
+if(Test-Path $codexCustomAgentsSrc){
+  $codexCustomAgentsDir = Join-Path $codexDir 'agents'
+  Ensure-Dir $codexCustomAgentsDir
+  Get-ChildItem $codexCustomAgentsSrc -Filter '*.toml' -File | ForEach-Object {
+    $target = Join-Path $codexCustomAgentsDir $_.Name
+    Backup-IfExists $target
+    Copy-Item $_.FullName $target -Force
+    Ok "agents/$($_.Name) -> ~/.codex/agents/$($_.Name)"
+  }
+}
+
+$codexHooksScriptsSrc = Join-Parts $src 'codex' 'hooks'
+if(Test-Path $codexHooksScriptsSrc){
+  $codexHooksScriptsDir = Join-Path $codexDir 'hooks'
+  Ensure-Dir $codexHooksScriptsDir
+  Get-ChildItem $codexHooksScriptsSrc -File | ForEach-Object {
+    $target = Join-Path $codexHooksScriptsDir $_.Name
+    Backup-IfExists $target
+    Copy-Item $_.FullName $target -Force
+    Ok "hooks/$($_.Name) -> ~/.codex/hooks/$($_.Name)"
+  }
+}
+
+$codexHooksTemplate = Join-Parts $src 'codex' 'hooks.json'
+if(Test-Path $codexHooksTemplate){
+  $codexHooksTarget = Join-Path $codexDir 'hooks.json'
+  $codexHomeForHooks = $codexDir -replace '\\','/'
+  $codexHooksText = (Get-Content $codexHooksTemplate -Raw).Replace('__CODEX_HOME__', $codexHomeForHooks)
+  Backup-IfExists $codexHooksTarget
+  [System.IO.File]::WriteAllText($codexHooksTarget, $codexHooksText, $enc)
+  Ok 'hooks.json -> ~/.codex/hooks.json（已套用本機 Codex home）'
+}
+
 $codexCfg = Join-Path $codexDir 'config.toml'
 if((Test-Path $codexCfg) -and -not $ForceCodex){
   Skip 'config.toml 已存在，保留現有（含機器特定 node_repl）。要覆蓋請加 -ForceCodex'

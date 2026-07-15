@@ -83,22 +83,15 @@ max_rollout_age_days = 45
 # min_rollout_idle_hours = 6
 
 [agents]
-max_threads = 12
-max_depth = 2
+max_threads = 6
+max_depth = 1
 
-# 目前 schema 不支援在 agents.<role> 直接設定 model / sandbox_mode /
-# model_reasoning_effort，因此這裡只保留角色描述。
+# explorer / reviewer 由 ~/.codex/agents/ 的獨立設定載入，並繼承父 session 模型。
 [agents.default]
 description = "General-purpose helper."
 
-[agents.explorer]
-description = "Fast codebase explorer for read-heavy tasks."
-
 [agents.awaiter]
 description = "Long-running command and task monitoring role."
-
-[agents.reviewer]
-description = "Reviewer agent for code reviews and feedback."
 
 ################################################################################
 # Shell 環境策略

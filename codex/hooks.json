@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"__CODEX_HOME__/hooks/resume-project-ledger.mjs\"",
+            "commandWindows": "node \"__CODEX_HOME__/hooks/resume-project-ledger.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
