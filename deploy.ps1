@@ -437,3 +437,4 @@ Write-Host ''
 Info '部署完成。'
 Write-Host '  1. 完全重啟 Claude Code 與 VS Code 以套用設定' -ForegroundColor White
 Write-Host '  2. 首次啟動 Claude Code 會跳出 profile.md 的 import 批准對話，按核准' -ForegroundColor White
+Write-Host '  3. 在每台 Codex 機器開啟 /hooks，review 並 trust 目前的 command hook definition' -ForegroundColor Yellow

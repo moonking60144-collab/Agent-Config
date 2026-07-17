@@ -70,6 +70,7 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | Gate | Must be true before proceeding |
 | --- | --- |
 | Scope gate | Target files/settings/surfaces are named before edits |
+| Consumer coverage gate | When `AGENTS.md` section 3.1 applies, the producer -> contract -> all production consumers inventory is complete and every consumer is marked `must-align` or `intentional-divergence` |
 | Read-only gate | If the user asked read-only/review/analysis, no writes happen |
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |

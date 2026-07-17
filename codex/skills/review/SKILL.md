@@ -148,6 +148,10 @@ description: Issue-first code, architecture, integration, pull request, and chan
 
 使用子 agent 時，傳 raw artifact、diff、檔案路徑與任務，不傳自己的結論、預期答案或懷疑點。要求子 agent 使用本 skill 做獨立 review，回收結果後再由主 agent 去重、校準嚴重度、直接驗證證據，最後決定是否上報。
 
+## Shared Contract Coverage
+
+當 diff 修改共享 contract、reader、serializer、資料模型、UI default 或互動契約時，套用 `AGENTS.md` §3.1 的 Consumer Coverage Gate。從 producer -> contract 反查所有 production consumers，包含 sibling、history、detail、admin 與不同裝置 surface；不能停在 diff 已出現的 caller。
+
 ## 回覆約束
 
 用繁體中文回覆，保留程式碼、CLI、路徑、API 名稱與錯誤原文。檔案位置用 markdown link 或清楚的路徑加行號。CLI 指令要符合使用者目前 OS/shell；若不確定，標明假設或提供 PowerShell 與 zsh/bash 兩版。保持精簡，但 findings 的證據鏈要完整。

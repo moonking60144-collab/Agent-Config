@@ -84,6 +84,8 @@ Write a durable plan before implementation. Each task entry must include:
 
 - Task id and goal.
 - Files/modules expected to change.
+- Affected contracts and production consumers; mark each consumer `must-align` or `intentional-divergence` when shared behavior is involved.
+- Mirror the active task's contract, producer, consumer matrix, divergence reasons, and verification evidence into the ledger; do not leave this inventory only in the plan.
 - Preconditions and dependencies.
 - Implementation steps.
 - Verification commands or artifacts.

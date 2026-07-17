@@ -1,104 +1,150 @@
-import fs from "node:fs";
+import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 async function readInput() {
-  let raw = "";
-  for await (const chunk of process.stdin) raw += chunk;
-  return raw.trim() ? JSON.parse(raw) : {};
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 
-function findGitRoot(start) {
+async function findGitRoot(start) {
   let current = path.resolve(start);
   while (true) {
-    if (fs.existsSync(path.join(current, ".git"))) return current;
-    const parent = path.dirname(current);
-    if (parent === current) return null;
-    current = parent;
+    try {
+      await fs.access(path.join(current, ".git"));
+      return current;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
   }
 }
 
-function normalizeSlug(value) {
-  return value.trim().replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "");
+function cleanValue(value) {
+  return value.trim().replace(/^['"`]|['"`]$/g, "");
 }
 
-function collectMarkdownFiles(directory, depth = 0) {
-  if (!fs.existsSync(directory) || depth > 2) return [];
+function readField(content, key) {
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.replaceAll("**", "").replaceAll("`", "").trim().replace(/^[-*]\s+/, "");
+    const prefix = `${key}:`;
+    if (line.toLowerCase().startsWith(prefix.toLowerCase())) return cleanValue(line.slice(prefix.length));
+
+    if (line.startsWith("|") && line.endsWith("|")) {
+      const cells = line.slice(1, -1).split("|").map((cell) => cell.trim());
+      if (cells[0]?.toLowerCase() === key.toLowerCase() && cells[1]) return cleanValue(cells[1]);
+    }
+  }
+  return null;
+}
+
+function expandHome(value) {
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
+  return value;
+}
+
+async function canonicalPath(value) {
+  const resolved = path.resolve(expandHome(value));
+  try {
+    return await fs.realpath(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+async function collectMarkdownFiles(root, depth = 0) {
+  if (depth > 2) return [];
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
 
   const files = [];
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...collectMarkdownFiles(target, depth + 1));
-    if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) files.push(target);
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) files.push(...await collectMarkdownFiles(entryPath, depth + 1));
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) files.push(entryPath);
   }
   return files;
 }
 
-function isUnfinishedLedger(text) {
-  return (
-    /(?:^|\|)\s*(?:pending|in[_ -]?progress|blocked)\s*(?:\||$)/im.test(text) ||
-    /^\s*(?:status|state)\s*[:=]\s*(?:pending|in[_ -]?progress|blocked)\b/im.test(text) ||
-    /^\s*-\s*\[ \]/m.test(text)
-  );
-}
-
-try {
-  const input = await readInput();
-  const cwd = path.resolve(input.cwd || process.cwd());
-  const gitRoot = findGitRoot(cwd);
-  const scopeRoot = gitRoot || cwd;
-  const codexHome = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-  const ledgerDirectories = new Set([
-    path.join(cwd, "ledgers"),
+async function findLedgerRoots(cwd, scopeRoot) {
+  const roots = new Set([
     path.join(cwd, ".codex", "ledgers"),
     path.join(cwd, "docs", "codex", "ledgers"),
-    path.join(cwd, "outputs"),
     path.join(scopeRoot, ".codex", "ledgers"),
-    path.join(scopeRoot, "docs", "codex", "ledgers")
+    path.join(scopeRoot, "docs", "codex", "ledgers"),
   ]);
 
-  const slugCandidates = new Set([
-    path.basename(scopeRoot).toLowerCase(),
-    normalizeSlug(path.basename(scopeRoot)).toLowerCase()
-  ]);
-  const projectsRoot = path.join(codexHome, "projects");
-  if (fs.existsSync(projectsRoot)) {
-    for (const entry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      if (slugCandidates.has(entry.name.toLowerCase()) || slugCandidates.has(normalizeSlug(entry.name).toLowerCase())) {
-        ledgerDirectories.add(path.join(projectsRoot, entry.name, "ledgers"));
-      }
+  const projectsRoot = path.join(os.homedir(), ".codex", "projects");
+  try {
+    for (const entry of await fs.readdir(projectsRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) roots.add(path.join(projectsRoot, entry.name, "ledgers"));
     }
+  } catch {
+    // No durable project directory exists yet.
   }
-
-  const unfinished = [];
-  for (const directory of ledgerDirectories) {
-    for (const file of collectMarkdownFiles(directory)) {
-      const text = fs.readFileSync(file, "utf8");
-      if (isUnfinishedLedger(text)) unfinished.push({ file, mtimeMs: fs.statSync(file).mtimeMs });
-    }
-  }
-
-  unfinished.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  if (unfinished.length > 0) {
-    const ledger = unfinished[0].file;
-    const gitInstruction = gitRoot
-      ? `Then inspect current history with git -C ${JSON.stringify(gitRoot)} log --oneline -20.`
-      : "Then inspect git log if the current directory belongs to a repository.";
-    const additionalContext = [
-      `An unfinished project ledger was detected: ${ledger}`,
-      "Before continuing any task, read that ledger and treat it as the source of truth.",
-      gitInstruction,
-      "Do not repeat tasks marked done_verified. Read the Eliminated section before testing another hypothesis, then resume from Next Action or the first non-complete task."
-    ].join(" ");
-
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "SessionStart",
-        additionalContext
-      }
-    }));
-  }
-} catch {
-  process.exitCode = 0;
+  return [...roots];
 }
+
+async function parseLedger(filePath, scopeRoot) {
+  const content = await fs.readFile(filePath, "utf8");
+  const status = readField(content, "project_status")?.toLowerCase();
+  if (!status || !["pending", "in_progress", "blocked"].includes(status)) return null;
+
+  const repoPath = readField(content, "repo_path");
+  if (!repoPath) return null;
+
+  const [ledgerRepo, currentScope] = await Promise.all([canonicalPath(repoPath), canonicalPath(scopeRoot)]);
+  if (ledgerRepo !== currentScope) return null;
+
+  const stat = await fs.stat(filePath);
+  return {
+    filePath,
+    planPath: readField(content, "plan_path"),
+    nextInstruction: readField(content, "next_instruction"),
+    updatedAt: stat.mtimeMs,
+  };
+}
+
+async function main() {
+  const input = await readInput();
+  const cwd = path.resolve(input.cwd || process.cwd());
+  const scopeRoot = await findGitRoot(cwd) || cwd;
+  const roots = await findLedgerRoots(cwd, scopeRoot);
+  const files = (await Promise.all(roots.map((root) => collectMarkdownFiles(root)))).flat();
+  const ledgers = (await Promise.all(files.map(async (filePath) => {
+    try {
+      return await parseLedger(filePath, scopeRoot);
+    } catch {
+      return null;
+    }
+  }))).filter(Boolean).sort((left, right) => right.updatedAt - left.updatedAt);
+
+  const ledger = ledgers[0];
+  if (!ledger) return;
+
+  const context = [
+    `Unfinished project ledger detected: ${ledger.filePath}.`,
+    "Read this ledger first and treat it as the durable source of truth.",
+    "Then inspect git log, skip tasks marked done_verified, preserve eliminated hypotheses, and restore the active task's consumer matrix before acting.",
+    ledger.planPath ? `The recorded plan is ${ledger.planPath}; read it only when the ledger points to missing scope or task detail.` : null,
+    ledger.nextInstruction ? `Recorded next instruction: ${ledger.nextInstruction}` : null,
+  ].filter(Boolean).join(" ");
+
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext: context,
+    },
+  }));
+}
+
+main().catch(() => {
+  process.exitCode = 0;
+});
