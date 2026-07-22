@@ -1,6 +1,6 @@
 ---
 name: repo-onboarding-audit
-description: Read-only onboarding workflow for unfamiliar repositories and codebases. Use when entering a new repo, starting review or architecture audit without enough context, generating a project map, identifying stack/frameworks/tests/tooling, tracing first data flow, or deciding safe validation commands before implementation.
+description: "Use for read-only orientation in an unfamiliar repo or subsystem: map stack, entry points, data flow, tests, tooling, conventions, and safe validation commands."
 ---
 
 # Repo Onboarding Audit

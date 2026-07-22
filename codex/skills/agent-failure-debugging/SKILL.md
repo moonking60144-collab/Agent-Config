@@ -1,6 +1,6 @@
 ---
 name: agent-failure-debugging
-description: Structured debugging workflow for repeated Codex, Claude, agent, tool, shell, MCP, connector, runtime, or environment failures. Use when the same error or failed hypothesis appears twice, a tool loop is forming, output claims do not match observed state, config changes do not take effect, or progress depends on diagnosing agent/runtime behavior before trying another fix.
+description: "Use after the same agent, tool, runtime, or config failure appears twice, a retry loop forms, or claimed state conflicts with observed evidence."
 ---
 
 # Agent Failure Debugging

@@ -1,6 +1,6 @@
 ---
 name: frontend-ui-designer
-description: Design and implement distinctive, production-grade web interfaces with intentional layout, typography, color, spacing, motion, and responsive behavior. Use this skill when Codex needs to create a new UI, redesign an existing page, improve visual quality, establish a stronger visual direction, or turn a generic interface into a more intentional frontend experience. Typical triggers include landing pages, dashboards, product screens, marketing pages, app shells, design-system-driven surfaces, and visual polish passes on existing pages. Also use for Chinese requests such as：前端設計、視覺改版、美化頁面、提升質感、重新設計介面、做出更有設計感的網站、整體風格統一、版面太醜、不像專業設計、UI 感覺很廉價、幫我改版面. Works across React, Next.js, Vite, Tailwind, plain CSS, and component-based frontend projects. Preserve established design systems when present; otherwise define a clear visual direction instead of falling back to generic AI aesthetics.
+description: "Use for new UI, visual redesign, or frontend polish requiring intentional layout, typography, color, motion, and responsive behavior. Preserve established design systems when present."
 ---
 
 ## 角色定位

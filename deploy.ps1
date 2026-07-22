@@ -346,9 +346,15 @@ if(Test-Path $codexSkillsSrc){
   Move-CodexSkillBackupsOutOfRegistry $codexSkillsDir $codexSkillBackupDir
   Get-ChildItem $codexSkillsSrc -Directory | ForEach-Object {
     $target = Join-Path $codexSkillsDir $_.Name
-    Backup-IfExists $target $codexSkillBackupDir
-    Ensure-Dir $target
-    Copy-Item (Join-Path $_.FullName '*') $target -Recurse -Force
+    $staged = Join-Path $codexSkillBackupDir "$($_.Name).deploying.$([guid]::NewGuid().ToString('N'))"
+    try {
+      Copy-Item $_.FullName $staged -Recurse -Force
+      Backup-IfExists $target $codexSkillBackupDir
+      if(Test-Path $target){ Remove-Item -LiteralPath $target -Recurse -Force }
+      Move-Item -LiteralPath $staged -Destination $target
+    } finally {
+      if(Test-Path $staged){ Remove-Item -LiteralPath $staged -Recurse -Force }
+    }
     Ok "skills/$($_.Name) -> ~/.codex/skills/$($_.Name)"
   }
 }

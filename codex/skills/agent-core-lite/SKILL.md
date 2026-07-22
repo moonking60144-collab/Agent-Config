@@ -1,6 +1,6 @@
 ---
 name: agent-core-lite
-description: "Scoped Codex engineering workflow. Use when AGENTS.md section 3.6 routes a task here: large repo, cross-file change, 3+ steps, config/runtime mismatch, token/context/compact abnormality, sync, deploy, commit/push, or an external/destructive/permission-sensitive side effect. Do not trigger for simple questions or single-file/single-step edits."
+description: "Use when AGENTS.md section 3.6 routes cross-file or 3+ step work, config/runtime drift, sync/deploy/commit/push, or external side effects. Skip simple questions and single-step edits."
 ---
 
 # Agent Core Lite
@@ -89,6 +89,8 @@ Apply these gates when writing or reviewing code:
 - Use structured parsers/APIs for structured data instead of ad hoc string surgery when the project already provides them.
 - Treat SQL injection, XSS, command injection, auth bypass, data loss, migration drift, and source-of-truth conflicts as blocker risks.
 - For frontend work, verify actual rendered/user behavior when the task depends on layout, interaction, accessibility, or browser state.
+- When tests are added, moved, renamed, nested, generated, or selected by custom globs or patterns, verify the intended test is discovered or direct-run it once; an aggregate green exit is not enough.
+- Before changing an external black-box write payload, required field, idempotency rule, or create/update timing, apply the `AGENTS.md` section 3.1 baseline requirement and protect critical payload behavior with a focused contract test. If live writes are unavailable, use mock or staging evidence and report the live boundary.
 - For external APIs, product limits, versions, specs, legal/financial/medical facts, or latest behavior, use official or primary sources.
 
 ## Good / Bad Patterns

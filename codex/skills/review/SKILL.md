@@ -1,6 +1,6 @@
 ---
 name: review
-description: Issue-first code, architecture, integration, pull request, and change review. Use when the user asks Codex to review, audit, inspect, check, critique, find issues, list problems, evaluate architecture/integration, review or re-review a PR/diff/branch, or assess correctness, regressions, security, test coverage, deployment risk, UI behavior, data flow, API contracts, automation/workflow behavior, or domain-specific system changes before implementation.
+description: "Use for issue-first review, audit, inspection, or re-review of code, diffs, PRs, architecture, integration, tests, deployment, security, data flow, or UI behavior. Default to read-only."
 ---
 
 # Review
@@ -18,7 +18,7 @@ description: Issue-first code, architecture, integration, pull request, and chan
    - Uncommitted review：先看 `git status -sb`、`git diff`、`git diff --cached`，再檢查相關 untracked files。
    - Branch/PR review：先找 merge-base，再看相對 base 的 diff；使用者給明確命令時照命令。
    - Audit/system review：以使用者指定的系統邊界、資料流、模組或風險面為 scope，不以 diff 為唯一來源。
-   - Re-review：驗證修補 diff 是否消除原 finding 的觸發條件，並檢查修補 diff 是否直接引入新的 P0/P1 風險；不要發散新增 P3 或無關 backlog。
+   - Re-review：先驗證原 finding 的觸發條件是否已消除，再檢查修補 diff 直接引入的任何 severity regression；不要擴張成與修補無關的 P3 backlog 或 system audit。
 3. 不要把廣義 audit 降格成 diff review。若使用者要求「掃整個系統」、「找所有 bug」、「flag conflicts」、「inconsistencies」、「system-wide refactor opportunities」、「architecture/integration 全面檢查」或類似語意，預設是 Audit/system review；不能只檢查 uncommitted changes 後宣稱沒有問題。一般「review this refactor」或「看這次 refactor diff」仍是 PR/diff/branch review，除非使用者明確要求系統級重構盤點。若系統邊界過大到無法一次完成，先提出分區掃描計畫或問一個必要問題。
 4. 命令要符合目前 OS 與 shell。先依環境、路徑與使用者語境判斷是 macOS/Linux 的 zsh/bash、Windows PowerShell、CMD、WSL 或 Git Bash；不要在 Windows PowerShell 情境輸出只適用 Bash 的語法，例如 `VAR=value cmd`、`2>/dev/null`、`/tmp/...`、`rm -rf`、`sed/awk` pipeline、process substitution，也不要在 Windows PowerShell 5.1 假設 `cmd1 && cmd2` 可用。若命令需要跨平台交付，優先用 npm scripts、git、Node/Python 小片段或同時列 PowerShell 與 zsh/bash 版本；使用者給明確命令時照命令。
 5. 先索引後讀取。用 `rg`、symbol search、test names、route names 或 diff hunk 先定位高風險區，再讀必要檔案；確認高風險後才擴大到完整檔案或完整 caller/downstream。

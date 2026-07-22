@@ -62,14 +62,12 @@ personality = "pragmatic"
 # 集中式功能旗標
 ################################################################################
 [features]
-shell_tool = true
-shell_snapshot = true
 unified_exec = true
-multi_agent = true
 prevent_idle_sleep = true
 memories = true
 chronicle = false
 fast_mode = false
+multi_agent = true
 # voice_transcription = true
 
 [memories]
@@ -167,12 +165,6 @@ enabled = true
 SystemRoot = '__SYSTEM_ROOT__'
 # __NPX_COMMAND__ and __SYSTEM_ROOT__ are replaced by deploy.ps1.
 # On macOS/Linux, deploy.ps1 removes SystemRoot because it is Windows-only.
-
-[mcp_servers.sequential-thinking]
-command = '__NPX_COMMAND__'
-args = ["-y", "@modelcontextprotocol/server-sequential-thinking@2025.12.18"]
-startup_timeout_ms = 40_000
-enabled = true
 
 [mcp_servers.serena]
 command = "uvx"

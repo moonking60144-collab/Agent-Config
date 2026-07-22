@@ -95,7 +95,7 @@ async function findLedgerRoots(cwd, scopeRoot) {
 async function parseLedger(filePath, scopeRoot) {
   const content = await fs.readFile(filePath, "utf8");
   const status = readField(content, "project_status")?.toLowerCase();
-  if (!status || !["pending", "in_progress", "blocked"].includes(status)) return null;
+  if (!status || !["active", "blocked", "pending", "in_progress"].includes(status)) return null;
 
   const repoPath = readField(content, "repo_path");
   if (!repoPath) return null;

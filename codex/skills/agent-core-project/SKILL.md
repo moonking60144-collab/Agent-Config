@@ -1,6 +1,6 @@
 ---
 name: agent-core-project
-description: Use only when an engineering task spans 3+ independently verifiable subsystems, cannot fit safely in one context, requires a durable plan and ledger across compaction/resume/handoff, involves irreversible or high-blast-radius changes such as schema migration, data backfill, or production deploy, or needs audit-first discovery with an unknown worklist followed by prioritized multi-phase implementation.
+description: "Use only for 3+ independently verifiable subsystems, work that must survive compaction or handoff, irreversible schema/data/deploy operations, or audit-first discovery with an unknown worklist."
 ---
 
 # Agent Core Project
@@ -169,6 +169,6 @@ Before any stop or final report, update the ledger and include:
 - Next task to run.
 - Exact first instruction for the next turn: `Read <ledger path> first, then continue from <task id>.`
 
-The ledger path must also be visible in the final response so the global AGENTS.md resume hook can recover it after compaction.
+Keep the ledger path visible in the final response for operator visibility and manual handoff. Automatic recovery uses the ledger header and `repo_path`, not final-response text.
 
 Before final report, run `git diff --stat` when inside a git repo. Base the changed-file summary on the actual diff, not memory.
