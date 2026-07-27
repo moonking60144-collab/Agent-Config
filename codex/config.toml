@@ -167,10 +167,9 @@ SystemRoot = '__SYSTEM_ROOT__'
 # On macOS/Linux, deploy.ps1 removes SystemRoot because it is Windows-only.
 
 [mcp_servers.serena]
-command = "uvx"
+command = '__SERENA_COMMAND__'
 args = [
-  "--from", "git+https://github.com/oraios/serena@v1.5.3",
-  "serena", "start-mcp-server",
+  "start-mcp-server",
   "--context", "claude-code",
   "--enable-web-dashboard", "false",
   "--enable-gui-log-window", "false"

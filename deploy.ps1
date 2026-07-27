@@ -79,6 +79,28 @@ function Get-NpxCommand {
   }
   return Get-CommandPathOrFallback @('npx') 'npx'
 }
+function Get-SerenaCommand {
+  $uv = Get-Command uv -ErrorAction SilentlyContinue
+  if(-not $uv){ throw '找不到 uv，無法安裝 Serena。請先安裝 uv 後重試。' }
+
+  $installedTools = (& $uv.Source tool list 2>&1) -join "`n"
+  if($LASTEXITCODE -ne 0){ throw "無法讀取 uv tool 清單：$installedTools" }
+
+  if($installedTools -match '(?m)^serena-agent\s'){
+    & $uv.Source tool upgrade serena-agent
+  } else {
+    & $uv.Source tool install -p 3.13 serena-agent
+  }
+  if($LASTEXITCODE -ne 0){ throw 'Serena stable 安裝或升級失敗。' }
+
+  $binDir = ((& $uv.Source tool dir --bin 2>&1) -join "`n").Trim()
+  if($LASTEXITCODE -ne 0 -or -not $binDir){ throw '無法取得 uv tool binary 目錄。' }
+
+  $binaryName = if($IsWindowsHost){ 'serena.exe' } else { 'serena' }
+  $serenaPath = Join-Path $binDir $binaryName
+  if(-not(Test-Path $serenaPath)){ throw "找不到 Serena binary：$serenaPath" }
+  return $serenaPath
+}
 function Get-CodexTerminalShell {
   if($IsWindowsHost){ return 'powershell' }
   if($IsMacOSHost){ return 'zsh' }
@@ -86,6 +108,7 @@ function Get-CodexTerminalShell {
 }
 function Resolve-CodexConfigTemplate($templatePath){
   $text = Get-Content $templatePath -Raw
+  $text = $text.Replace('__SERENA_COMMAND__', ((Get-SerenaCommand) -replace '\\','/'))
   $text = $text.Replace('__NPX_COMMAND__', (Get-NpxCommand))
   $text = $text.Replace('__CODEX_TERMINAL_SHELL__', (Get-CodexTerminalShell))
   if($IsWindowsHost){
