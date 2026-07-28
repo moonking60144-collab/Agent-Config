@@ -160,7 +160,7 @@ flowchart TD
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會先備份再覆蓋；skill 備份不放在 `~/.codex/skills/` 底下，避免重複出現在 Codex skill picker。
 
-`config.toml` 裡的 `__NPX_COMMAND__`、`__SERENA_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`deploy.ps1` 會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。部署 Codex config 時也會透過 `uv tool install` / `uv tool upgrade` 統一使用最新 stable `serena-agent`，再把該機器的 Serena binary 路徑寫入 active config；不追蹤 GitHub `main`，避免不同 Serena schema 輪流重寫 `.serena/project.yml`。
+`config.toml` 裡的 `__NPX_COMMAND__`、`__SERENA_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`deploy.ps1` 會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。部署 Codex config 時也會透過 `uv tool install` / `uv tool upgrade` 統一使用最新 stable `serena-agent`，再把該機器的 Serena binary 路徑寫入 active config；不追蹤 GitHub `main`。部署腳本會讀取該 stable 版本自帶的 `project.template.yml`，再以 `scripts/repair-serena-project-configs.mjs` 將已註冊專案統一成相容的 `languages` 或 `language_servers` schema，避免不同版本輪流重寫後導致 `KeyError`。
 
 目前 repo 版 Codex 不固定模型版本，避免每次模型更新都要修改 repo；Codex Desktop 寫入 active `~/.codex/config.toml` 的目前模型與 `model_reasoning_effort` 視為 runtime 狀態，不會由 `backup.ps1` 回寫 repo。`model_reasoning_summary`、`model_verbosity`、`personality` 仍屬可攜偏好。可攜 token 行為維持 `model_context_window = 1000000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。日常 reasoning 預設為 `high`，`Max` / `Ultra` 由 task 需要時再從模型選擇器調整。
 

@@ -99,6 +99,22 @@ function Get-SerenaCommand {
   $binaryName = if($IsWindowsHost){ 'serena.exe' } else { 'serena' }
   $serenaPath = Join-Path $binDir $binaryName
   if(-not(Test-Path $serenaPath)){ throw "找不到 Serena binary：$serenaPath" }
+
+  $toolDir = ((& $uv.Source tool dir 2>&1) -join "`n").Trim()
+  if($LASTEXITCODE -ne 0 -or -not $toolDir){ throw '無法取得 uv tool 安裝目錄。' }
+  $projectTemplate = Get-ChildItem (Join-Path $toolDir 'serena-agent') -Filter 'project.template.yml' -Recurse -File |
+    Select-Object -First 1
+  if(-not $projectTemplate){ throw '找不到 Serena project.template.yml，無法確認專案設定 schema。' }
+
+  $serenaRegistry = Join-Parts (Get-HomeDir) '.serena' 'serena_config.yml'
+  if(Test-Path $serenaRegistry){
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if(-not $node){ throw '找不到 node，無法修正 Serena 專案設定 schema。' }
+    $repairScript = Join-Parts $src 'scripts' 'repair-serena-project-configs.mjs'
+    & $node.Source $repairScript '--template' $projectTemplate.FullName '--registry' $serenaRegistry
+    if($LASTEXITCODE -ne 0){ throw 'Serena 專案設定 schema 修正失敗。' }
+  }
+
   return $serenaPath
 }
 function Get-CodexTerminalShell {
