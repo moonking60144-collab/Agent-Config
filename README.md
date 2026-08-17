@@ -8,7 +8,7 @@
 
 ## 快速開始
 
-Windows / macOS 都使用 PowerShell 部署；macOS 需要先安裝 PowerShell 7、Git、Node.js。
+Windows / macOS 都使用 PowerShell 部署；兩者都需要 Git 與 Node.js，macOS 另外需要 PowerShell 7。
 
 ```powershell
 git clone https://github.com/moonking60144-collab/config.git
@@ -28,7 +28,7 @@ powershell -ExecutionPolicy Bypass -File deploy.ps1
 pwsh -File deploy.ps1 -ForceCodex
 ```
 
-`deploy.ps1` 會：依目前 OS 展開路徑與 command，把設定還原到正確位置、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔（`*.bak.<時間戳>`）。每個目標預設保留最近 5 份備份，可用 `-BackupRetention` 調整，設為 `0` 可停用清理。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
+`deploy.ps1` 會：依目前 OS 展開路徑與 command，把設定還原到正確位置、探測本機硬體生成 `~/.claude/profile.md`、安裝 VS Code 擴充套件，並備份被覆蓋的既有檔。Claude 備份集中在 `~/.claude/backups/deploy-claude/`，其他目標沿用 `*.bak.<時間戳>`；每個目標預設保留最近 5 份備份，可用 `-BackupRetention` 調整，設為 `0` 可停用清理。Codex skill 目錄的備份會移到 `~/.codex/backups/skills/`，避免 `.bak.*` 目錄被 Codex 當成可用 skill 掃入清單。
 
 跨平台部署目標：
 
@@ -36,7 +36,7 @@ pwsh -File deploy.ps1 -ForceCodex
 |------|---------|-------|-------|
 | Claude / Codex | `~/.claude` / `~/.codex` | `~/.claude` / `~/.codex` | `~/.claude` / `~/.codex` |
 | VS Code User | `%APPDATA%\Code\User` | `~/Library/Application Support/Code/User` | `~/.config/Code/User` |
-| Claude hook | `powershell.exe ... check-traditional.ps1` | `pwsh ... check-traditional.ps1` | `pwsh ... check-traditional.ps1` |
+| Claude hook | `node ... check-traditional.mjs` | `node ... check-traditional.mjs` | `node ... check-traditional.mjs` |
 | Context7 MCP | `npx.cmd` / `npx` | `npx` | `npx` |
 | Codex terminal | `powershell` | `zsh` | `bash` |
 
@@ -50,13 +50,14 @@ config/
 ├── deploy.ps1                   # 主部署：repo -> 本機
 ├── backup.ps1                   # 反向同步：本機 -> repo
 ├── scripts/
+│   ├── deploy-claude.mjs        # Claude 唯一 deployer：merge、atomic write、備份與 hook 部署
 │   └── validate-config.ps1      # 檢查 repo template、active config、skill 同步與 Context7
 ├── claude/                      # Claude Code
 │   ├── CLAUDE.md                #   可攜核心（行為準則 + 程式撰寫準則 + 語言/身份偏好）
 │   ├── profile.example.md       #   機器 profile 範本（硬體/OS/工具/常用指令）
 │   ├── settings.json            #   user settings（hook command 由 deploy 依 OS 展開）
 │   └── hooks/
-│       └── check-traditional.ps1#   Stop hook：偵測回覆含簡體字就擋下要求改繁體
+│       └── check-traditional.mjs #  Stop hook：偵測回覆含簡體字就擋下要求改繁體
 ├── codex/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
@@ -90,12 +91,10 @@ config/
 |------|----------|------|
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | user-level global memory，不論工作目錄在哪都載入 |
 | `settings.json` | `~/.claude/settings.json` | 權限模式、effort 等級、Stop hook |
-| `hooks/check-traditional.ps1` | `~/.claude/hooks/` | 繁體中文檢查 hook |
-| （生成）`profile.md` | `~/.claude/profile.md` | deploy 探測本機硬體生成，被 `CLAUDE.md` 以 `@import` 載入 |
+| `hooks/check-traditional.mjs` | `~/.claude/hooks/` | 跨平台繁體中文 Stop hook；由 Node exec form 執行 |
+| （生成）`profile.md` | `~/.claude/profile.md` | deploy 探測本機硬體生成，僅供本機環境盤點，不自動載入 context |
 
-**CLAUDE.md 為什麼拆兩份**：行為準則 / 程式準則是跨機器的習慣（可攜）；硬體規格、OS、工具版本是機器特定的，換機器就變。所以 `CLAUDE.md` 只放可攜核心，末尾用官方 `@~/.claude/profile.md` 把機器 profile 分檔 import 進來。換機器時 deploy 會探測新機硬體重新生成 profile，不需手改規範。
-
-> 首次啟動 Claude Code 會跳出 import 批准對話，按核准即可。
+**CLAUDE.md 與 profile.md 的邊界**：行為與工程規則是跨機器的可攜核心，放在 `CLAUDE.md`；硬體規格、OS 與工具版本會隨機器改變，由 deploy 重新生成 `profile.md`。`profile.md` 不以 `@import` 常駐載入，避免機器 inventory 佔用每個 session 的 context；需要時再直接讀取。
 
 ### Codex（`codex/`）
 
@@ -200,7 +199,7 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / hooks / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook command、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 token / reasoning summary / verbosity / personality key；目前模型與 `model_reasoning_effort` 不回寫，避免單一 task 的選擇污染 repo 預設，也不會帶入 `notify`、`projects.*`、本機絕對路徑等機器特定內容。`profile.md` 含機器特定內容，不自動回寫。
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / canonical `check-traditional.mjs` hook / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook path、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 token / reasoning summary / verbosity / personality key；目前模型與 `model_reasoning_effort` 不回寫，避免單一 task 的選擇污染 repo 預設，也不會帶入 `notify`、`projects.*`、本機絕對路徑等機器特定內容。`profile.md` 含機器特定內容，不自動回寫。
 
 VS Code extensions 清單預設不回寫，避免某臺機器的臨時擴充污染 repo。確定要更新 `vscode/extensions.txt` 時才執行：
 

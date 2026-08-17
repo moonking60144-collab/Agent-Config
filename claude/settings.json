@@ -1,26 +1,25 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
-  "extraKnownMarketplaces": {
-    "claude-plugins-official": {
-      "source": {
-        "source": "github",
-        "repo": "anthropics/claude-plugins-official"
-      }
-    }
-  },
   "effortLevel": "xhigh",
+  "switchModelsOnFlag": true,
   "skipDangerousModePermissionPrompt": true,
-  "skipWorkflowUsageWarning": true,
+  "autoMemoryEnabled": true,
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
   "hooks": {
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "__CLAUDE_STOP_HOOK_COMMAND__",
+            "command": "node",
+            "args": ["__CLAUDE_STOP_HOOK_PATH__"],
             "timeout": 20,
             "statusMessage": "檢查繁體中文"
           }

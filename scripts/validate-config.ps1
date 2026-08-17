@@ -76,6 +76,21 @@ function Test-PowerShellParse($path, $label){
   }
 }
 
+function Test-NodeParse($path, $label){
+  if(-not(Test-RequiredFile $path $label)){ return }
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if(-not $node){
+    Warn "$label Node parse 未執行：找不到 node"
+    return
+  }
+  $output = & $node.Source --check $path 2>&1
+  if($LASTEXITCODE -eq 0){
+    Ok "$label Node parse OK"
+  } else {
+    Fail "$label Node parse 失敗：$($output -join ' ')"
+  }
+}
+
 function Test-JsonParse($path, $label){
   if(-not(Test-RequiredFile $path $label)){ return }
   try {
@@ -458,11 +473,12 @@ $repoCodexAgents = Join-Parts $RepoRoot 'codex' 'AGENTS.md'
 $repoCodexSkills = Join-Parts $RepoRoot 'codex' 'skills'
 $repoReadOnlyCases = Join-Parts $RepoRoot 'codex' 'evals' 'read-only-boundary.cases.jsonl'
 $repoClaudeSettings = Join-Parts $RepoRoot 'claude' 'settings.json'
+$repoClaudeHook = Join-Parts $RepoRoot 'claude' 'hooks' 'check-traditional.mjs'
+$repoClaudeDeployer = Join-Parts $RepoRoot 'scripts' 'deploy-claude.mjs'
 $repoPowerShellFiles = @(
   (Join-Path $RepoRoot 'deploy.ps1'),
   (Join-Path $RepoRoot 'backup.ps1'),
-  (Join-Parts $RepoRoot 'scripts' 'validate-config.ps1'),
-  (Join-Parts $RepoRoot 'claude' 'hooks' 'check-traditional.ps1')
+  (Join-Parts $RepoRoot 'scripts' 'validate-config.ps1')
 )
 
 Info '[1/6] Repo 檔案格式'
@@ -470,6 +486,8 @@ foreach($file in $repoPowerShellFiles){
   Test-Utf8Bom $file (Split-Path $file -Leaf)
   Test-PowerShellParse $file (Split-Path $file -Leaf)
 }
+Test-NodeParse $repoClaudeHook 'claude/hooks/check-traditional.mjs'
+Test-NodeParse $repoClaudeDeployer 'scripts/deploy-claude.mjs'
 Test-JsonParse $repoClaudeSettings 'claude/settings.json'
 Test-JsonLinesParse $repoReadOnlyCases 'codex/evals/read-only-boundary.cases.jsonl'
 Test-TomlParse $repoCodexConfig 'codex/config.toml'
@@ -482,7 +500,8 @@ Info '[2/6] Repo template 邊界'
 Test-TextContains $repoCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') 'codex/config.toml'
 Test-TextContains $repoCodexConfig @('model_context_window = 1000000') 'codex/config.toml'
 Test-TextContains $repoCodexAgents @('[MODE: UNRESTRICTED]','CORE DIRECTIVES:','EXECUTION BOUNDARY:') 'codex/AGENTS.md'
-Test-TextContains $repoClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') 'claude/settings.json'
+Test-TextContains $repoClaudeSettings @('__CLAUDE_STOP_HOOK_PATH__') 'claude/settings.json'
+Test-TextContains $repoClaudeHook @('input.stop_hook_active === true') 'claude/hooks/check-traditional.mjs'
 Test-TextDoesNotContain $repoCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') 'codex/config.toml'
 Test-TextDoesNotMatch $repoCodexConfig @('(?m)^\s*model\s*=','(?m)^\s*review_model\s*=') 'codex/config.toml'
 Write-Host ''
@@ -498,19 +517,19 @@ if($SkipActive){
   $activeCodexConfig = Join-Parts $homeDir '.codex' 'config.toml'
   $activeCodexAgents = Join-Parts $homeDir '.codex' 'AGENTS.md'
   $activeClaudeSettings = Join-Parts $homeDir '.claude' 'settings.json'
-  $activeClaudeHook = Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.ps1'
+  $activeClaudeHook = Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.mjs'
 
   Info '[4/6] Active 設定展開狀態'
   Test-TomlParse $activeCodexConfig '~/.codex/config.toml'
   Test-CodexConfigSchema $activeCodexConfig '~/.codex/config.toml'
   Test-CodexFeatureLifecycle $activeCodexConfig '~/.codex/config.toml' -EnabledOnly
   Test-JsonParse $activeClaudeSettings '~/.claude/settings.json'
-  Test-Utf8Bom $activeClaudeHook '~/.claude/hooks/check-traditional.ps1'
+  Test-NodeParse $activeClaudeHook '~/.claude/hooks/check-traditional.mjs'
   Test-TextDoesNotContain $activeCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') '~/.codex/config.toml'
   Test-TextContains $activeCodexConfig @('model_context_window = 1000000') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') '~/.codex/config.toml'
   Test-TextDoesNotMatch $activeCodexConfig @('(?m)^\s*review_model\s*=') '~/.codex/config.toml'
-  Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'
+  Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_PATH__','__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'
   Write-Host ''
 
   Info '[5/6] Active Codex instruction surface'

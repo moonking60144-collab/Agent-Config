@@ -61,18 +61,6 @@ function Get-CommandPathOrFallback($names, $fallback){
   }
   return $fallback
 }
-function Escape-JsonStringValue($value){
-  $json = ConvertTo-Json $value -Compress
-  return $json.Substring(1, $json.Length - 2)
-}
-function Get-ClaudeStopHookCommand($homeDir){
-  $hookPath = (Join-Parts $homeDir '.claude' 'hooks' 'check-traditional.ps1') -replace '\\','/'
-  if($IsWindowsHost){
-    return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$hookPath`""
-  }
-  $pwsh = Get-CommandPathOrFallback @('pwsh') 'pwsh'
-  return "$pwsh -NoProfile -File `"$hookPath`""
-}
 function Get-NpxCommand {
   if($IsWindowsHost){
     return Get-CommandPathOrFallback @('npx.cmd','npx') 'npx.cmd'
@@ -327,24 +315,13 @@ Write-Host ''
 
 # ---------------------------------------------------------------------------
 Info '[1/4] Claude Code'
-$claudeDir = Join-Path $U '.claude'
-Ensure-Dir $claudeDir
-Ensure-Dir (Join-Path $claudeDir 'hooks')
-
-Backup-IfExists (Join-Path $claudeDir 'CLAUDE.md')
-Copy-Item (Join-Parts $src 'claude' 'CLAUDE.md') (Join-Path $claudeDir 'CLAUDE.md') -Force
-Ok 'CLAUDE.md -> ~/.claude/CLAUDE.md'
-
-$st = Get-Content (Join-Parts $src 'claude' 'settings.json') -Raw
-$st = $st.Replace('__USERPROFILE__', ($U -replace '\\','/'))
-$st = $st.Replace('__CLAUDE_STOP_HOOK_COMMAND__', (Escape-JsonStringValue (Get-ClaudeStopHookCommand $U)))
-Backup-IfExists (Join-Path $claudeDir 'settings.json')
-[System.IO.File]::WriteAllText((Join-Path $claudeDir 'settings.json'), $st, $enc)
-Ok 'settings.json -> ~/.claude/settings.json（已套用本機 hook command）'
-
-$claudeHooksSrc = Join-Parts $src 'claude' 'hooks'
-Copy-Item (Join-Path $claudeHooksSrc '*') (Join-Path $claudeDir 'hooks') -Recurse -Force
-Ok 'hooks/* -> ~/.claude/hooks/'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if(-not $nodeCommand){ throw '找不到 node，無法部署 Claude Code 設定與 Stop hook。請先安裝 Node.js 後重試。' }
+$claudeDeployScript = Join-Parts $src 'scripts' 'deploy-claude.mjs'
+if(-not(Test-Path -LiteralPath $claudeDeployScript -PathType Leaf)){ throw "找不到 Claude deployer：$claudeDeployScript" }
+& $nodeCommand.Source $claudeDeployScript '--home' $U '--backup-retention' ([string]$BackupRetention)
+if($LASTEXITCODE -ne 0){ throw 'Claude Code 設定部署失敗。' }
+Ok 'Claude Code settings / instructions / Stop hook 已由唯一 Node deployer 部署'
 
 $profileMd = Build-Profile
 [System.IO.File]::WriteAllText((Join-Path $claudeDir 'profile.md'), $profileMd, $enc)
@@ -481,5 +458,5 @@ Write-Host ''
 
 Info '部署完成。'
 Write-Host '  1. 完全重啟 Claude Code 與 VS Code 以套用設定' -ForegroundColor White
-Write-Host '  2. 首次啟動 Claude Code 會跳出 profile.md 的 import 批准對話，按核准' -ForegroundColor White
+Write-Host '  2. profile.md 僅供本機環境盤點，不會自動載入 Claude context' -ForegroundColor White
 Write-Host '  3. 在每台 Codex 機器開啟 /hooks，review 並 trust 目前的 command hook definition' -ForegroundColor Yellow

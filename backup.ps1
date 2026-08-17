@@ -52,15 +52,16 @@ function Normalize-ClaudeSettingsTemplate {
     $obj = $normalized | ConvertFrom-Json
     foreach($stop in @($obj.hooks.Stop)){
       foreach($hook in @($stop.hooks)){
-        if(($hook.command -as [string]) -match 'check-traditional\.ps1'){
-          $hook.command = '__CLAUDE_STOP_HOOK_COMMAND__'
+        $hookArgs = (@($hook.args) -join ' ')
+        if((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-traditional\.mjs')){
+          $hook.args = @('__CLAUDE_STOP_HOOK_PATH__')
           $hook.statusMessage = '檢查繁體中文'
         }
       }
     }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
-    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.ps1', '__CLAUDE_STOP_HOOK_COMMAND__')
+    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__')
   }
 }
 
@@ -107,7 +108,7 @@ function Sync-CodexPortableConfig {
   Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜 summary / verbosity / personality / token key）'
 }
 
-# Claude CLAUDE.md（可攜核心，含 @import 行）
+# Claude CLAUDE.md（可攜核心）
 $cm = Join-Parts $U '.claude' 'CLAUDE.md'
 if(Test-Path $cm){
   Copy-Item $cm (Join-Parts $src 'claude' 'CLAUDE.md') -Force
@@ -123,12 +124,12 @@ if(Test-Path $cs){
   Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'
 } else { Skip "$cs 不存在" }
 
-# Claude hooks
-$hk = Join-Parts $U '.claude' 'hooks'
+# Claude canonical Stop hook
+$hk = Join-Parts $U '.claude' 'hooks' 'check-traditional.mjs'
 if(Test-Path $hk){
-  Copy-Item (Join-Path $hk '*') (Join-Parts $src 'claude' 'hooks') -Recurse -Force
-  Ok 'hooks <- ~/.claude/hooks'
-}
+  Copy-Item $hk (Join-Parts $src 'claude' 'hooks' 'check-traditional.mjs') -Force
+  Ok 'check-traditional.mjs <- ~/.claude/hooks/check-traditional.mjs'
+} else { Skip "$hk 不存在" }
 
 # Codex AGENTS.md（可攜全域指令）
 $ca = Join-Parts $U '.codex' 'AGENTS.md'
