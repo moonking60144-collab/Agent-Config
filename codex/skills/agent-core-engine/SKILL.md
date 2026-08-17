@@ -7,7 +7,7 @@ description: Design, implement, review, or extend a production-ready custom agen
 
 Use this skill when the user asks to build, integrate, optimize, or review an agent runtime, tool loop, compactor, retry engine, or production-grade autonomous coding agent core.
 
-For ordinary Codex tasks, do not invoke the full runtime template by default. The day-to-day integration lives in the `agent-core-lite` skill, whose frontmatter is the Superpowers-style trigger surface for multi-step work, repeated failures, config/runtime drift, context pressure, and commit/push tasks. Use this full skill only when the task is about agent/runtime architecture itself.
+For ordinary Codex tasks, do not invoke the full runtime template by default. The day-to-day integration lives in the `agent-core-lite` skill for scoped multi-step work, config/runtime drift, context pressure, and commit/push tasks; repeated failures route to `agent-failure-debugging`. Use this full skill only when the task is about agent/runtime architecture itself.
 
 This is a global Codex skill. Do not write `src/agent-core` into the current business repo unless the user explicitly names that repo as the target runtime implementation. If the user asks to improve "Codex settings", update global AGENTS/skills/templates instead of project source.
 

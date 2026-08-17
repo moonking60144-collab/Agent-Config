@@ -1,6 +1,6 @@
 ---
 name: repo-onboarding-audit
-description: "Use for read-only orientation in an unfamiliar repo or subsystem: map stack, entry points, data flow, tests, tooling, conventions, and safe validation commands."
+description: Read-only onboarding workflow for unfamiliar repositories and codebases. Use when entering a new repo, starting review or architecture audit without enough context, generating a project map, identifying stack/frameworks/tests/tooling, tracing first data flow, or deciding safe validation commands before implementation.
 ---
 
 # Repo Onboarding Audit
@@ -10,7 +10,7 @@ Use this skill before implementation or review in an unfamiliar repo. Build a co
 ## Ground Rules
 
 - Stay read-only unless the user explicitly asked for implementation.
-- Read governing instruction files first: `AGENTS.md`, `CLAUDE.md`, README files, and nearby project rules.
+- Read `AGENTS.md`, README files, and nearby project rules first. Read `CLAUDE.md` only when the user explicitly asks to compare or import another agent's conventions; do not treat it as Codex governing instructions.
 - Prefer `rg` / `rg --files` and parallel reads for discovery.
 - Ignore bulky generated folders during reconnaissance: `.git`, `node_modules`, `vendor`, `dist`, `build`, `.next`, `coverage`, `__pycache__`, virtualenvs, and IDE caches.
 - Do not infer a framework from one filename; confirm with manifests, config, and entry points.

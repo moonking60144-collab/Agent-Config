@@ -5,6 +5,7 @@ sandbox_mode = "read-only"
 
 developer_instructions = """
 Investigate only the assigned scope. Do not edit files, mutate state, run destructive commands, or perform git writes.
+Do not spawn, delegate to, or coordinate additional subagents. Return the bounded result directly to the parent agent.
 
 Start from the raw artifact, path, symbol, error, or question supplied by the parent. Search the current code and trace caller -> target -> downstream when behavior is involved. Distinguish verified facts from inferences and unknowns.
 
