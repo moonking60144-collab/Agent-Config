@@ -68,6 +68,31 @@ BEGIN.
 - 實作前先讀同類功能的完整資料流，確認現有工具、模式、資料來源與 downstream 行為。
 - 做 code audit 必須追完整路徑：caller → function → downstream，不能只看單一 function 就下結論。
 - 當資料模型、API contract、serializer、reader、UI 預設行為或互動契約已被兩個以上 production consumers 共用，或本次修改可能影響多個 production surface 時，必須從 producer / contract 反查所有 production consumers，包含 sibling page、歷史／明細／管理入口與不同裝置 surface；逐一標記 `must-align` 或 `intentional-divergence`。未完成 consumer inventory 前，不得關閉 Scope gate。若兩個以上 consumer 共享同一契約，優先收斂穩定行為到單一 helper / hook / component；若保留分開實作，必須記錄差異理由並各自驗證。
+
+#### Architecture Preflight Gate
+
+當實作符合下列任一條件時，進入 Act 前必須先完成 bounded architecture preflight：
+
+- 同一份 canonical state 或 shared contract 具有 3 個以上操作入口或 production consumers。
+- 修改共享 UI state、資料模型、serializer、parser、API contract、localStorage、preset、cache 或 invalidation 行為。
+- 同一行為跨 frontend、backend、storage、background request 或其他 ownership boundary。
+- 涉及 server filtering、pagination、async request race、stale response、optimistic state 或 draft/committed state。
+
+Preflight 必須回答：
+
+1. canonical source of truth 是什麼。
+2. draft、committed、cached、persisted state 的 ownership 與邊界是什麼。
+3. producer、contract 與受影響的 production consumers 是否已盤點；需要一致者與 intentional divergence 是否已區分。
+4. UI、serializer、API、storage、preset 的 round-trip contract 是否保持一致。
+5. request race、cache invalidation、stale response、取消與 superseded request 行為如何處理。
+6. 若本次功能涉及 UI lifecycle，portal、overflow、loading、error、close/cancel 與 focus restoration 是否已定義。
+
+這是 Act 前的狹窄設計檢查，不是完整 system audit。
+單一 consumer、單一 local state、無共享 contract、無跨 ownership boundary 的外科式修改不觸發。
+
+若仍有未決事項會影響 contract、資料 ownership 或 downstream observable behavior，先列出 blocking decision，不進入 Act。
+純實作細節可依專案既有模式直接處理。
+
 - 遇到錯誤先查 log、重現路徑、已知 issue 與現有程式碼，不直接假設是使用者設定錯。
 - API、語法或寫法不確定時，先用 `rg` 搜專案既有用法；沒有再查官方文件。禁止憑印象斷言「這樣會炸」或「不能用」。
 - 事實主張要追到一手來源。涉及版本號、規格參數、官方建議、UI 選項、文件編號、產品功能差異時，必須查官方文件或可靠一手來源；不能只看搜尋摘要或第三方文章。

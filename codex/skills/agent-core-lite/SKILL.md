@@ -49,6 +49,8 @@ State what this turn will touch and what it will not touch. Before edits, name t
 
 For 3+ steps, cross-file changes, review sweeps, or commit/push work, use `update_plan`. Each step needs a verifiable completion condition. Keep exactly one step in progress unless a true multi-agent workflow is active.
 
+When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, complete that bounded preflight before entering Act.
+
 ### Act
 
 Parallelize independent read-only checks. Keep writes, shell mutations, git, MCP side effects, and external calls sequential. Treat unknown tools as write-capable until proven otherwise. Avoid broad file dumps; keep large outputs as paths, summaries, or reproducible commands.
@@ -70,7 +72,8 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | Gate | Must be true before proceeding |
 | --- | --- |
 | Scope gate | Target files/settings/surfaces are named before edits |
-| Consumer coverage gate | When `AGENTS.md` section 3.1 applies, the producer -> contract -> all production consumers inventory is complete and every consumer is marked `must-align` or `intentional-divergence` |
+| Consumer coverage gate | When the production-consumer inventory rule in `AGENTS.md` section 3.1 triggers, the producer -> contract -> all production consumers inventory is complete and every consumer is marked `must-align` or `intentional-divergence` |
+| Architecture preflight gate | When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, canonical source of truth, state boundaries, production consumer coverage, contract round-trips, async/cache behavior, and relevant UI lifecycle are resolved before Act |
 | Read-only gate | If the user asked read-only/review/analysis, no writes happen |
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |
