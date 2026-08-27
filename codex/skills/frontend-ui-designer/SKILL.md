@@ -215,6 +215,15 @@ description: "Use for new UI, visual redesign, or frontend polish requiring inte
 5. **Motion language**
    - reveal、hover、scroll 動效是否存在，以及整頁共用的速度與節奏
 
+### 容器與語意色邊界
+
+- 一般 card、panel、callout、設定區塊與內部工具容器，預設使用中性 `1px` border；禁止用 accent color 頂線、左線、rail、色帶、glow 或漸層線作為無功能意義的強調裝飾。
+- 移除 accent rail 時不要換成更淡的 rail、shadow、glow、icon rail 或其他等價裝飾；應改用 typography、spacing、內容層級與中性 surface 建立焦點。
+- 同一狀態不要同時疊加彩色邊框、彩色背景與彩色文字。狀態優先由 dot、badge、icon、文字色或很淡的語意背景表達；容器幾何保持中性。
+- 操作語意由 primary／destructive button 表達；敏感或一次性資料由 code surface、monospace 與文字色表達，不再讓整張卡片取得 accent border。
+- 同頁出現多個語意狀態時要檢查 accent density；如果每張卡片、通知或區塊都用不同彩色邊線搶焦點，視為典型 AI dashboard 退化，應收斂成單一 surface language。
+- 例外只限既有 design system 明確規定的模式、selected tab／navigation indicator、progress、chart／legend，或確實需要提高辨識度的 critical alert；例外仍須同時提供 icon、文字或標籤等非顏色線索，不能只靠一條色線傳達語意。
+
 ### 禁止的退化模式
 
 - Hero 是一種風格，後面 section 每一塊又換另一種風格
