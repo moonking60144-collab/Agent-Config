@@ -49,7 +49,7 @@ State what this turn will touch and what it will not touch. Before edits, name t
 
 For 3+ steps, cross-file changes, review sweeps, or commit/push work, use `update_plan`. Each step needs a verifiable completion condition. Keep exactly one step in progress unless a true multi-agent workflow is active.
 
-When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, complete that bounded preflight before entering Act.
+When the Architecture Preflight Gate or Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 triggers, complete the applicable bounded preflight before entering Act.
 
 ### Act
 
@@ -60,6 +60,8 @@ Use subagents when they are expected to improve coverage, reduce main-context pr
 ### Verify
 
 Verify the real source of truth for the task, not the easiest proxy. Code changes normally need the relevant lint/build/test or a stated reason if not run. Config changes need the active consumer or a clear reload/restart boundary. Review findings need a reachable trigger chain. Do not mark work complete with missing files, failed tests, stale state, or indirect evidence.
+
+If either section 3.1 preflight triggered, verify the final change against its preflight model and collect evidence appropriate to the claim. Tests and builds do not substitute for architecture/concurrency evidence or representative interaction-performance runtime evidence.
 
 ### Report
 
@@ -73,7 +75,8 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | --- | --- |
 | Scope gate | Target files/settings/surfaces are named before edits |
 | Consumer coverage gate | When the production-consumer inventory rule in `AGENTS.md` section 3.1 triggers, the producer -> contract -> all production consumers inventory is complete and every consumer is marked `must-align` or `intentional-divergence` |
-| Architecture preflight gate | When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, canonical source of truth, state boundaries, production consumer coverage, contract round-trips, async/cache behavior, and relevant UI lifecycle are resolved before Act |
+| Architecture preflight gate | When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, canonical state, ownership, authority, version semantics, contract round-trips, async/cache behavior, and relevant UI lifecycle are resolved with evidence before Act |
+| Interaction performance gate | When the Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 triggers, representative load, baseline, budget, update strategy, complexity, geometry contract, and browser runtime acceptance are defined before Act |
 | Read-only gate | If the user asked read-only/review/analysis, no writes happen |
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |

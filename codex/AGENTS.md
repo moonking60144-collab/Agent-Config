@@ -77,6 +77,9 @@ BEGIN.
 - 修改共享 UI state、資料模型、serializer、parser、API contract、localStorage、preset、cache 或 invalidation 行為。
 - 同一行為跨 frontend、backend、storage、background request 或其他 ownership boundary。
 - 涉及 server filtering、pagination、async request race、stale response、optimistic state 或 draft/committed state。
+- 擴大 entity 的 visibility 或 ownership scope，例如新增 global/shared scope、`scope=all`，或讓 local／remote entity 共用 controller、tracker、poller 或 completion flow。
+- 修改 generation、revision、snapshot、lock、atomic publish、retry、supersession 或 restart recovery 行為。
+- 改變 live freshness、point-in-time validation、multi-source composition，或讓同一 controller 同時讀 state 並執行 completion side effect。
 
 Preflight 必須回答：
 
@@ -86,12 +89,38 @@ Preflight 必須回答：
 4. UI、serializer、API、storage、preset 的 round-trip contract 是否保持一致。
 5. request race、cache invalidation、stale response、取消與 superseded request 行為如何處理。
 6. 若本次功能涉及 UI lifecycle，portal、overflow、loading、error、close/cancel 與 focus restoration 是否已定義。
+7. version／revision／snapshot 的 immutable、publish、pinning 與 supersession semantics 是什麼。
+8. 哪些 caller 是 originating mutation、哪些只是 observer；誰擁有 completion、retry、rollback 與其他 side-effect authority。
+9. cache validity、live freshness、point-in-time validation、mutation safety 與 UI observability 是否由正確且可區分的機制負責。
+10. concurrency、consistency 或 lifecycle 的 architecture claim 是否能由實際 I/O、state transition 或 component-boundary evidence 證明。
+
+當主張存在 race、torn read、stale write、lost update、duplicate side effect、deadlock、supersession 或 restart recovery 問題時，必須構造可達 execution timeline，標明 shared mutable source、實際 I/O、version／lock boundary、state commit 與 observable failure。無法構造時，該主張只能列為 hypothesis，不得當成已證實根因。
 
 這是 Act 前的狹窄設計檢查，不是完整 system audit。
 單一 consumer、單一 local state、無共享 contract、無跨 ownership boundary 的外科式修改不觸發。
 
 若仍有未決事項會影響 contract、資料 ownership 或 downstream observable behavior，先列出 blocking decision，不進入 Act。
 純實作細節可依專案既有模式直接處理。
+
+#### Interaction Performance Preflight Gate
+
+當實作符合下列任一條件時，進入 Act 前必須先完成 bounded interaction performance preflight：
+
+- 使用 `pointermove`、`mousemove`、`mouseover`、`scroll`、`wheel`、drag、touch move、resize 或其他連續高頻事件，驅動成本會隨資料量、DOM 數或互動範圍成長的 state、render、layout 或 paint 更新。
+- 修改超寬、高密度、虛擬化、sticky 或大量 cell／row surface 的 selection、scroll、render、geometry 或 virtualization path。
+- 單次互動可能造成隨 rows、columns、selection size 或 mounted DOM 成長的 render、selector、layout 或 paint 成本。
+- 幾何計算同時依賴 column width、row height、zoom、scroll offset、sticky offset、virtualizer spacer 或 overscan。
+
+Preflight 必須定義：
+
+1. 代表性最大負載、目前 baseline 與可量測的目標 budget。
+2. bounded event update strategy，例如 rAF、coalescing、throttle、ref、imperative overlay 或其他機制；高頻事件不得無界地直接驅動 React commit。
+3. 每次 event、render 與整段互動的時間／空間複雜度；不得在高頻路徑引入未量測的 `O(rows × columns)` 成本。
+4. transient interaction state 與 committed application state 的 ownership 邊界。
+5. width、height、zoom、scroll、sticky 與 virtualizer 共用的 canonical geometry contract，以及各 consumers 的 invariant／intentional divergence。
+6. 代表性瀏覽器驗收，涵蓋最大資料量、快速互動／捲動、zoom／字級、virtualization 邊界、blank frame 與實際 render／layout／paint evidence。
+
+這是高頻或高密度互動的條件式效能檢查，不以固定 DOM 數量、單一框架寫法或所有 frontend 改動作為觸發條件。
 
 - 遇到錯誤先查 log、重現路徑、已知 issue 與現有程式碼，不直接假設是使用者設定錯。
 - API、語法或寫法不確定時，先用 `rg` 搜專案既有用法；沒有再查官方文件。禁止憑印象斷言「這樣會炸」或「不能用」。

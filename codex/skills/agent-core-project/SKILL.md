@@ -78,6 +78,8 @@ If the current cwd is already a Codex scratch workspace and the artifact is a us
 
 Identify affected subsystems, source-of-truth surfaces, data/control flow edges, dependency order, consumes/produces relationships, blast radius, and ordered sub-tasks. Each sub-task must be independently verifiable and name dependencies when order matters.
 
+For each sub-task, identify whether the Architecture Preflight Gate or Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 applies.
+
 ### 2. Plan to File
 
 Write a durable plan before implementation. Each task entry must include:
@@ -86,6 +88,7 @@ Write a durable plan before implementation. Each task entry must include:
 - Files/modules expected to change.
 - Affected contracts and production consumers; mark each consumer `must-align` or `intentional-divergence` when shared behavior is involved.
 - Mirror the active task's contract, producer, consumer matrix, divergence reasons, and verification evidence into the ledger; do not leave this inventory only in the plan.
+- Applicable `AGENTS.md` section 3.1 preflight, including its resolved model, representative baseline/budget, evidence, and blocking decisions; mirror these into the ledger so they survive compaction, resume, and handoff.
 - Preconditions and dependencies.
 - Implementation steps.
 - Verification commands or artifacts.
@@ -137,6 +140,8 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 
 Execute one task at a time. Update the ledger after every task state change. Use fresh subagents when independent read-only exploration, adversarial verification, or clearly isolated work will improve coverage or reduce main-context pressure. No per-use permission is required for those bounded reads. The main agent owns writes, git actions, external side effects, and final verification unless the user explicitly delegates otherwise.
 
+Before entering Act for a task whose section 3.1 preflight applies, confirm the required model, evidence, baseline/budget, and blocking decisions are recorded in the plan or ledger. If the preflight is incomplete or current evidence invalidates it, return to Map & Decompose and update the durable artifacts instead of implementing against stale assumptions.
+
 Subagent findings are leads, not verification evidence. Before marking any task `done_verified`, the main agent must directly verify referenced files, commands, logs, diffs, runtime state, or artifacts and record that direct evidence in the ledger.
 
 Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply `AGENTS.md` §3.5 confirmation requirements; do not rely on post-run verification to invent the rollback path.
@@ -147,7 +152,7 @@ If a task becomes blocked, mark it `blocked` with evidence and dependency impact
 
 ### 5. Verify Before Complete
 
-Apply `agent-core-lite`'s verification gate by reference. Additionally produce a requirement evidence table:
+Apply `agent-core-lite`'s verification gate by reference, including its conditional section 3.1 preflight verification. Additionally produce a requirement evidence table:
 
 ```text
 Requirement | Evidence | Status

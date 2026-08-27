@@ -31,6 +31,8 @@ description: "Use for issue-first review, audit, inspection, or re-review of cod
 12. 對外部 API、規格、workflow/automation API、版本行為或產品功能的主張，不憑印象；查官方文件或一手來源後再下結論。
 13. 不確定時明確標示不確定點、原因、驗證方式。不要把猜測包裝成 finding。
 
+審查 concurrency、versioning、cache/freshness、observer/mutation ownership 或 restart-recovery 行為時，套用 `AGENTS.md` section 3.1 的 architecture-claim evidence 規則。缺少可達 execution timeline 的 race、torn read、stale write、lost update、duplicate side effect、supersession 或 recovery 主張只能列為待確認問題，不能列為 finding。
+
 ## Findings 標準
 
 只列可辯護、可重現、會造成實際風險的問題。每個 finding 必須包含：
@@ -125,6 +127,7 @@ description: "Use for issue-first review, audit, inspection, or re-review of cod
 - Deployment：env key、`.env.example`、migration、build package、feature flag、rollback、dirty worktree impact。
 - Observability：錯誤是否被吞掉、log context 是否足夠、metrics/tracing/alert 是否能看出新失敗模式。
 - UI：實際畫面、loading/disabled/error state、background refresh flicker、responsive layout、表單互動與可用性。
+- Performance：高頻事件的 update rate、render／selector complexity、DOM／layout／paint、virtualization、canonical geometry、代表性最大負載與實際瀏覽器 runtime evidence；unit test、lint 與 build 不構成互動效能證據。
 - Domain workflow/API：automation 是否循環觸發、side effect 是否可重入、欄位/資源 ID 是否正確、dry-run/apply 是否共用錯誤路徑、canonical 值是否被 round-trip 破壞。
 
 ## 子 Agent 使用
