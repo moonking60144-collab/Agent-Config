@@ -1,6 +1,6 @@
 ---
 name: agent-core-engine
-description: Design, implement, review, or extend a production-ready custom agent runtime, deterministic agentic loop, tool runner, retry policy, context compactor, or typed tick context.
+description: "Use only to design, implement, review, or extend a custom agent runtime, typed tick loop, tool runner, retry engine, compactor, transcript, memory, or resume implementation. Do not use for ordinary business workflows, Config routing rules, or application-level async mutations."
 ---
 
 # Agent Core Engine

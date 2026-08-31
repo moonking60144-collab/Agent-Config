@@ -8,7 +8,12 @@
 
 ## 快速開始
 
-Windows / macOS 都使用 PowerShell 部署；兩者都需要 Git 與 Node.js，macOS 另外需要 PowerShell 7。
+Codex 設定的 canonical deploy／validate 使用 Node.js，Windows、macOS、Linux 共用同一實作：
+
+    node scripts/deploy-codex.mjs
+    node scripts/validate-codex.mjs
+
+只要部署 Codex，不需要 PowerShell。`validate-codex.mjs` 需要 Python 3.11+ 的 `tomllib`；fresh／`--force-config` 部署另需要 `uv` 與 `npx`，並會安裝或升級 stable Serena。完整部署 Claude、Codex 與 VS Code 時仍可使用 PowerShell；`deploy.ps1` 的 Codex 段會呼叫同一個 Node deployer，避免兩套邏輯漂移。完整部署需要 Git 與 Node.js，macOS／Linux 另需 PowerShell 7。
 
 ```powershell
 git clone https://github.com/moonking60144-collab/config.git
@@ -50,8 +55,11 @@ config/
 ├── deploy.ps1                   # 主部署：repo -> 本機
 ├── backup.ps1                   # 反向同步：本機 -> repo
 ├── scripts/
-│   ├── deploy-claude.mjs        # Claude 唯一 deployer：merge、atomic write、備份與 hook 部署
-│   └── validate-config.ps1      # 檢查 repo template、active config、skill 同步與 Context7
+│   ├── deploy-claude.mjs        # Claude 唯一 deployer：merge、staged write、備份與 hook 部署
+│   ├── deploy-codex.mjs         # Codex 跨平台 deployer：backup、staging、失敗回復
+│   ├── validate-codex.mjs       # Codex 跨平台 repo／active 驗證
+│   ├── run-codex-evals.mjs      # 無依賴 Codex routing eval runner
+│   └── validate-config.ps1      # 完整設定與 Context7 驗證；Codex 可改用 Node validator
 ├── claude/                      # Claude Code
 │   ├── CLAUDE.md                #   可攜核心（行為準則 + 程式撰寫準則 + 語言/身份偏好）
 │   ├── profile.example.md       #   機器 profile 範本（硬體/OS/工具/常用指令）
@@ -61,10 +69,9 @@ config/
 ├── codex/
 │   ├── AGENTS.md                #   Codex user-level 全域規則
 │   ├── config.toml              #   Codex CLI 可攜偏好（已剔除機器特定的 node_repl 等）
-│   ├── policies/
-│   │   └── risk-matrix.md       #   高風險操作的一頁式判斷規則
 │   ├── evals/
-│   │   └── read-only-boundary.cases.jsonl # read-only / destructive smoke cases
+│   │   ├── workflow-routing.cases.jsonl # versioned routing / boundary / historical cases
+│   │   └── workflow-routing.output.schema.json # schema-constrained eval result
 │   ├── compact-prompts/         #   context compaction prompt 實驗檔
 │   ├── profiles/                #   Codex profile 檔，部署到 ~/.codex/*.config.toml
 │   └── skills/
@@ -98,7 +105,7 @@ config/
 
 ### Codex（`codex/`）
 
-`AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 全域規範與 canonical skill routing；原本 base 的無限制模式與核心指令也集中保留在這個唯一維護面。可攜行為規則進版控，機器特定 runtime 路徑、帳號狀態與自動生成內容不放入此檔。
+`AGENTS.md` 部署到 `~/.codex/AGENTS.md`，作為 Codex user-level 核心契約與 native skill precedence；skill description 是候選 routing canonical。無效的 unrestricted override 與重複 dispatch table 已退役。可攜行為規則進版控，機器特定 runtime 路徑、帳號狀態與自動生成內容不放入此檔。
 
 `skills/` 部署到 `~/.codex/skills/`。目前 repo 管理七個 Codex skills：
 
@@ -112,45 +119,29 @@ config/
 | `agent-core-engine` | 設計、實作、審查或擴充 custom agent runtime、tool loop、compactor、retry engine | 將 agent core 做成 deterministic lifecycle，並提供可複製的 TypeScript skeleton |
 | `frontend-ui-designer` | 新 UI、視覺改版、prototype、URL/image-to-code、landing page、dashboard、產品畫面 polish | 先鎖定 design brief 與 visual target，沿用既有 design system，補齊互動狀態、asset fidelity、responsive 與 evidence-based design QA |
 
-`deploy.ps1` 只同步 repo 內存在的 skill 目錄，並會把既有 `~/.codex/skills/*.bak.*` 備份移出 skill registry；`backup.ps1` 也只回寫 repo 已管理的 skill，避免把系統、外掛 cache 或備份目錄掃進版控。
+`scripts/deploy-codex.mjs` 只同步 repo 內存在的 skill 目錄，會先 stage 完整目錄、備份既有 active skill，再 replacement；失敗時從新備份回復；`references/` 會隨 skill 遞迴同步。既有 `~/.codex/skills/*.bak.*` 會移出 registry。`deploy.ps1` 的 Codex 段呼叫同一 Node deployer；`backup.ps1` 仍只回寫 repo 已管理的 skill。
 
 #### Codex workflow 架構
 
 目前架構刻意凍結在四層：routing、execution、verification、risk rules。除非真實重複失敗至少 2 次，且會造成檔案、git、設定、外部服務或長任務狀態損害，否則不新增 trace schema、typed ledger schema、MCP/plugin governance matrix、workflow DAG 或完整 agent framework。
 
-```mermaid
+~~~mermaid
 flowchart TD
-  A["User request"] --> B["AGENTS.md §3.6 routing"]
-  B --> C{"Task type"}
-  C --> D["review"]
-  C --> E["repo-onboarding-audit"]
-  C --> F["agent-failure-debugging"]
-  C --> G["agent-core-lite"]
-  C --> H["agent-core-project"]
-  C --> I["agent-core-engine"]
-  C --> J["frontend-ui-designer"]
+  A["User request"] --> B["Native skill descriptions"]
+  B --> C["AGENTS thin precedence"]
+  C --> D{"Process"}
+  D --> E["review / onboarding / failure-debugging"]
+  D --> F["agent-core-lite / agent-core-project"]
+  D --> G["agent-core-engine"]
+  C --> H{"Domain when needed"}
+  H --> I["frontend-ui-designer / other domain skills"]
+  F --> J["Conditional preflight references"]
+  E --> K["Evidence / findings"]
+  J --> K
+  K --> L["Versioned routing-classifier cases"]
+~~~
 
-  D --> K["Read-only findings"]
-  E --> L["Project map / validation surface"]
-  F --> M["Evidence / hypothesis / stop blind retry"]
-  G --> N["Observe / Scope / Plan / Act / Verify / Report"]
-  H --> O["Intake Gate / Plan / Ledger / Resume / Verify"]
-  I --> P["Runtime / tool contract / compaction design"]
-  J --> Q["Design brief / implementation / QA"]
-
-  K --> R["Risk Matrix"]
-  L --> R
-  M --> R
-  N --> R
-  O --> R
-  P --> R
-  Q --> R
-  R --> S["Human / agent contract"]
-  U["validate-config.ps1"] --> V["config / active sync verification"]
-  V --> W["deploy / backup / git sync"]
-```
-
-風險規則維護在 `codex/policies/risk-matrix.md`，只保留 `read_only`、`local_reversible_write`、`local_destructive`、`git_shared_or_irreversible`、`external_side_effect`、`secret_bearing` 六類。Read-only 邊界與 destructive 操作的 smoke cases 維護在 `codex/evals/read-only-boundary.cases.jsonl`；`validate-config.ps1` 只驗證 JSONL 語法，case 行為仍是人工 / 未來腳本化的 contract。
+Read-only、destructive、升降級與 historical classifier cases 維護在 codex/evals/workflow-routing.cases.jsonl。run-codex-evals.mjs 驗證 schema-constrained routing classification、repeat 與 threshold；它不宣稱 native skill body 或 conditional reference 已被 runtime 載入。
 
 `config.toml` 只保留可攜偏好（短版 additive `developer_instructions`、reasoning/personality、sandbox/approval 策略、features、agents 等）。不設定 `model_instructions_file`，讓 GPT-5.6 與後續模型保留各自的內建 instructions，再額外載入 `AGENTS.md`。不固定 `model` 與 `review_model`：新 task 使用 Codex 當下的 recommended model，`/review` 跟隨目前 task 的模型。也不啟用或保存 `model_catalog_json` snapshot，模型清單與能力由官方 / server 端 catalog 管理。已**剔除**機器特定 / 自動生成的內容：
 
@@ -159,9 +150,9 @@ flowchart TD
 
 `config.toml` 部署目標是 `~/.codex/config.toml`，**預設不覆蓋既有檔**（避免蓋掉現機的 node_repl）；要覆蓋用 `pwsh -File deploy.ps1 -ForceCodex`。`AGENTS.md` 與 repo 管理的 `skills/` 不含機器特定 runtime 路徑，部署時會先備份再覆蓋；skill 備份不放在 `~/.codex/skills/` 底下，避免重複出現在 Codex skill picker。
 
-`config.toml` 裡的 `__NPX_COMMAND__`、`__SERENA_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`deploy.ps1` 會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。部署 Codex config 時也會透過 `uv tool install` / `uv tool upgrade` 統一使用最新 stable `serena-agent`，再把該機器的 Serena binary 路徑寫入 active config；不追蹤 GitHub `main`。部署腳本會讀取該 stable 版本自帶的 `project.template.yml`，再以 `scripts/repair-serena-project-configs.mjs` 將已註冊專案統一成相容的 `languages` 或 `language_servers` schema，避免不同版本輪流重寫後導致 `KeyError`。
+`config.toml` 裡的 `__NPX_COMMAND__`、`__SERENA_COMMAND__`、`__SYSTEM_ROOT__`、`__CODEX_TERMINAL_SHELL__` 是跨平台 template token，不是實際部署值。`scripts/deploy-codex.mjs` 負責展開，`deploy.ps1` 只轉交參數給同一 Node deployer。它會在 Windows 展開為 `npx.cmd`、`SystemRoot`、`powershell`，在 macOS 展開為 `npx`、移除 Windows-only `SystemRoot` / WSL 開關、terminal shell 用 `zsh`。部署 Codex config 時也會透過 `uv tool install` / `uv tool upgrade` 統一使用最新 stable `serena-agent`，再把該機器的 Serena binary 路徑寫入 active config；不追蹤 GitHub `main`。部署腳本會讀取該 stable 版本自帶的 `project.template.yml`，再以 `scripts/repair-serena-project-configs.mjs` 將已註冊專案統一成相容的 `languages` 或 `language_servers` schema，避免不同版本輪流重寫後導致 `KeyError`。
 
-目前 repo 版 Codex 不固定模型版本，避免每次模型更新都要修改 repo；Codex Desktop 寫入 active `~/.codex/config.toml` 的目前模型與 `model_reasoning_effort` 視為 runtime 狀態，不會由 `backup.ps1` 回寫 repo。`model_reasoning_summary`、`model_verbosity`、`personality` 仍屬可攜偏好。可攜 token 行為維持 `model_context_window = 1000000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。日常 reasoning 預設為 `high`，`Max` / `Ultra` 由 task 需要時再從模型選擇器調整。
+目前 repo 版 Codex 不固定模型版本，避免每次模型更新都要修改 repo；Codex Desktop 寫入 active `~/.codex/config.toml` 的目前模型與 `model_reasoning_effort` 視為 runtime 狀態，不會由 `backup.ps1` 回寫 repo。`model_reasoning_summary`、`model_verbosity`、`personality` 仍屬可攜偏好。可攜 token 行為維持 `model_context_window = 372000`、`model_auto_compact_token_limit` 不固定、`tool_output_token_limit = 8000`。日常 reasoning 預設為 `xhigh`，`Max` / `Ultra` 由 task 需要時再從模型選擇器調整。
 
 `profiles/compact-preserve.config.toml` 是 experimental compact prompt profile。需要測 context 壓縮摘要品質時，用 `codex --profile compact-preserve`；不要先放進全域 `config.toml`。
 
@@ -173,7 +164,25 @@ flowchart TD
 
 ### 驗證
 
-部署或同步前後可執行：
+Codex-only 跨平台驗證：
+
+    node scripts/validate-codex.mjs
+
+Routing-classifier contract／case 清單：
+
+    node scripts/run-codex-evals.mjs --validate
+    node scripts/run-codex-evals.mjs --list
+
+有模型用量的 classifier smoke／完整 regression：
+
+    node scripts/run-codex-evals.mjs --run
+    node scripts/run-codex-evals.mjs --run --all
+
+新機器尚未 deploy active Codex 時：
+
+    node scripts/validate-codex.mjs --skip-active
+
+完整設定與 Context7 驗證仍可執行：
 
 ```powershell
 pwsh -File scripts/validate-config.ps1
@@ -185,7 +194,7 @@ pwsh -File scripts/validate-config.ps1
 pwsh -File scripts/validate-config.ps1 -SkipActive
 ```
 
-驗證器也會檢查 repo-managed Codex skills 的 frontmatter／目錄結構，以及 `codex/evals/read-only-boundary.cases.jsonl` 的 JSONL 語法。JSONL 檢查只驗證 contract 檔可讀，不會啟動模型或建立額外 eval runtime。
+Node validator會檢查 repo-managed skills、TOML、hooks、routing-classifier cases 與 output schema；PowerShell validator轉交同一 Node canonical validation，避免維護第二份 Codex contract。只有明確執行 --run 才會呼叫模型並產生用量。
 
 ---
 
@@ -199,13 +208,21 @@ git commit -m "更新設定"
 git push
 ```
 
-`backup.ps1` 會把本機的 `CLAUDE.md` / settings / canonical `check-traditional.mjs` hook / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook path、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 token / reasoning summary / verbosity / personality key；目前模型與 `model_reasoning_effort` 不回寫，避免單一 task 的選擇污染 repo 預設，也不會帶入 `notify`、`projects.*`、本機絕對路徑等機器特定內容。`profile.md` 含機器特定內容，不自動回寫。
+目前 active → repo 的完整反向同步仍由 `backup.ps1` 負責；沒有 PowerShell 的 Mac 應把 repo 當 source of truth，直接修改 repo 後執行 Node deploy，不要以手動複製 active 檔案冒充 backup pipeline。
+
+`backup.ps1` 會把本機的 `CLAUDE.md` / settings / canonical `check-traditional.mjs` hook / Codex `AGENTS.md` / repo 管理的 Codex skills / compact prompts / profiles / VS Code 設定回寫到 repo，並自動把 hook path、GCP 專案 ID 還原成佔位符。Codex `config.toml` 只回寫可攜 tool output / reasoning summary / verbosity / personality key；目前模型與 `model_reasoning_effort` 不回寫，避免單一 task 的選擇污染 repo 預設，也不會帶入 `notify`、`projects.*`、本機絕對路徑等機器特定內容。`profile.md` 含機器特定內容，不自動回寫。
 
 VS Code extensions 清單預設不回寫，避免某臺機器的臨時擴充污染 repo。確定要更新 `vscode/extensions.txt` 時才執行：
 
 ```powershell
 pwsh -File backup.ps1 -IncludeExtensions
 ```
+
+---
+
+## Checkout ownership
+
+同一 remote 若存在多個 clone、worktree 或 submodule checkout，只指定一個長期 canonical checkout。Session／temporary clone 可用於進行中的 patch，但不得和 canonical checkout 同時累積未提交變更。Commit 前先比對 remote、branch、HEAD、upstream 與 dirty state；push 後只用 fast-forward 對齊其他 checkout。若 canonical checkout 是 parent repo 的 submodule，submodule pointer 是否更新是另一個明確決策，不與 Config commit 混為一談。
 
 ---
 

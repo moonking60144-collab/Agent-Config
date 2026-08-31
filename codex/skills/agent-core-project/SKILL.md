@@ -1,6 +1,6 @@
 ---
 name: agent-core-project
-description: "Use only for 3+ independently verifiable subsystems, work that must survive compaction or handoff, irreversible schema/data/deploy operations, or audit-first discovery with an unknown worklist."
+description: "Use only for 3+ independently verifiable subsystems, work that must survive compaction or handoff, irreversible schema/data/deploy operations, or audit-first discovery with an unknown worklist. Do not use for ordinary cross-file work, fixed-scope implementation, pure review, or tasks that agent-core-lite can finish in one context."
 ---
 
 # Agent Core Project
@@ -28,7 +28,9 @@ Before creating a new plan or ledger, search for an existing unfinished ledger f
 ~/.codex/projects/<repo-slug>/ledgers/
 ```
 
-If a matching `active` or `blocked` ledger exists for the current objective, read that ledger first and continue from its `next_instruction` instead of creating a duplicate project. If multiple ledgers plausibly match, summarize the candidates and ask the user which one to resume before writing new project artifacts.
+If a matching `active` or `blocked` ledger exists for the current objective, read that ledger first and continue from its `next_instruction` instead of creating a duplicate project.
+
+When project rules or an earlier handoff name a repo-local ledger convention, also check that exact controlled path, such as docs/codex/ledgers/. Do not broadly scan the repo; use the known ledger_path or standard project location. If multiple ledgers plausibly match, summarize the candidates and ask the user which one to resume before writing new project artifacts.
 
 ## Routing Priority
 
@@ -78,7 +80,8 @@ If the current cwd is already a Codex scratch workspace and the artifact is a us
 
 Identify affected subsystems, source-of-truth surfaces, data/control flow edges, dependency order, consumes/produces relationships, blast radius, and ordered sub-tasks. Each sub-task must be independently verifiable and name dependencies when order matters.
 
-For each sub-task, identify whether the Architecture Preflight Gate or Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 applies.
+For each sub-task, identify whether architecture, async-mutation, or interaction-performance risk applies; read the matching agent-core-lite reference and no unrelated checklist.
+When Async Mutation Convergence applies, read ../agent-core-lite/references/async-mutation-convergence.md and persist the selected architecture, repo-level ratchets, and evidence class in the plan and ledger. Only when the sub-task itself changes a workflow rule or evaluates an incident-derived gate, also persist incident support, positive and negative probes, historical-backtest status, confidence limit, and retirement condition.
 
 ### 2. Plan to File
 
@@ -88,7 +91,7 @@ Write a durable plan before implementation. Each task entry must include:
 - Files/modules expected to change.
 - Affected contracts and production consumers; mark each consumer `must-align` or `intentional-divergence` when shared behavior is involved.
 - Mirror the active task's contract, producer, consumer matrix, divergence reasons, and verification evidence into the ledger; do not leave this inventory only in the plan.
-- Applicable `AGENTS.md` section 3.1 preflight, including its resolved model, representative baseline/budget, evidence, and blocking decisions; mirror these into the ledger so they survive compaction, resume, and handoff.
+- Applicable conditional preflight reference, including its resolved model, evidence, blocking decisions, and any representative baseline/budget required by that specific gate; mirror these into the ledger so they survive compaction, resume, and handoff.
 - Preconditions and dependencies.
 - Implementation steps.
 - Verification commands or artifacts.
@@ -140,11 +143,11 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 
 Execute one task at a time. Update the ledger after every task state change. Use fresh subagents when independent read-only exploration, adversarial verification, or clearly isolated work will improve coverage or reduce main-context pressure. No per-use permission is required for those bounded reads. The main agent owns writes, git actions, external side effects, and final verification unless the user explicitly delegates otherwise.
 
-Before entering Act for a task whose section 3.1 preflight applies, confirm the required model, evidence, baseline/budget, and blocking decisions are recorded in the plan or ledger. If the preflight is incomplete or current evidence invalidates it, return to Map & Decompose and update the durable artifacts instead of implementing against stale assumptions.
+Before entering Act for a task whose conditional preflight applies, confirm the required model, evidence, blocking decisions, and any gate-specific baseline/budget are recorded in the plan or ledger. If the preflight is incomplete or current evidence invalidates it, return to Map & Decompose and update the durable artifacts instead of implementing against stale assumptions.
 
 Subagent findings are leads, not verification evidence. Before marking any task `done_verified`, the main agent must directly verify referenced files, commands, logs, diffs, runtime state, or artifacts and record that direct evidence in the ledger.
 
-Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply `AGENTS.md` §3.5 confirmation requirements; do not rely on post-run verification to invent the rollback path.
+Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply the global destructive-operation confirmation boundary; do not rely on post-run verification to invent the rollback path.
 
 If execution shows the plan is wrong, dependencies changed, or discovery expanded the worklist, pause execution, return to Map & Decompose, then update the plan and ledger before continuing.
 
@@ -152,7 +155,7 @@ If a task becomes blocked, mark it `blocked` with evidence and dependency impact
 
 ### 5. Verify Before Complete
 
-Apply `agent-core-lite`'s verification gate by reference, including its conditional section 3.1 preflight verification. Additionally produce a requirement evidence table:
+Apply `agent-core-lite`'s verification gate by reference, including its conditional reference verification. Additionally produce a requirement evidence table:
 
 ```text
 Requirement | Evidence | Status

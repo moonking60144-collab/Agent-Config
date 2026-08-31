@@ -1,6 +1,6 @@
 ---
 name: agent-failure-debugging
-description: "Use after the same agent, tool, runtime, or config failure appears twice, a retry loop forms, or claimed state conflicts with observed evidence."
+description: "Use after the same agent, tool, runtime, hypothesis, or config failure appears twice, a retry loop forms, or claimed state conflicts with observed evidence. Do not use for the first ordinary error when one direct reversible check can resolve it."
 ---
 
 # Agent Failure Debugging

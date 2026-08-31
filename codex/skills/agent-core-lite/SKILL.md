@@ -1,13 +1,13 @@
 ---
 name: agent-core-lite
-description: "Use when AGENTS.md section 3.6 routes cross-file or 3+ step work, config/runtime drift, sync/deploy/commit/push, or external side effects. Skip simple questions and single-step edits."
+description: "Use for ordinary cross-file or 3+ step implementation, config/runtime drift, sync/deploy/commit/push, and work needing architecture, async-mutation, or interaction-performance preflight. Do not use for pure read-only review, a repeated failure that needs agent-failure-debugging, or project-grade work requiring a durable ledger."
 ---
 
 # Agent Core Lite
 
 ## Trigger Rule
 
-Invoke this skill only when the canonical routing in `AGENTS.md` section 3.6 matches. If the same failure or hypothesis has already appeared twice, route directly to `agent-failure-debugging` instead.
+Invoke this skill when its frontmatter description matches. If the same failure or hypothesis already appeared twice, route to agent-failure-debugging instead.
 
 Do not trigger this skill solely because a task involves implementation, refactoring, architecture, data flow, production, or verification. Simple questions and single-file/single-step edits stay on the direct path.
 
@@ -21,7 +21,7 @@ No edits before scope. No completion claim without direct evidence. No third bli
 
 ## Internal Routing
 
-This skill is not the canonical dispatch table. The canonical routing rules live in `AGENTS.md` section 3.6. After this skill is already invoked, check whether another process skill should take over:
+Native skill descriptions are the candidate-routing canonical. After invocation, apply the global Native skill routing precedence:
 
 - If this is pure code review or audit, switch to `review`.
 - If this is first contact with an unfamiliar repo or subsystem, switch to `repo-onboarding-audit`.
@@ -49,7 +49,7 @@ State what this turn will touch and what it will not touch. Before edits, name t
 
 For 3+ steps, cross-file changes, review sweeps, or commit/push work, use `update_plan`. Each step needs a verifiable completion condition. Keep exactly one step in progress unless a true multi-agent workflow is active.
 
-When the Architecture Preflight Gate or Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 triggers, complete the applicable bounded preflight before entering Act.
+When cross-boundary architecture, async mutation convergence, or high-frequency interaction risk applies, read the matching file under references/ before Act: architecture-preflight.md, async-mutation-convergence.md, or interaction-performance.md. Select only the applicable reference; do not fill unrelated checklists.
 
 ### Act
 
@@ -61,7 +61,7 @@ Use subagents when they are expected to improve coverage, reduce main-context pr
 
 Verify the real source of truth for the task, not the easiest proxy. Code changes normally need the relevant lint/build/test or a stated reason if not run. Config changes need the active consumer or a clear reload/restart boundary. Review findings need a reachable trigger chain. Do not mark work complete with missing files, failed tests, stale state, or indirect evidence.
 
-If either section 3.1 preflight triggered, verify the final change against its preflight model and collect evidence appropriate to the claim. Tests and builds do not substitute for architecture/concurrency evidence or representative interaction-performance runtime evidence.
+If any conditional preflight reference applied, verify the final change against its preflight model and collect evidence appropriate to the claim. Tests and builds do not substitute for architecture/concurrency, async-mutation convergence, or representative interaction-performance runtime evidence.
 
 ### Report
 
@@ -74,9 +74,10 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | Gate | Must be true before proceeding |
 | --- | --- |
 | Scope gate | Target files/settings/surfaces are named before edits |
-| Consumer coverage gate | When the production-consumer inventory rule in `AGENTS.md` section 3.1 triggers, the producer -> contract -> all production consumers inventory is complete and every consumer is marked `must-align` or `intentional-divergence` |
-| Architecture preflight gate | When the Architecture Preflight Gate in `AGENTS.md` section 3.1 triggers, canonical state, ownership, authority, version semantics, contract round-trips, async/cache behavior, and relevant UI lifecycle are resolved with evidence before Act |
-| Interaction performance gate | When the Interaction Performance Preflight Gate in `AGENTS.md` section 3.1 triggers, representative load, baseline, budget, update strategy, complexity, geometry contract, and browser runtime acceptance are defined before Act |
+| Consumer coverage gate | When shared contract or multi-surface consumer inventory applies, the producer -> contract -> all production consumers inventory is complete and every consumer is marked must-align or intentional-divergence |
+| Architecture preflight gate | When references/architecture-preflight.md applies, canonical state, ownership, authority, version semantics, round-trips, async/cache behavior, and relevant UI lifecycle are resolved with evidence before Act |
+| Async mutation convergence gate | When references/async-mutation-convergence.md applies, the chosen state model minimizes lifecycle surface, every non-terminal state converges, and durable repo enforcement plus production-equivalent evidence are identified; prompt analysis alone does not close the gate |
+| Interaction performance gate | When references/interaction-performance.md applies, representative load, baseline, budget, update strategy, complexity, geometry contract, and browser runtime acceptance are defined before Act |
 | Read-only gate | If the user asked read-only/review/analysis, no writes happen |
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |
@@ -96,7 +97,7 @@ Apply these gates when writing or reviewing code:
 - Treat SQL injection, XSS, command injection, auth bypass, data loss, migration drift, and source-of-truth conflicts as blocker risks.
 - For frontend work, verify actual rendered/user behavior when the task depends on layout, interaction, accessibility, or browser state.
 - When tests are added, moved, renamed, nested, generated, or selected by custom globs or patterns, verify the intended test is discovered or direct-run it once; an aggregate green exit is not enough.
-- Before changing an external black-box write payload, required field, idempotency rule, or create/update timing, apply the `AGENTS.md` section 3.1 baseline requirement and protect critical payload behavior with a focused contract test. If live writes are unavailable, use mock or staging evidence and report the live boundary.
+- Before changing an external black-box write payload, required field, idempotency rule, or create/update timing, establish a baseline and negative control and protect critical payload behavior with a focused contract test. If live writes are unavailable, use mock or staging evidence and report the live boundary.
 - For external APIs, product limits, versions, specs, legal/financial/medical facts, or latest behavior, use official or primary sources.
 
 ## Good / Bad Patterns
@@ -121,7 +122,7 @@ These thoughts mean stop and take the required action:
 
 | Thought | Required action |
 | --- | --- |
-| "This involves implementation, so Lite must apply." | Check `AGENTS.md` section 3.6; simple single-file/single-step work stays on the direct path |
+| "This involves implementation, so Lite must apply." | Apply the global Native skill routing boundary; simple single-file/single-step work stays on the direct path |
 | "The config value changed, so behavior must have changed." | Identify and verify the live consumer |
 | "The test/build passed, so the user-facing flow is fine." | Verify the actual user-facing path if behavior depends on UI/runtime |
 | "This is probably a cache issue." | Name the cache/state layer and the reload boundary |

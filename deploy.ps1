@@ -54,76 +54,6 @@ function Get-VSCodeUserDir {
   if($IsMacOSHost){ return (Join-Parts (Get-HomeDir) 'Library' 'Application Support' 'Code' 'User') }
   return (Join-Parts (Get-HomeDir) '.config' 'Code' 'User')
 }
-function Get-CommandPathOrFallback($names, $fallback){
-  foreach($name in $names){
-    $cmd = Get-Command $name -ErrorAction SilentlyContinue
-    if($cmd){ return $cmd.Source }
-  }
-  return $fallback
-}
-function Get-NpxCommand {
-  if($IsWindowsHost){
-    return Get-CommandPathOrFallback @('npx.cmd','npx') 'npx.cmd'
-  }
-  return Get-CommandPathOrFallback @('npx') 'npx'
-}
-function Get-SerenaCommand {
-  $uv = Get-Command uv -ErrorAction SilentlyContinue
-  if(-not $uv){ throw '找不到 uv，無法安裝 Serena。請先安裝 uv 後重試。' }
-
-  $installedTools = (& $uv.Source tool list 2>&1) -join "`n"
-  if($LASTEXITCODE -ne 0){ throw "無法讀取 uv tool 清單：$installedTools" }
-
-  if($installedTools -match '(?m)^serena-agent\s'){
-    & $uv.Source tool upgrade serena-agent
-  } else {
-    & $uv.Source tool install -p 3.13 serena-agent
-  }
-  if($LASTEXITCODE -ne 0){ throw 'Serena stable 安裝或升級失敗。' }
-
-  $binDir = ((& $uv.Source tool dir --bin 2>&1) -join "`n").Trim()
-  if($LASTEXITCODE -ne 0 -or -not $binDir){ throw '無法取得 uv tool binary 目錄。' }
-
-  $binaryName = if($IsWindowsHost){ 'serena.exe' } else { 'serena' }
-  $serenaPath = Join-Path $binDir $binaryName
-  if(-not(Test-Path $serenaPath)){ throw "找不到 Serena binary：$serenaPath" }
-
-  $toolDir = ((& $uv.Source tool dir 2>&1) -join "`n").Trim()
-  if($LASTEXITCODE -ne 0 -or -not $toolDir){ throw '無法取得 uv tool 安裝目錄。' }
-  $projectTemplate = Get-ChildItem (Join-Path $toolDir 'serena-agent') -Filter 'project.template.yml' -Recurse -File |
-    Select-Object -First 1
-  if(-not $projectTemplate){ throw '找不到 Serena project.template.yml，無法確認專案設定 schema。' }
-
-  $serenaRegistry = Join-Parts (Get-HomeDir) '.serena' 'serena_config.yml'
-  if(Test-Path $serenaRegistry){
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if(-not $node){ throw '找不到 node，無法修正 Serena 專案設定 schema。' }
-    $repairScript = Join-Parts $src 'scripts' 'repair-serena-project-configs.mjs'
-    & $node.Source $repairScript '--template' $projectTemplate.FullName '--registry' $serenaRegistry
-    if($LASTEXITCODE -ne 0){ throw 'Serena 專案設定 schema 修正失敗。' }
-  }
-
-  return $serenaPath
-}
-function Get-CodexTerminalShell {
-  if($IsWindowsHost){ return 'powershell' }
-  if($IsMacOSHost){ return 'zsh' }
-  return 'bash'
-}
-function Resolve-CodexConfigTemplate($templatePath){
-  $text = Get-Content $templatePath -Raw
-  $text = $text.Replace('__SERENA_COMMAND__', ((Get-SerenaCommand) -replace '\\','/'))
-  $text = $text.Replace('__NPX_COMMAND__', (Get-NpxCommand))
-  $text = $text.Replace('__CODEX_TERMINAL_SHELL__', (Get-CodexTerminalShell))
-  if($IsWindowsHost){
-    $systemRoot = if($env:SystemRoot){ $env:SystemRoot } else { 'C:\Windows' }
-    $text = $text.Replace('__SYSTEM_ROOT__', $systemRoot)
-  } else {
-    $text = [regex]::Replace($text, "(?m)^SystemRoot\s*=\s*'__SYSTEM_ROOT__'\r?\n?", '')
-    $text = [regex]::Replace($text, "(?m)^runCodexInWindowsSubsystemForLinux\s*=\s*false\r?\n?", '')
-  }
-  return $text
-}
 function Backup-IfExists($p, $backupRoot = $null){
   if(Test-Path $p){
     $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
@@ -174,20 +104,6 @@ function Prune-Backups($p, $backupRoot = $null){
     }
     Remove-Item -LiteralPath $backup.FullName -Recurse -Force
     Skip "已清理舊備份 $backupFull"
-  }
-}
-
-function Move-CodexSkillBackupsOutOfRegistry($skillsDir, $backupRoot){
-  if(-not(Test-Path $skillsDir)){ return }
-  Ensure-Dir $backupRoot
-  Get-ChildItem $skillsDir -Directory | Where-Object { $_.Name -match '\.bak\.\d{8}_\d{6}$' } | ForEach-Object {
-    $dest = Join-Path $backupRoot $_.Name
-    if(Test-Path $dest){
-      $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
-      $dest = Join-Path $backupRoot "$($_.Name).moved.$ts"
-    }
-    Move-Item -LiteralPath $_.FullName -Destination $dest
-    Ok "已移出舊 skill 備份 $($_.Name) -> $dest"
   }
 }
 
@@ -323,102 +239,23 @@ if(-not(Test-Path -LiteralPath $claudeDeployScript -PathType Leaf)){ throw "找�
 if($LASTEXITCODE -ne 0){ throw 'Claude Code 設定部署失敗。' }
 Ok 'Claude Code settings / instructions / Stop hook 已由唯一 Node deployer 部署'
 
+$claudeDir = Join-Path $U '.claude'
+Ensure-Dir $claudeDir
 $profileMd = Build-Profile
 [System.IO.File]::WriteAllText((Join-Path $claudeDir 'profile.md'), $profileMd, $enc)
 Ok 'profile.md -> ~/.claude/profile.md（已探測本機硬體）'
 Write-Host ''
 
 # ---------------------------------------------------------------------------
-Info '[2/4] Codex'
-$codexDir = Join-Path $U '.codex'
-Ensure-Dir $codexDir
-
-$codexAgents = Join-Path $codexDir 'AGENTS.md'
-Backup-IfExists $codexAgents
-Copy-Item (Join-Parts $src 'codex' 'AGENTS.md') $codexAgents -Force
-Ok 'AGENTS.md -> ~/.codex/AGENTS.md'
-
-$codexCompactPromptsSrc = Join-Parts $src 'codex' 'compact-prompts'
-if(Test-Path $codexCompactPromptsSrc){
-  $codexCompactPromptsDir = Join-Path $codexDir 'compact-prompts'
-  Ensure-Dir $codexCompactPromptsDir
-  Copy-Item (Join-Path $codexCompactPromptsSrc '*') $codexCompactPromptsDir -Recurse -Force
-  Ok 'compact-prompts/* -> ~/.codex/compact-prompts/'
-}
-
-$codexProfilesSrc = Join-Parts $src 'codex' 'profiles'
-if(Test-Path $codexProfilesSrc){
-  Get-ChildItem $codexProfilesSrc -Filter '*.config.toml' -File | ForEach-Object {
-    Copy-Item $_.FullName (Join-Path $codexDir $_.Name) -Force
-    Ok "profiles/$($_.Name) -> ~/.codex/$($_.Name)"
-  }
-}
-
-$codexSkillsSrc = Join-Parts $src 'codex' 'skills'
-if(Test-Path $codexSkillsSrc){
-  $codexSkillsDir = Join-Path $codexDir 'skills'
-  $codexSkillBackupDir = Join-Parts $codexDir 'backups' 'skills'
-  Ensure-Dir $codexSkillsDir
-  Move-CodexSkillBackupsOutOfRegistry $codexSkillsDir $codexSkillBackupDir
-  Get-ChildItem $codexSkillsSrc -Directory | ForEach-Object {
-    $target = Join-Path $codexSkillsDir $_.Name
-    $staged = Join-Path $codexSkillBackupDir "$($_.Name).deploying.$([guid]::NewGuid().ToString('N'))"
-    try {
-      Copy-Item $_.FullName $staged -Recurse -Force
-      Backup-IfExists $target $codexSkillBackupDir
-      if(Test-Path $target){ Remove-Item -LiteralPath $target -Recurse -Force }
-      Move-Item -LiteralPath $staged -Destination $target
-    } finally {
-      if(Test-Path $staged){ Remove-Item -LiteralPath $staged -Recurse -Force }
-    }
-    Ok "skills/$($_.Name) -> ~/.codex/skills/$($_.Name)"
-  }
-}
-
-$codexCustomAgentsSrc = Join-Parts $src 'codex' 'agents'
-if(Test-Path $codexCustomAgentsSrc){
-  $codexCustomAgentsDir = Join-Path $codexDir 'agents'
-  Ensure-Dir $codexCustomAgentsDir
-  Get-ChildItem $codexCustomAgentsSrc -Filter '*.toml' -File | ForEach-Object {
-    $target = Join-Path $codexCustomAgentsDir $_.Name
-    Backup-IfExists $target
-    Copy-Item $_.FullName $target -Force
-    Ok "agents/$($_.Name) -> ~/.codex/agents/$($_.Name)"
-  }
-}
-
-$codexHooksScriptsSrc = Join-Parts $src 'codex' 'hooks'
-if(Test-Path $codexHooksScriptsSrc){
-  $codexHooksScriptsDir = Join-Path $codexDir 'hooks'
-  Ensure-Dir $codexHooksScriptsDir
-  Get-ChildItem $codexHooksScriptsSrc -File | ForEach-Object {
-    $target = Join-Path $codexHooksScriptsDir $_.Name
-    Backup-IfExists $target
-    Copy-Item $_.FullName $target -Force
-    Ok "hooks/$($_.Name) -> ~/.codex/hooks/$($_.Name)"
-  }
-}
-
-$codexHooksTemplate = Join-Parts $src 'codex' 'hooks.json'
-if(Test-Path $codexHooksTemplate){
-  $codexHooksTarget = Join-Path $codexDir 'hooks.json'
-  $codexHomeForHooks = $codexDir -replace '\\','/'
-  $codexHooksText = (Get-Content $codexHooksTemplate -Raw).Replace('__CODEX_HOME__', $codexHomeForHooks)
-  Backup-IfExists $codexHooksTarget
-  [System.IO.File]::WriteAllText($codexHooksTarget, $codexHooksText, $enc)
-  Ok 'hooks.json -> ~/.codex/hooks.json（已套用本機 Codex home）'
-}
-
-$codexCfg = Join-Path $codexDir 'config.toml'
-if((Test-Path $codexCfg) -and -not $ForceCodex){
-  Skip 'config.toml 已存在，保留現有（含機器特定 node_repl）。要覆蓋請加 -ForceCodex'
-} else {
-  Backup-IfExists $codexCfg
-  $codexConfigText = Resolve-CodexConfigTemplate (Join-Parts $src 'codex' 'config.toml')
-  [System.IO.File]::WriteAllText($codexCfg, $codexConfigText, $enc)
-  Ok 'config.toml -> ~/.codex/config.toml（已套用本機 MCP command）'
-}
-Write-Host ''
+Info "[2/4] Codex"
+$codexDeployScript = Join-Parts $src "scripts" "deploy-codex.mjs"
+if(-not(Test-Path -LiteralPath $codexDeployScript -PathType Leaf)){ throw "找不到 Codex deployer：$codexDeployScript" }
+$codexDeployArgs = @("--home", $U, "--backup-retention", ([string]$BackupRetention))
+if($ForceCodex){ $codexDeployArgs += "--force-config" }
+& $nodeCommand.Source $codexDeployScript @codexDeployArgs
+if($LASTEXITCODE -ne 0){ throw "Codex 設定部署失敗。" }
+Ok "Codex AGENTS / skills / hooks / profiles / config 已由唯一 Node deployer 部署"
+Write-Host ""
 
 # ---------------------------------------------------------------------------
 Info '[3/4] VS Code 設定'

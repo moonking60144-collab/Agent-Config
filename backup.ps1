@@ -79,7 +79,6 @@ function Sync-CodexPortableConfig {
   }
 
   $portableKeys = @(
-    'model_context_window',
     'tool_output_token_limit',
     'model_reasoning_summary',
     'model_verbosity',
@@ -105,7 +104,7 @@ function Sync-CodexPortableConfig {
   }
 
   [System.IO.File]::WriteAllText($RepoPath, (($repoLines -join "`n") + "`n"), $enc)
-  Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜 summary / verbosity / personality / token key）'
+  Ok 'config.toml <- ~/.codex/config.toml（只回寫可攜 summary / verbosity / personality / tool output key）'
 }
 
 # Claude CLAUDE.md（可攜核心）
@@ -142,11 +141,30 @@ if(Test-Path $ca){
 $repoSkills = Join-Parts $src 'codex' 'skills'
 $localSkills = Join-Parts $U '.codex' 'skills'
 if((Test-Path $repoSkills) -and (Test-Path $localSkills)){
-  Get-ChildItem $repoSkills -Directory | ForEach-Object {
+  @(Get-ChildItem $repoSkills -Directory) | ForEach-Object {
+    $repoSkill = $_.FullName
     $localSkill = Join-Path $localSkills $_.Name
     if(Test-Path $localSkill){
-      Copy-Item (Join-Path $localSkill '*') $_.FullName -Recurse -Force
-      Ok "skills/$($_.Name) <- ~/.codex/skills/$($_.Name)"
+      $parent = Split-Path $repoSkill -Parent
+      $staged = Join-Path $parent ".$($_.Name).backup-staged.$([guid]::NewGuid().ToString('N'))"
+      $previous = Join-Path $parent ".$($_.Name).backup-previous.$([guid]::NewGuid().ToString('N'))"
+      try {
+        Copy-Item $localSkill $staged -Recurse -Force
+        Move-Item -LiteralPath $repoSkill -Destination $previous
+        try {
+          Move-Item -LiteralPath $staged -Destination $repoSkill
+        } catch {
+          Move-Item -LiteralPath $previous -Destination $repoSkill
+          throw
+        }
+        Remove-Item -LiteralPath $previous -Recurse -Force
+        Ok "skills/$($_.Name) <- ~/.codex/skills/$($_.Name)（exact mirror）"
+      } finally {
+        if(Test-Path $staged){ Remove-Item -LiteralPath $staged -Recurse -Force }
+        if((Test-Path $previous) -and -not(Test-Path $repoSkill)){
+          Move-Item -LiteralPath $previous -Destination $repoSkill
+        }
+      }
     } else {
       Skip "$localSkill 不存在"
     }
@@ -230,5 +248,5 @@ if($IncludeExtensions){
 }
 
 Write-Host ''
-Write-Host 'Codex config.toml 只回寫可攜 summary / verbosity / personality / token key；目前模型、reasoning effort 與 ~/.claude/profile.md 未自動回寫。' -ForegroundColor Yellow
+Write-Host 'Codex config.toml 只回寫可攜 summary / verbosity / personality / tool output key；目前模型、reasoning effort 與 ~/.claude/profile.md 未自動回寫。' -ForegroundColor Yellow
 Write-Host "完成。請執行  git -C `"$src`" diff  檢視後再 commit。" -ForegroundColor Cyan

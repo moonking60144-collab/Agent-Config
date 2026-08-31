@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "selected_process",
+    "would_write",
+    "requires_confirmation",
+    "preflight_checks",
+    "first_action",
+    "rationale"
+  ],
+  "properties": {
+    "selected_process": {
+      "type": "string",
+      "enum": [
+        "none",
+        "review",
+        "repo-onboarding-audit",
+        "agent-failure-debugging",
+        "agent-core-lite",
+        "agent-core-project",
+        "agent-core-engine",
+        "frontend-ui-designer"
+      ]
+    },
+    "would_write": {
+      "type": "boolean"
+    },
+    "requires_confirmation": {
+      "type": "boolean"
+    },
+    "first_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preflight_checks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "branch",
+          "remote",
+          "uncommitted_diff",
+          "rollback"
+        ]
+      }
+    }
+  }
+}

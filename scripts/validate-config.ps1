@@ -471,7 +471,10 @@ function Test-FileSync($repoFile, $activeFile, $label){
 $repoCodexConfig = Join-Parts $RepoRoot 'codex' 'config.toml'
 $repoCodexAgents = Join-Parts $RepoRoot 'codex' 'AGENTS.md'
 $repoCodexSkills = Join-Parts $RepoRoot 'codex' 'skills'
-$repoReadOnlyCases = Join-Parts $RepoRoot 'codex' 'evals' 'read-only-boundary.cases.jsonl'
+$repoWorkflowCases = Join-Parts $RepoRoot 'codex' 'evals' 'workflow-routing.cases.jsonl'
+$repoCodexDeployer = Join-Parts $RepoRoot 'scripts' 'deploy-codex.mjs'
+$repoCodexValidator = Join-Parts $RepoRoot 'scripts' 'validate-codex.mjs'
+$repoCodexEvalRunner = Join-Parts $RepoRoot 'scripts' 'run-codex-evals.mjs'
 $repoClaudeSettings = Join-Parts $RepoRoot 'claude' 'settings.json'
 $repoClaudeHook = Join-Parts $RepoRoot 'claude' 'hooks' 'check-traditional.mjs'
 $repoClaudeDeployer = Join-Parts $RepoRoot 'scripts' 'deploy-claude.mjs'
@@ -488,18 +491,28 @@ foreach($file in $repoPowerShellFiles){
 }
 Test-NodeParse $repoClaudeHook 'claude/hooks/check-traditional.mjs'
 Test-NodeParse $repoClaudeDeployer 'scripts/deploy-claude.mjs'
+Test-NodeParse $repoCodexDeployer 'scripts/deploy-codex.mjs'
+Test-NodeParse $repoCodexValidator 'scripts/validate-codex.mjs'
+Test-NodeParse $repoCodexEvalRunner 'scripts/run-codex-evals.mjs'
 Test-JsonParse $repoClaudeSettings 'claude/settings.json'
-Test-JsonLinesParse $repoReadOnlyCases 'codex/evals/read-only-boundary.cases.jsonl'
+Test-JsonLinesParse $repoWorkflowCases 'codex/evals/workflow-routing.cases.jsonl'
 Test-TomlParse $repoCodexConfig 'codex/config.toml'
 Test-CodexConfigSchema $repoCodexConfig 'codex/config.toml'
 Test-CodexFeatureLifecycle $repoCodexConfig 'codex/config.toml'
 Test-CodexSkills $repoCodexSkills 'codex/skills'
+$nodeForCodexValidation = Get-Command node -ErrorAction SilentlyContinue
+if($nodeForCodexValidation){
+  $codexValidationArgs = @($repoCodexValidator)
+  if($SkipActive){ $codexValidationArgs += '--skip-active' }
+  $codexValidationOutput = & $nodeForCodexValidation.Source @codexValidationArgs 2>&1
+  if($LASTEXITCODE -eq 0){ Ok 'Node Codex canonical validation OK' } else { Fail "Node Codex canonical validation 失敗：$($codexValidationOutput -join ' ')" }
+} else { Fail '找不到 node，無法執行 canonical Codex validation' }
 Write-Host ''
 
 Info '[2/6] Repo template 邊界'
 Test-TextContains $repoCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') 'codex/config.toml'
-Test-TextContains $repoCodexConfig @('model_context_window = 1000000') 'codex/config.toml'
-Test-TextContains $repoCodexAgents @('[MODE: UNRESTRICTED]','CORE DIRECTIVES:','EXECUTION BOUNDARY:') 'codex/AGENTS.md'
+Test-TextContains $repoCodexConfig @('model_context_window = 372000','model_reasoning_effort = "xhigh"') 'codex/config.toml'
+Test-TextContains $repoCodexAgents @('# AGENTS.md - Codex 全域工作契約','## 3. 實作與授權邊界','## 4. Native skill routing','## 9. Memory') 'codex/AGENTS.md'
 Test-TextContains $repoClaudeSettings @('__CLAUDE_STOP_HOOK_PATH__') 'claude/settings.json'
 Test-TextContains $repoClaudeHook @('input.stop_hook_active === true') 'claude/hooks/check-traditional.mjs'
 Test-TextDoesNotContain $repoCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') 'codex/config.toml'
@@ -526,7 +539,6 @@ if($SkipActive){
   Test-JsonParse $activeClaudeSettings '~/.claude/settings.json'
   Test-NodeParse $activeClaudeHook '~/.claude/hooks/check-traditional.mjs'
   Test-TextDoesNotContain $activeCodexConfig @('__NPX_COMMAND__','__SYSTEM_ROOT__','__CODEX_TERMINAL_SHELL__') '~/.codex/config.toml'
-  Test-TextContains $activeCodexConfig @('model_context_window = 1000000') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeCodexConfig @('model_catalog_json','model_auto_compact_token_limit =','model_instructions_file','consolidation_model','extract_model','[agents.worker]') '~/.codex/config.toml'
   Test-TextDoesNotMatch $activeCodexConfig @('(?m)^\s*review_model\s*=') '~/.codex/config.toml'
   Test-TextDoesNotContain $activeClaudeSettings @('__CLAUDE_STOP_HOOK_PATH__','__CLAUDE_STOP_HOOK_COMMAND__') '~/.claude/settings.json'

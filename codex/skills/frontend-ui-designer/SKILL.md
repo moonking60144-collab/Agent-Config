@@ -1,6 +1,6 @@
 ---
 name: frontend-ui-designer
-description: "Use for new UI, visual redesign, or frontend polish requiring intentional layout, typography, color, motion, and responsive behavior. Preserve established design systems when present."
+description: "Use for new UI, visual redesign, prototype, image/URL-to-code, landing page, dashboard, or frontend polish where layout, typography, color, motion, responsive behavior, or design QA is part of the goal. Do not use for ordinary frontend logic bugs with no visual or interaction-design decision."
 ---
 
 ## 角色定位

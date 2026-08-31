@@ -154,7 +154,7 @@ enabled = true
 
 [mcp_servers.context7.env]
 SystemRoot = '__SYSTEM_ROOT__'
-# __NPX_COMMAND__ and __SYSTEM_ROOT__ are replaced by deploy.ps1.
+# Template tokens are replaced by scripts/deploy-codex.mjs; deploy.ps1 calls the same Node deployer.
 # On macOS/Linux, deploy.ps1 removes SystemRoot because it is Windows-only.
 
 [mcp_servers.serena]

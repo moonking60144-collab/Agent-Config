@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use for issue-first review, audit, inspection, or re-review of code, diffs, PRs, architecture, integration, tests, deployment, security, data flow, or UI behavior. Default to read-only."
+description: "Use for read-only review, audit, inspect, re-review, PR/diff/architecture/integration/security/data-flow/UI evaluation, or requests to list issues. Report findings first and do not implement unless the user explicitly switches from review to modification."
 ---
 
 # Review
@@ -31,7 +31,10 @@ description: "Use for issue-first review, audit, inspection, or re-review of cod
 12. 對外部 API、規格、workflow/automation API、版本行為或產品功能的主張，不憑印象；查官方文件或一手來源後再下結論。
 13. 不確定時明確標示不確定點、原因、驗證方式。不要把猜測包裝成 finding。
 
-審查 concurrency、versioning、cache/freshness、observer/mutation ownership 或 restart-recovery 行為時，套用 `AGENTS.md` section 3.1 的 architecture-claim evidence 規則。缺少可達 execution timeline 的 race、torn read、stale write、lost update、duplicate side effect、supersession 或 recovery 主張只能列為待確認問題，不能列為 finding。
+審查 concurrency、versioning、cache/freshness、observer/mutation ownership 或 restart recovery 時，使用 ../agent-core-lite/references/architecture-preflight.md 的 evidence 與 timeline 邊界；畫不出可達 timeline 的主張只能列 hypothesis。
+
+審查 mutation 時，依 ../agent-core-lite/references/async-mutation-convergence.md 的 trigger 與 exemption 判斷；不得只因 optimistic／async／background／external 關鍵字觸發。適用時，non-terminal state 必須有 owner、timeout、restart/resume 與 terminal convergence path。
+When it applies, read ../agent-core-lite/references/async-mutation-convergence.md; review whether the mutation lifecycle can be simplified and whether enforceable invariants live in types, shared modules, composed contract tests, CI, or runtime reconciliation rather than only in instructions.
 
 ## Findings 標準
 
@@ -122,6 +125,8 @@ description: "Use for issue-first review, audit, inspection, or re-review of cod
 - Integration：frontend/backend contract、API response shape、DB schema/read model、cache invalidation、事件/SSE/watchers、背景刷新與 stale response。
 - Data ownership：誰是 source of truth、誰是 read model/cache、同步與 invalidation 責任是否清楚。
 - Concurrency：request race、in-flight key、abort/cancel、重試、idempotency、all-or-nothing 行為。
+- Mutation lifecycle：outcome taxonomy、terminal／non-terminal closure、durable intent、authoritative reconciliation、overlay／retry cleanup、restart/resume、idempotent compensation 與 point of no return。
+- Contract proof：actual producer output 是否通過真實 wrapper／classifier／API／consumer；手寫 mock、重複型別或各層獨立 fixture 不構成唯一 integration proof。
 - Security：SQL/XSS/command injection、權限檢查、secret exposure、trusted boundary、server-side validation。
 - Tests：測試是否真的被 test runner discovery、是否覆蓋失敗路徑、是否只測 helper 沒測使用者流程。
 - Deployment：env key、`.env.example`、migration、build package、feature flag、rollback、dirty worktree impact。
@@ -153,7 +158,7 @@ description: "Use for issue-first review, audit, inspection, or re-review of cod
 
 ## Shared Contract Coverage
 
-當 diff 修改共享 contract、reader、serializer、資料模型、UI default 或互動契約時，套用 `AGENTS.md` §3.1 的 Consumer Coverage Gate。從 producer -> contract 反查所有 production consumers，包含 sibling、history、detail、admin 與不同裝置 surface；不能停在 diff 已出現的 caller。
+當 diff 修改共享 contract、reader、serializer、資料模型、UI default 或互動契約時，套用 global evidence contract 的 shared-consumer inventory。從 producer -> contract 反查所有 production consumers，包含 sibling、history、detail、admin 與不同裝置 surface；不能停在 diff 已出現的 caller。
 
 ## 回覆約束
 
