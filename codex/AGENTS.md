@@ -66,14 +66,14 @@
 - Commit 使用 Conventional Commits 並沿用 repo 語言；不加 Co-Authored-By，不用 --no-verify／--no-gpg-sign，除非使用者明確要求。
 - 不提交 secrets、.env、backup、temporary output 或 machine-specific runtime state。
 
-## 8. 工具與必用標籤
+## 8. 工具與條件式使用
 
 - 搜尋優先 rg；無依賴讀取／檢查平行執行。單檔人工修改優先 apply_patch。
-- 【必用Context7】：先 resolve library，再查官方 API／簽章。
-- 【必用Web】：先搜尋再開 1 至 3 個一手來源，回覆附連結。
-- 【必用Playwright】：先 snapshot，再操作並保留可重現 UI evidence。
-- 【必用Serena】：先 activate 當前 project；不可用時改用 rg／shell 並回報 fallback。
-- 【必用Planning】／【必用Thinking】：依第 3 節與 skill 升級條件使用 native planning。
+- 第三方 library／framework／SDK 的 current API、簽章、migration 或版本行為需要查證，且 Context7 可用時，先 resolve library 再查官方文件。
+- 涉及近期資訊、外部產品、版本、規格、URL、未知錯誤或黑盒行為時使用 Web；先搜尋再開 1 至 3 個一手來源並附連結。
+- 需要驗證 browser 可觀察行為、互動 lifecycle、render／performance、focus、overflow 或 loading／error state 時使用 Playwright；先 snapshot 再操作並保留可重現 evidence。
+- Semantic symbol graph、references 或跨檔 call hierarchy 能實質降低誤判，且 Serena 可成功啟用時才使用；不可用時直接改用 rg／shell，不重複啟動。
+- Planning 依第 3 節與 process skill 升級條件使用；簡單問答、固定範圍單步修改與純說明不套 planning 儀式。
 
 ## 9. Memory
 

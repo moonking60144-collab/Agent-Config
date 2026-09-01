@@ -523,6 +523,22 @@ async function validateRepo(python) {
     }
   }
 
+  for (const hookAsset of [
+    "project-ledger-lib.mjs",
+    "record-session-provenance.mjs",
+    "guard-project-completion.mjs",
+    "validate-project-ledger.mjs",
+    "project-ledger-completion.schema.json",
+  ]) {
+    await requireFile(path.join(sourceRoot, "hooks", hookAsset), "codex/hooks/" + hookAsset);
+  }
+  try {
+    JSON.parse(await readFile(path.join(sourceRoot, "hooks", "project-ledger-completion.schema.json"), "utf8"));
+    ok("project ledger completion schema JSON 有效");
+  } catch (error) {
+    fail("project ledger completion schema JSON 無效：" + error.message);
+  }
+
 }
 
 async function validateActive(codexHome, python) {
@@ -616,6 +632,19 @@ async function main() {
   const python = resolvePython();
   runNegativeSelfTests(python);
   await validateRepo(python);
+  const hookTests = spawnSync(
+    process.execPath,
+    ["--test", path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs")],
+    { cwd: repoRoot, encoding: "utf8", shell: false }
+  );
+  if (hookTests.error || hookTests.status !== 0) {
+    fail(
+      "project ledger hook tests 失敗：" +
+        (hookTests.stderr || hookTests.stdout || hookTests.error?.message)
+    );
+  } else {
+    ok("project ledger hook tests 全部通過");
+  }
 const evalValidation = spawnSync(
   process.execPath,
   [path.join(scriptDir, "run-codex-evals.mjs"), "--validate"],

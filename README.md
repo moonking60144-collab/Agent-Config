@@ -15,6 +15,8 @@ Codex 設定的 canonical deploy／validate 使用 Node.js，Windows、macOS、L
 
 只要部署 Codex，不需要 PowerShell。`validate-codex.mjs` 需要 Python 3.11+ 的 `tomllib`；fresh／`--force-config` 部署另需要 `uv` 與 `npx`，並會安裝或升級 stable Serena。完整部署 Claude、Codex 與 VS Code 時仍可使用 PowerShell；`deploy.ps1` 的 Codex 段會呼叫同一個 Node deployer，避免兩套邏輯漂移。完整部署需要 Git 與 Node.js，macOS／Linux 另需 PowerShell 7。
 
+Codex hooks 只會在 `SessionStart` 已找到 unfinished ledger 時記錄 observed standard instruction/config digests，並把該 ledger 綁定到 session；`Stop` 只檢查這份 session-bound structured completion contract。這些 digest 不是 Codex 實際載入 instruction chain 的完整證明。Hook 定義變更後，Codex 會依 hash 要求重新信任；請在支援 hook 管理的介面檢查並信任本 repo 部署的 user-level hooks。未信任前 hook 會被跳過，不得宣稱 provenance 或 completion guard 已生效。
+
 ```powershell
 git clone https://github.com/moonking60144-collab/config.git
 cd config
@@ -195,6 +197,8 @@ pwsh -File scripts/validate-config.ps1 -SkipActive
 ```
 
 Node validator會檢查 repo-managed skills、TOML、hooks、routing-classifier cases 與 output schema；PowerShell validator轉交同一 Node canonical validation，避免維護第二份 Codex contract。只有明確執行 --run 才會呼叫模型並產生用量。
+
+Project-grade ledger 可在 header 指定同名 `.completion.json`；`project-ledger-completion.schema.json` 是 shape contract 的 canonical source，`validate-project-ledger.mjs` 依該 schema 驗證後再執行唯一 ID、exception metadata 與 blocker 語意檢查。這是 opt-in、session-bound、bounded enforcement：舊 ledger 不會被追溯阻擋，SessionStart 後才建立的 ledger 必須在第一個 session 明確執行 validator，Stop hook 最多要求一次 continuation，也不證明 native skill／reference activation。
 
 ---
 

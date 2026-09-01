@@ -77,7 +77,7 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | Consumer coverage gate | When shared contract or multi-surface consumer inventory applies, the producer -> contract -> all production consumers inventory is complete and every consumer is marked must-align or intentional-divergence |
 | Architecture preflight gate | When references/architecture-preflight.md applies, canonical state, ownership, authority, version semantics, round-trips, async/cache behavior, and relevant UI lifecycle are resolved with evidence before Act |
 | Async mutation convergence gate | When references/async-mutation-convergence.md applies, the chosen state model minimizes lifecycle surface, every non-terminal state converges, and durable repo enforcement plus production-equivalent evidence are identified; prompt analysis alone does not close the gate |
-| Interaction performance gate | When references/interaction-performance.md applies, representative load, baseline, budget, update strategy, complexity, geometry contract, and browser runtime acceptance are defined before Act |
+| Interaction performance gate | When references/interaction-performance.md applies, representative load, controlled baseline, measurement environment, phase timing, budget, update strategy, complexity, geometry contract, and runtime acceptance are defined before Act |
 | Read-only gate | If the user asked read-only/review/analysis, no writes happen |
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |

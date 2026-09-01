@@ -112,11 +112,14 @@ project_status: active | blocked | complete | archived
 repo_path: <absolute repo path or projectless workspace path>
 plan_path: <absolute plan path>
 ledger_path: <absolute ledger path>
+completion_contract: <absolute path to the sibling .completion.json>
 active_task: <task id or none>
 last_verified_task: <task id or none>
 updated_at: <ISO-8601 timestamp with timezone>
 next_instruction: Read <ledger path> first, then continue from <task id>.
 ```
+
+New project ledgers and existing ledgers updated for a new phase must use the structured completion contract. Legacy ledgers without `completion_contract` remain readable and are not retroactively blocked.
 
 Use `active` or `blocked` for unfinished work. Set `complete` only after verification evidence is recorded. Set `archived` only when the user intentionally closes the project.
 
@@ -138,6 +141,17 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 ## Eliminated
 - <hypothesis> — evidence: <command/output/artifact>
 ```
+
+### Structured Completion Contract
+
+Store machine-decidable completion state beside the ledger as `<ledger-name>.completion.json`, following the deployed `project-ledger-completion.schema.json`. The contract must contain:
+
+- Findings with stable id, severity, status, `blockingCompletion`, and evidence.
+- Required evidence with `missing`, `present`, or `waived` status.
+- Applicable preflights with `open`, `resolved`, `not_applicable`, or `waived` status.
+- `owner`, `reason`, and at least one evidence reference for accepted-risk, deferred, out-of-scope, blocked-external, or waived exceptions.
+
+Do not infer blockers by searching prose for `P1` or similar labels. Markdown remains the human-readable progress record; the JSON sidecar is the completion-decision contract. When SessionStart finds an existing unfinished ledger, it binds that ledger to the session and records observed standard instruction/config digests under the user-level project `sessions/` directory. This does not prove the exact loaded instruction chain, native skill activation, reference activation, or compliance. A ledger created after SessionStart still requires the explicit validator in the first session.
 
 ### 4. Execute Per Task
 
@@ -163,9 +177,13 @@ Requirement | Evidence | Status
 
 For irreversible or high-blast-radius steps, include rollback or recovery path evidence before claiming completion.
 
+Before changing `project_status` to `complete`, update the structured completion contract and run the deployed `validate-project-ledger.mjs --ledger <ledger path>` entrypoint. Completion requires zero contract errors, unique item ids, zero blocking findings, zero missing required evidence, and zero open applicable preflights. The Stop hook rechecks the exact ledger bound when the session started and can request one continuation; this is bounded runtime enforcement, not an unbypassable proof that the model followed every rule.
+
 ### 6. Handoff / Resume Contract
 
 When context pressure is rising, compaction is likely, or the task may pause for a long time, checkpoint proactively: update the ledger, write eliminated hypotheses, produce the handoff, and stop cleanly instead of pushing until state is lost.
+
+Preserve reconstruction evidence without violating Git authorization: use a normal commit only when the user authorized commit, use a named stash only when explicitly authorized, otherwise record HEAD plus a binary tracked diff and untracked manifest with a declared reconstruction level. A hash or manifest alone proves drift but is not a frozen snapshot.
 
 Before any stop or final report, update the ledger and include:
 

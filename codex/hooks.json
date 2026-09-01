@@ -2,12 +2,35 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"__CODEX_HOME__/hooks/record-session-provenance.mjs\"",
+            "commandWindows": "node \"__CODEX_HOME__/hooks/record-session-provenance.mjs\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "resume|compact",
         "hooks": [
           {
             "type": "command",
             "command": "node \"__CODEX_HOME__/hooks/resume-project-ledger.mjs\"",
             "commandWindows": "node \"__CODEX_HOME__/hooks/resume-project-ledger.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"__CODEX_HOME__/hooks/guard-project-completion.mjs\"",
+            "commandWindows": "node \"__CODEX_HOME__/hooks/guard-project-completion.mjs\"",
             "timeout": 5
           }
         ]
