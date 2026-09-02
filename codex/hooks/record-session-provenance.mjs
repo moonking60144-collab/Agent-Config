@@ -3,11 +3,16 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findMatchingLedgers, projectDirectoryFor, readHookInput } from "./project-ledger-lib.mjs";
+import {
+  findMatchingLedgers,
+  projectDirectoryFor,
+  readBoundedRegularFile,
+  readHookInput,
+} from "./project-ledger-lib.mjs";
 
 async function digestFile(filePath) {
   try {
-    return createHash("sha256").update(await fs.readFile(filePath)).digest("hex");
+    return createHash("sha256").update(await readBoundedRegularFile(filePath)).digest("hex");
   } catch {
     return null;
   }
@@ -89,18 +94,19 @@ async function atomicWrite(filePath, value) {
 async function main() {
   const input = await readHookInput();
   const cwd = path.resolve(input.cwd || process.cwd());
-  const { scopeRoot, ledgers } = await findMatchingLedgers(cwd, [
-    "active",
-    "blocked",
-    "pending",
-    "in_progress",
-  ]);
-  const ledger = ledgers[0] || null;
-  if (!ledger) return;
+  const { scopeRoot, ledgers } = await findMatchingLedgers(cwd);
+  const ledger = ledgers.find((candidate) => ["active", "blocked", "pending", "in_progress"].includes(candidate.status)) || null;
   const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
   const projectDirectory = projectDirectoryFor(scopeRoot);
   const sessionId = String(input.session_id || "unknown-session").replace(/[^A-Za-z0-9._-]+/g, "-");
   const filePath = path.join(projectDirectory, "sessions", `${sessionId}.json`);
+  let previous = null;
+  try {
+    previous = JSON.parse(await fs.readFile(filePath, "utf8"));
+  } catch {
+    // First lifecycle event for this session.
+  }
+  const ledgerPath = previous?.ledgerPath || ledger?.filePath || null;
   const [globalInstruction, config, hooks, skills, projectAgents] = await Promise.all([
     preferredInstruction(codexHome),
     digestFile(path.join(codexHome, "config.toml")),
@@ -115,7 +121,7 @@ async function main() {
     permissionMode: input.permission_mode || null,
     cwd,
     scopeRoot,
-    ledgerPath: ledger.filePath,
+    ledgerPath,
     instructionDiscoveryEvidence: "observed_standard_files_only",
     digests: {
       globalAgents: globalInstruction?.sha256 || null,
@@ -126,16 +132,24 @@ async function main() {
     },
   };
 
-  let previous = null;
-  try {
-    previous = JSON.parse(await fs.readFile(filePath, "utf8"));
-  } catch {
-    // First lifecycle event for this session.
-  }
+  const baselineLedgers = previous?.baselineLedgers || await Promise.all(
+    ledgers.map(async (candidate) => ({
+      filePath: candidate.filePath,
+      status: candidate.status,
+      updatedAt: candidate.updatedAt,
+      contentSha256: createHash("sha256").update(candidate.content).digest("hex"),
+      completionContractSha256: candidate.completionContract
+        ? await digestFile(candidate.completionContract)
+        : null,
+    })),
+  );
+
   await atomicWrite(filePath, {
     schemaVersion: 1,
     sessionId: input.session_id || null,
-    ledgerPath: ledger.filePath,
+    ledgerPath,
+    startedAt: previous?.startedAt || event.recordedAt,
+    baselineLedgers,
     codexVersion: previous?.codexVersion || codexVersion(),
     nativeSkillActivationObserved: false,
     selectedProcessSkill: null,

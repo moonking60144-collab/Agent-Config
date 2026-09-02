@@ -15,7 +15,7 @@ Codex 設定的 canonical deploy／validate 使用 Node.js，Windows、macOS、L
 
 只要部署 Codex，不需要 PowerShell。`validate-codex.mjs` 需要 Python 3.11+ 的 `tomllib`；fresh／`--force-config` 部署另需要 `uv` 與 `npx`，並會安裝或升級 stable Serena。完整部署 Claude、Codex 與 VS Code 時仍可使用 PowerShell；`deploy.ps1` 的 Codex 段會呼叫同一個 Node deployer，避免兩套邏輯漂移。完整部署需要 Git 與 Node.js，macOS／Linux 另需 PowerShell 7。
 
-Codex hooks 只會在 `SessionStart` 已找到 unfinished ledger 時記錄 observed standard instruction/config digests，並把該 ledger 綁定到 session；`Stop` 只檢查這份 session-bound structured completion contract。這些 digest 不是 Codex 實際載入 instruction chain 的完整證明。Hook 定義變更後，Codex 會依 hash 要求重新信任；請在支援 hook 管理的介面檢查並信任本 repo 部署的 user-level hooks。未信任前 hook 會被跳過，不得宣稱 provenance 或 completion guard 已生效。
+Codex hooks 會在每次 `SessionStart` 記錄 observed standard instruction/config digests 與當下 ledger baseline；若已找到 unfinished ledger，另把它綁定到 session。`Stop` 會檢查 session-bound ledger，以及 baseline 後新增、重新完成或內容／completion contract 已改變的 complete ledgers。這些 digest 不是 Codex 實際載入 instruction chain 的完整證明。Hook 定義變更後，Codex 會依 hash 要求重新信任；請在支援 hook 管理的介面檢查並信任本 repo 部署的 user-level hooks。未信任前 hook 會被跳過，不得宣稱 provenance 或 completion guard 已生效。
 
 ```powershell
 git clone https://github.com/moonking60144-collab/config.git
@@ -198,7 +198,7 @@ pwsh -File scripts/validate-config.ps1 -SkipActive
 
 Node validator會檢查 repo-managed skills、TOML、hooks、routing-classifier cases 與 output schema；PowerShell validator轉交同一 Node canonical validation，避免維護第二份 Codex contract。只有明確執行 --run 才會呼叫模型並產生用量。
 
-Project-grade ledger 可在 header 指定同名 `.completion.json`；`project-ledger-completion.schema.json` 是 shape contract 的 canonical source，`validate-project-ledger.mjs` 依該 schema 驗證後再執行唯一 ID、exception metadata 與 blocker 語意檢查。這是 opt-in、session-bound、bounded enforcement：舊 ledger 不會被追溯阻擋，SessionStart 後才建立的 ledger 必須在第一個 session 明確執行 validator，Stop hook 最多要求一次 continuation，也不證明 native skill／reference activation。
+Project-grade ledger 可在 header 指定同名 `.completion.json`；`project-ledger-completion.schema.json` 是 shape contract 的 canonical source，`validate-project-ledger.mjs` 依該 schema 驗證後再執行唯一 ID、exception metadata、evidence class、artifact integrity 與 blocker 語意檢查。一般 CLI 仍可讀取舊 schema-v1 ledger，但目前 Stop hook 只接受 `schemaVersion: 2`、`evidencePolicyVersion: 1` 的完成契約；因此舊工作可續接，重新宣告完成前必須升級。SessionStart 會記錄當下 ledger、內容與 contract digest baseline；Stop 會 strict 驗證已綁定 ledger，以及本 session 後新增、重新完成或內容／contract 改變的 complete ledgers，並在唯一一次 continuation 中彙整所有不合規 ledger。每個 preflight 必須明示 `scope: local | cross-boundary`，不由自由文字 ID 猜測。Completion sidecar 必須是最多 1 MiB 的一般非 symlink 檔案；schema-v2 另要求同名 sibling sidecar。每筆 present evidence 需以 `artifactBase` 指定 repo／contract 相對路徑並提供 `artifactSha256`；hook 只讀取 declared base 內不超過 5 MiB 的一般檔案，單一 manifest 最多 128 筆 evidence、最多雜湊 16 MiB 的唯一 artifacts，重複路徑共用 digest cache。helper/unit 只能關閉 local claim；跨 producer／persistence／consumer 的 claim 需要 present composed/runtime/production evidence，所有 behavioral proof 不可 waiver，independent review 必須 present 或有明確 waiver。治理案例、false-positive boundary 與退役條件記錄於 `tests/fixtures/project-ledger-evidence-policy.md`。這是 session-bound、bounded enforcement：Stop hook 最多要求一次 continuation，hash 只證明 artifact 完整性，不證明 native skill／reference activation或業務語意正確。
 
 ---
 

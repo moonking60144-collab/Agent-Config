@@ -1,9 +1,19 @@
-import { promises as fs, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalPath, expandHome, parseLedger, readField } from "./project-ledger-lib.mjs";
+import {
+  canonicalPath,
+  expandHome,
+  MAX_COMPLETION_CONTRACT_BYTES,
+  parseLedger,
+  readBoundedRegularFile,
+  readField,
+} from "./project-ledger-lib.mjs";
 
 const EXCEPTION_STATUSES = new Set(["accepted_risk", "deferred", "out_of_scope", "blocked_external"]);
+const MAX_EVIDENCE_ARTIFACT_BYTES = 5 * 1024 * 1024;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const COMPLETION_SCHEMA = JSON.parse(
   readFileSync(new URL("./project-ledger-completion.schema.json", import.meta.url), "utf8"),
 );
@@ -41,6 +51,9 @@ function validateSchemaNode(value, schema, prefix, errors) {
     errors.push(`${prefix} must not be empty`);
   }
   if (schema.type === "array" && schema.items) {
+    if (Number.isInteger(schema.maxItems) && value.length > schema.maxItems) {
+      errors.push(`${prefix} must contain no more than ${schema.maxItems} items`);
+    }
     value.forEach((item, index) => validateSchemaNode(item, schema.items, `${prefix}[${index}]`, errors));
   }
   if (schema.type === "object") {
@@ -66,7 +79,88 @@ function validateUniqueIds(items, prefix, errors) {
   });
 }
 
-export function validateCompletionContract(contract, expectedLedgerPath) {
+function validateEvidencePolicy(contract, errors, { requireEvidencePolicy = false } = {}) {
+  const usesEvidencePolicyFields = contract.requiredEvidence.some((item) =>
+    ["claim", "claimScope", "evidenceClass", "artifactBase", "artifactSha256"].some((field) => Object.hasOwn(item, field))
+  );
+  if (requireEvidencePolicy && contract.schemaVersion !== 2) {
+    errors.push("current Stop completion requires schemaVersion 2 evidence contract");
+    return;
+  }
+  const policyApplies = contract.schemaVersion === 2 || contract.evidencePolicyVersion === 1 || usesEvidencePolicyFields;
+  if (!policyApplies) return;
+  if (contract.evidencePolicyVersion !== 1) {
+    errors.push("evidencePolicyVersion must be 1 when evidence policy fields are present");
+  }
+
+  const crossBoundaryClaims = contract.requiredEvidence.filter((item) => item.claimScope === "cross-boundary");
+  for (const [index, item] of contract.requiredEvidence.entries()) {
+    const prefix = `requiredEvidence[${index}]`;
+    if (!hasText(item.claim)) errors.push(`${prefix}.claim is required by evidence policy v1`);
+    if (!hasText(item.claimScope)) errors.push(`${prefix}.claimScope is required by evidence policy v1`);
+    if (!hasText(item.evidenceClass)) errors.push(`${prefix}.evidenceClass is required by evidence policy v1`);
+    if (
+      item.claimScope === "cross-boundary" &&
+      !["composed", "runtime", "production"].includes(item.evidenceClass)
+    ) {
+      errors.push(`${prefix} cross-boundary claim requires composed, runtime, or production evidence`);
+    }
+    if (["local", "cross-boundary"].includes(item.claimScope) && item.status === "waived") {
+      errors.push(`${prefix} behavioral evidence cannot be waived`);
+    }
+    if (
+      item.claimScope === "review" &&
+      item.evidenceClass !== "independent-review"
+    ) {
+      errors.push(`${prefix} review claim requires independent-review evidence`);
+    }
+    if (item.evidenceClass === "independent-review" && item.claimScope !== "review") {
+      errors.push(`${prefix} independent-review evidence can only satisfy a review claim`);
+    }
+    if (contract.schemaVersion === 2 && item.status === "present") {
+      if (!hasText(item.artifactBase)) errors.push(`${prefix}.artifactBase is required by schemaVersion 2`);
+      if (!hasText(item.artifactSha256)) {
+        errors.push(`${prefix}.artifactSha256 is required by schemaVersion 2`);
+      } else if (!SHA256_PATTERN.test(item.artifactSha256)) {
+        errors.push(`${prefix}.artifactSha256 must be a lowercase SHA-256 digest`);
+      }
+    }
+  }
+
+  if (!contract.requiredEvidence.some((item) => item.status === "present" && ["local", "cross-boundary"].includes(item.claimScope))) {
+    errors.push("evidence policy v1 requires at least one present behavioral claim");
+  }
+  if (
+    crossBoundaryClaims.length > 0 && !contract.requiredEvidence.some(
+      (item) =>
+        item.status === "present" &&
+        item.claimScope === "cross-boundary" &&
+        ["composed", "runtime", "production"].includes(item.evidenceClass)
+    )
+  ) {
+    errors.push(
+      "evidence policy v1 requires present composed, runtime, or production evidence for a cross-boundary claim"
+    );
+  }
+  if (
+    crossBoundaryClaims.length > 0 && !contract.requiredEvidence.some(
+      (item) =>
+        item.claimScope === "review" &&
+        item.evidenceClass === "independent-review" &&
+        (item.status === "present" || item.status === "waived")
+    )
+  ) {
+    errors.push("evidence policy v1 requires independent review evidence or an explicit waiver");
+  }
+  if (
+    contract.preflights.some((item) => item.scope === "cross-boundary" && item.status !== "not_applicable") &&
+    crossBoundaryClaims.length === 0
+  ) {
+    errors.push("cross-boundary preflight requires at least one cross-boundary evidence claim");
+  }
+}
+
+export function validateCompletionContract(contract, expectedLedgerPath, options = {}) {
   const errors = [];
   const blockers = [];
   validateSchemaNode(contract, COMPLETION_SCHEMA, "completion contract", errors);
@@ -79,6 +173,7 @@ export function validateCompletionContract(contract, expectedLedgerPath) {
   validateUniqueIds(contract.findings, "findings", errors);
   validateUniqueIds(contract.requiredEvidence, "requiredEvidence", errors);
   validateUniqueIds(contract.preflights, "preflights", errors);
+  validateEvidencePolicy(contract, errors, options);
 
   if (Array.isArray(contract.findings)) {
     contract.findings.forEach((finding, index) => {
@@ -111,6 +206,7 @@ export function validateCompletionContract(contract, expectedLedgerPath) {
     contract.preflights.forEach((item, index) => {
       const prefix = `preflights[${index}]`;
       if (!hasText(item?.id)) errors.push(`${prefix}.id is required`);
+      if (contract.schemaVersion === 2 && !hasText(item?.scope)) errors.push(`${prefix}.scope is required by schemaVersion 2`);
       if (!["open", "resolved", "not_applicable", "waived"].includes(item?.status)) errors.push(`${prefix}.status is invalid`);
       if (item?.status === "waived") validateExceptionMetadata(item, prefix, errors);
       if (item?.status === "open") blockers.push(`preflight ${item.id || index} is open`);
@@ -120,7 +216,80 @@ export function validateCompletionContract(contract, expectedLedgerPath) {
   return { errors, blockers };
 }
 
-export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null) {
+function escapesDeclaredBase(basePath, candidatePath) {
+  const relativePath = path.relative(basePath, candidatePath);
+  return !relativePath || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath);
+}
+
+const MAX_EVIDENCE_MANIFEST_ITEMS = 128;
+const MAX_EVIDENCE_MANIFEST_BYTES = 16 * 1024 * 1024;
+
+async function verifyEvidenceArtifacts(contract, contractPath, scopeRoot) {
+  if (contract.schemaVersion !== 2) return [];
+  const errors = [];
+  if (contract.requiredEvidence.length > MAX_EVIDENCE_MANIFEST_ITEMS) {
+    return [`requiredEvidence exceeds the ${MAX_EVIDENCE_MANIFEST_ITEMS}-item manifest limit`];
+  }
+  const digestCache = new Map();
+  let verifiedArtifactBytes = 0;
+  for (const [index, item] of contract.requiredEvidence.entries()) {
+    if (item.status !== "present") continue;
+    const prefix = `requiredEvidence[${index}]`;
+    if (!hasText(item.artifact) || !hasText(item.artifactBase) || !SHA256_PATTERN.test(item.artifactSha256 || "")) continue;
+    if (path.isAbsolute(item.artifact) || /^~(?:[\\/]|$)/.test(item.artifact)) {
+      errors.push(`${prefix}.artifact must be relative to its declared base`);
+      continue;
+    }
+    const basePath = item.artifactBase === "contract" ? path.dirname(contractPath) : scopeRoot;
+    const artifactPath = path.resolve(basePath, item.artifact);
+    if (escapesDeclaredBase(basePath, artifactPath)) {
+      errors.push(`${prefix}.artifact escapes or does not name a file below its declared base`);
+      continue;
+    }
+    try {
+      const [realBase, realArtifact] = await Promise.all([fs.realpath(basePath), fs.realpath(artifactPath)]);
+      if (escapesDeclaredBase(realBase, realArtifact)) {
+        errors.push(`${prefix}.artifact resolves outside its declared base`);
+        continue;
+      }
+      const cachedDigest = digestCache.get(realArtifact);
+      if (cachedDigest) {
+        if (cachedDigest !== item.artifactSha256) {
+          errors.push(`${prefix}.artifactSha256 does not match ${item.artifact}`);
+        }
+        continue;
+      }
+      const handle = await fs.open(realArtifact, fsConstants.O_RDONLY | fsConstants.O_NONBLOCK);
+      try {
+        const artifactStat = await handle.stat();
+        if (!artifactStat.isFile()) {
+          errors.push(`${prefix}.artifact must resolve to a regular file`);
+          continue;
+        }
+        if (artifactStat.size > MAX_EVIDENCE_ARTIFACT_BYTES) {
+          errors.push(`${prefix}.artifact exceeds the ${MAX_EVIDENCE_ARTIFACT_BYTES}-byte limit`);
+          continue;
+        }
+        if (verifiedArtifactBytes + artifactStat.size > MAX_EVIDENCE_MANIFEST_BYTES) {
+          errors.push(`requiredEvidence artifacts exceed the ${MAX_EVIDENCE_MANIFEST_BYTES}-byte manifest limit`);
+          break;
+        }
+        verifiedArtifactBytes += artifactStat.size;
+        const content = await handle.readFile();
+        const digest = createHash("sha256").update(content).digest("hex");
+        digestCache.set(realArtifact, digest);
+        if (digest !== item.artifactSha256) errors.push(`${prefix}.artifactSha256 does not match ${item.artifact}`);
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      errors.push(`${prefix}.artifact cannot be verified: ${error.message}`);
+    }
+  }
+  return errors;
+}
+
+export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, options = {}) {
   let resolvedScopeRoot = scopeRoot;
   if (!resolvedScopeRoot) {
     const content = await fs.readFile(ledgerPath, "utf8");
@@ -133,25 +302,62 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null) {
   if (!ledger) return { errors: ["ledger header is invalid or belongs to another repository"], blockers: [], ledger: null };
   if (!ledger.completionContract) return { errors: ["completion_contract is missing from the ledger header"], blockers: [], ledger };
 
+  const extension = path.extname(ledger.filePath);
+  const expectedContractPath = path.join(
+    path.dirname(ledger.filePath),
+    `${path.basename(ledger.filePath, extension)}.completion.json`,
+  );
+  const actualContractPath = path.resolve(ledger.completionContract);
+  const expectedResolvedPath = path.resolve(expectedContractPath);
+  const isExpectedSibling = process.platform === "win32"
+    ? actualContractPath.toLowerCase() === expectedResolvedPath.toLowerCase()
+    : actualContractPath === expectedResolvedPath;
+  if (options.requireEvidencePolicy && !isExpectedSibling) {
+    return {
+      errors: [`current Stop completion_contract must be the sibling sidecar ${expectedContractPath}`],
+      blockers: [],
+      ledger,
+    };
+  }
+
   let contract;
   try {
-    contract = JSON.parse(await fs.readFile(ledger.completionContract, "utf8"));
+    const content = await readBoundedRegularFile(actualContractPath, {
+      maxBytes: MAX_COMPLETION_CONTRACT_BYTES,
+      label: "completion_contract",
+    });
+    contract = JSON.parse(content.toString("utf8"));
   } catch (error) {
     return { errors: [`cannot read completion contract: ${error.message}`], blockers: [], ledger };
   }
-  const result = validateCompletionContract(contract, ledger.filePath);
+  if (contract.schemaVersion === 2) {
+    if (!isExpectedSibling) {
+      return {
+        errors: [`schemaVersion 2 completion_contract must be the sibling sidecar ${expectedContractPath}`],
+        blockers: [],
+        ledger,
+        contract,
+      };
+    }
+  }
+  const result = validateCompletionContract(contract, ledger.filePath, options);
+  if (result.errors.length === 0) {
+    result.errors.push(...await verifyEvidenceArtifacts(contract, ledger.completionContract, resolvedScopeRoot));
+  }
   return { ...result, ledger, contract };
 }
 
 async function main() {
   const ledgerIndex = process.argv.indexOf("--ledger");
-  if (ledgerIndex === -1 || !process.argv[ledgerIndex + 1]) throw new Error("usage: validate-project-ledger.mjs --ledger <path>");
+  if (ledgerIndex === -1 || !process.argv[ledgerIndex + 1]) throw new Error("usage: validate-project-ledger.mjs --ledger <path> [--require-evidence-policy]");
   const ledgerPath = path.resolve(expandHome(process.argv[ledgerIndex + 1]));
   const repoIndex = process.argv.indexOf("--repo");
   const scopeRoot = repoIndex === -1 || !process.argv[repoIndex + 1]
     ? null
     : await canonicalPath(process.argv[repoIndex + 1]);
-  const result = await evaluateLedgerCompletion(ledgerPath, scopeRoot);
+  const result = await evaluateLedgerCompletion(ledgerPath, scopeRoot, {
+    requireEvidencePolicy: process.argv.includes("--require-evidence-policy"),
+  });
   const payload = { ledgerPath, errors: result.errors, blockers: result.blockers, valid: result.errors.length === 0 && result.blockers.length === 0 };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   if (!payload.valid) process.exitCode = 1;

@@ -96,6 +96,23 @@ Canonical outcome contract 必須由 producer、wrapper、classifier、persisten
 
 ## 必要證據
 
+### Evidence matching rule
+
+證據層級必須覆蓋宣稱邊界：
+
+| Evidence class | 可關閉的 claim |
+| --- | --- |
+| helper | 單一 predicate、serializer、selector 或純函式 |
+| unit | 單一 module／owner contract |
+| composed | 真實 producer、persistence、classifier 與 consumer 的組合 transition |
+| runtime | browser、process restart、storage、network、route lifecycle 或 cache/hydration 行為 |
+| production | 已授權正式環境的 observable behavior |
+| independent-review | 額外 coverage；不能單獨關閉 behavioral claim |
+
+跨 producer、storage、retry、task registry、provider、hydration、route 或 UI consumer 的 invariant，最低需要 composed evidence。多個 helper/unit 綠燈不能相加成 cross-boundary evidence。測試應以完整失敗時間線命名，例如 `late hydration cannot overwrite a settled observation`，而不是只描述 helper 回傳值。
+
+當同一 agent 設計並實作狀態機時，完成前使用 fresh reviewer 從 raw task/diff 重新畫至少一條 failure timeline。不要先餵 expected finding。Reviewer 只能補 coverage；沒有 composed test 時不得因 review 無 finding 而宣稱收斂。
+
 依風險選擇，不是全部機械執行：
 
 - Transition matrix：每個 state 的 reachable next states 與 owner。

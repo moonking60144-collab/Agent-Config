@@ -135,6 +135,8 @@ skipped
 
 Each `done_verified` entry must include evidence: command, output summary, artifact path, git commit if available, or direct runtime/UI proof. Never redo a `done_verified` task unless the ledger says the evidence is invalid or the user asks.
 
+Evidence must match the claimed surface. Helper and unit evidence can close only local claims. A claim spanning producer, persistence, recovery, cache/hydration, route lifecycle, or downstream consumers requires a composed, runtime, or production artifact that exercises the named transition. Do not combine several helper tests and label the result cross-boundary verification.
+
 Keep an `Eliminated` section for debug or discovery work. Record one eliminated hypothesis per line with the evidence that ruled it out, so resume does not repeat dead paths:
 
 ```text
@@ -144,12 +146,16 @@ Keep an `Eliminated` section for debug or discovery work. Record one eliminated 
 
 ### Structured Completion Contract
 
-Store machine-decidable completion state beside the ledger as `<ledger-name>.completion.json`, following the deployed `project-ledger-completion.schema.json`. The contract must contain:
+Store machine-decidable completion state beside the ledger as `<ledger-stem>.completion.json`, following the deployed `project-ledger-completion.schema.json`. Completion sidecars must be regular, non-symlink files no larger than 1 MiB; schema-v2 completion also rejects external sidecars. The contract must contain:
 
 - Findings with stable id, severity, status, `blockingCompletion`, and evidence.
 - Required evidence with `missing`, `present`, or `waived` status.
 - Applicable preflights with `open`, `resolved`, `not_applicable`, or `waived` status.
 - `owner`, `reason`, and at least one evidence reference for accepted-risk, deferred, out-of-scope, blocked-external, or waived exceptions.
+
+Before a current session marks a project ledger complete, migrate its contract to `schemaVersion: 2` with `evidencePolicyVersion: 1`; the Stop hook rejects legacy completion shapes but leaves them readable for resume. Every `requiredEvidence` item must include `claim`, `claimScope`, and `evidenceClass`, every preflight must declare controlled `scope: local | cross-boundary`, and at least one present local or cross-boundary behavioral claim is required. Enumerate each cross-boundary invariant separately rather than using one broad "tests passed" item. Cross-boundary completion requires present composed/runtime/production evidence and fresh independent review unless the operator records an explicit, evidenced review waiver; behavioral proof itself cannot be waived.
+
+Each present schema-v2 evidence item must point to a repo-relative or completion-contract-relative regular file no larger than 5 MiB through `artifactBase`, `artifact`, and lowercase `artifactSha256`. A completion manifest may contain at most 128 evidence items and at most 16 MiB of unique artifact content; repeated paths reuse the same digest. Capture bounded command output, runtime observations, review notes, or production evidence into that file, then hash the exact file. A matching digest proves existence and integrity, not that the artifact semantically proves the claim.
 
 Do not infer blockers by searching prose for `P1` or similar labels. Markdown remains the human-readable progress record; the JSON sidecar is the completion-decision contract. When SessionStart finds an existing unfinished ledger, it binds that ledger to the session and records observed standard instruction/config digests under the user-level project `sessions/` directory. This does not prove the exact loaded instruction chain, native skill activation, reference activation, or compliance. A ledger created after SessionStart still requires the explicit validator in the first session.
 
@@ -160,6 +166,8 @@ Execute one task at a time. Update the ledger after every task state change. Use
 Before entering Act for a task whose conditional preflight applies, confirm the required model, evidence, blocking decisions, and any gate-specific baseline/budget are recorded in the plan or ledger. If the preflight is incomplete or current evidence invalidates it, return to Map & Decompose and update the durable artifacts instead of implementing against stale assumptions.
 
 Subagent findings are leads, not verification evidence. Before marking any task `done_verified`, the main agent must directly verify referenced files, commands, logs, diffs, runtime state, or artifacts and record that direct evidence in the ledger.
+
+When a cross-boundary architecture or async-mutation preflight applies, final review must use a fresh reviewer that did not design or implement the change. Give it the raw task, diff, transition artifacts, and repository paths without the expected answer. The reviewer must reconstruct at least one failure timeline from producer to downstream consumer. Independent review expands coverage but never substitutes for composed transition tests, and the main agent must still verify every accepted finding.
 
 Before running any irreversible or high-blast-radius step, confirm the rollback/recovery path exists in the plan or ledger and apply the global destructive-operation confirmation boundary; do not rely on post-run verification to invent the rollback path.
 
@@ -177,7 +185,7 @@ Requirement | Evidence | Status
 
 For irreversible or high-blast-radius steps, include rollback or recovery path evidence before claiming completion.
 
-Before changing `project_status` to `complete`, update the structured completion contract and run the deployed `validate-project-ledger.mjs --ledger <ledger path>` entrypoint. Completion requires zero contract errors, unique item ids, zero blocking findings, zero missing required evidence, and zero open applicable preflights. The Stop hook rechecks the exact ledger bound when the session started and can request one continuation; this is bounded runtime enforcement, not an unbypassable proof that the model followed every rule.
+Before changing `project_status` to `complete`, update the structured completion contract and run the deployed `validate-project-ledger.mjs --ledger <ledger path> --require-evidence-policy` entrypoint. Completion requires zero contract errors, unique item ids, zero blocking findings, zero missing required evidence, and zero open applicable preflights. The Stop hook rechecks the exact ledger bound when the session started, or any ledger created／completed after the recorded session baseline, and can request one continuation; this is bounded runtime enforcement, not an unbypassable proof that the model followed every rule.
 
 ### 6. Handoff / Resume Contract
 

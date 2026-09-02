@@ -1,8 +1,50 @@
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 const VALID_STATUSES = new Set(["active", "blocked", "pending", "in_progress", "complete", "archived"]);
+export const MAX_COMPLETION_CONTRACT_BYTES = 1024 * 1024;
+
+export async function readBoundedRegularFile(
+  filePath,
+  { maxBytes = MAX_COMPLETION_CONTRACT_BYTES, label = "file" } = {},
+) {
+  const initialStat = await fs.lstat(filePath);
+  if (!initialStat.isFile() || initialStat.isSymbolicLink()) {
+    throw new Error(`${label} must be a regular, non-symlink file`);
+  }
+  if (initialStat.size > maxBytes) {
+    throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
+  }
+
+  const noFollow = Number.isInteger(fsConstants.O_NOFOLLOW) ? fsConstants.O_NOFOLLOW : 0;
+  const handle = await fs.open(filePath, fsConstants.O_RDONLY | fsConstants.O_NONBLOCK | noFollow);
+  try {
+    const openedStat = await handle.stat();
+    if (!openedStat.isFile()) {
+      throw new Error(`${label} must be a regular, non-symlink file`);
+    }
+    if (openedStat.size > maxBytes) {
+      throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
+    }
+
+    const chunks = [];
+    let totalBytes = 0;
+    while (true) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1 - totalBytes));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      totalBytes += bytesRead;
+      if (totalBytes > maxBytes) {
+        throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, totalBytes);
+  } finally {
+    await handle.close();
+  }
+}
 
 export async function readHookInput() {
   const chunks = [];

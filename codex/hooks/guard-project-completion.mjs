@@ -1,6 +1,12 @@
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { findMatchingLedgers, projectDirectoryFor, readHookInput } from "./project-ledger-lib.mjs";
+import {
+  findMatchingLedgers,
+  projectDirectoryFor,
+  readBoundedRegularFile,
+  readHookInput,
+} from "./project-ledger-lib.mjs";
 import { evaluateLedgerCompletion } from "./validate-project-ledger.mjs";
 
 function continueTurn(systemMessage = null) {
@@ -8,6 +14,15 @@ function continueTurn(systemMessage = null) {
     continue: true,
     ...(systemMessage ? { systemMessage } : {}),
   }));
+}
+
+async function digestFile(filePath) {
+  if (!filePath) return null;
+  try {
+    return createHash("sha256").update(await readBoundedRegularFile(filePath)).digest("hex");
+  } catch {
+    return null;
+  }
 }
 
 async function main() {
@@ -40,29 +55,62 @@ async function main() {
     || [...(Array.isArray(provenance.events) ? provenance.events : [])]
       .reverse()
       .find((event) => event?.ledgerPath)?.ledgerPath;
-  const ledger = boundLedgerPath
+  const boundLedger = boundLedgerPath
     ? ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(boundLedgerPath))
     : null;
-  if (boundLedgerPath && !ledger) {
-    continueTurn(`Project completion guard could not resolve the session-bound ledger: ${boundLedgerPath}`);
-    return;
-  }
-  if (!ledger || ledger.status !== "complete" || !ledger.completionContract) {
-    continueTurn();
+  const missingBoundLedgerMessage = boundLedgerPath && !boundLedger
+    ? `Project completion guard could not resolve the session-bound ledger: ${boundLedgerPath}`
+    : null;
+  const baseline = new Map(
+    (Array.isArray(provenance.baselineLedgers) ? provenance.baselineLedgers : [])
+      .filter((item) => item?.filePath)
+      .map((item) => [path.resolve(item.filePath), item]),
+  );
+  const changedCompleteLedgers = (await Promise.all(ledgers.map(async (candidate) => {
+    if (candidate.status !== "complete") return false;
+    const previous = baseline.get(path.resolve(candidate.filePath));
+    if (!previous || previous.status !== "complete" || previous.updatedAt !== candidate.updatedAt) {
+      return candidate;
+    }
+    const contentSha256 = createHash("sha256").update(candidate.content).digest("hex");
+    if (previous.contentSha256 !== contentSha256) return candidate;
+    const completionContractSha256 = await digestFile(candidate.completionContract);
+    return previous.completionContractSha256 !== completionContractSha256 ? candidate : null;
+  }))).filter(Boolean);
+  const ledgersToEvaluate = [
+    ...new Map(
+      [boundLedger, ...changedCompleteLedgers]
+        .filter(Boolean)
+        .map((candidate) => [path.resolve(candidate.filePath), candidate]),
+    ).values(),
+  ];
+  if (ledgersToEvaluate.length === 0) {
+    continueTurn(missingBoundLedgerMessage);
     return;
   }
 
-  const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot);
-  if (result.errors.length === 0 && result.blockers.length === 0) {
-    continueTurn();
+  const invalidLedgers = [];
+  for (const ledger of ledgersToEvaluate) {
+    if (ledger.status !== "complete") continue;
+    const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, { requireEvidencePolicy: true });
+    if (result.errors.length === 0 && result.blockers.length === 0) continue;
+
+    const details = [...result.errors, ...result.blockers].slice(0, 6).join("; ");
+    invalidLedgers.push({ filePath: ledger.filePath, details });
+  }
+
+  if (invalidLedgers.length > 0) {
+    const summary = invalidLedgers
+      .map(({ filePath, details }) => `${filePath}: ${details}`)
+      .join(" | ");
+    process.stdout.write(JSON.stringify({
+      decision: "block",
+      reason: `${invalidLedgers.length} project ledger(s) were marked complete without satisfying their structured completion contracts: ${summary}. Restore project_status to active or resolve/waive the recorded items with evidence.`,
+    }));
     return;
   }
 
-  const details = [...result.errors, ...result.blockers].slice(0, 6).join("; ");
-  process.stdout.write(JSON.stringify({
-    decision: "block",
-    reason: `Project ledger ${ledger.filePath} was marked complete but its structured completion contract is not satisfied: ${details}. Restore project_status to active or resolve/waive the recorded items with evidence.`,
-  }));
+  continueTurn(missingBoundLedgerMessage);
 }
 
 main().catch((error) => {
