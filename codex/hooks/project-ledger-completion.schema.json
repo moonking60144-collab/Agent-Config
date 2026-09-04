@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "ledgerPath", "findings", "requiredEvidence", "preflights"],
   "properties": {
-    "schemaVersion": { "enum": [1, 2] },
+    "schemaVersion": { "enum": [1, 2, 3] },
     "evidencePolicyVersion": { "const": 1 },
     "ledgerPath": { "type": "string", "minLength": 1 },
     "findings": {
@@ -60,6 +60,39 @@
           "owner": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 },
           "evidence": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "remoteChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicable", "status", "checks"],
+      "properties": {
+        "applicable": { "type": "boolean" },
+        "provider": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "revision": { "type": "string", "minLength": 40 },
+        "policySource": { "type": "string", "minLength": 1 },
+        "policyFingerprint": { "type": "string", "minLength": 64 },
+        "status": { "enum": ["not_applicable", "pending", "passed", "failed", "unknown"] },
+        "checkedAt": { "type": "string", "minLength": 1 },
+        "evidenceUrl": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "checks": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "required", "status"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "required": { "type": "boolean" },
+              "status": { "enum": ["pending", "passed", "failed", "unknown"] },
+              "evidenceUrl": { "type": "string", "minLength": 1 }
+            }
+          }
         }
       }
     }

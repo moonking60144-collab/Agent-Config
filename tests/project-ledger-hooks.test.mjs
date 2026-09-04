@@ -1435,3 +1435,108 @@ test("Stop hook still evaluates late ledgers when the session-bound ledger disap
   assert.equal(result.decision, "block");
   assert.match(result.reason, /late-after-removal\.md/);
 });
+
+function remoteCompletionContract(ledgerPath, remoteChecks) {
+  return {
+    schemaVersion: 3,
+    evidencePolicyVersion: 1,
+    ledgerPath,
+    findings: [],
+    requiredEvidence: [{
+      id: "local-behavior",
+      status: "present",
+      claim: "local candidate behavior is verified",
+      claimScope: "local",
+      evidenceClass: "unit",
+      artifactBase: "repo",
+      artifact: "evidence/local.txt",
+      artifactSha256: "0".repeat(64),
+    }],
+    preflights: [],
+    remoteChecks,
+  };
+}
+
+function applicableRemoteChecks(overrides = {}) {
+  return {
+    applicable: true,
+    provider: "github-actions",
+    repository: "example/project",
+    ref: "refs/heads/main",
+    revision: "a".repeat(40),
+    policySource: "github-ruleset",
+    status: "pending",
+    checkedAt: "2026-09-04T10:00:00+08:00",
+    checks: [],
+    ...overrides,
+  };
+}
+
+test("remote completion blocks pending, failed, and unknown states", () => {
+  const ledgerPath = "/tmp/remote-blocked.md";
+  for (const remoteChecks of [
+    applicableRemoteChecks(),
+    applicableRemoteChecks({
+      status: "failed",
+      evidenceUrl: "https://example.test/actions/failed",
+      checks: [{ name: "Frontend", required: true, status: "failed" }],
+    }),
+    applicableRemoteChecks({ status: "unknown", reason: "required-check policy unavailable" }),
+  ]) {
+    const result = validateCompletionContract(
+      remoteCompletionContract(ledgerPath, remoteChecks),
+      ledgerPath,
+      { requireRemoteChecks: true, currentRevision: "a".repeat(40) },
+    );
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.blockers.length, 1);
+  }
+});
+
+test("remote completion accepts passed required checks for the exact revision", () => {
+  const ledgerPath = "/tmp/remote-passed.md";
+  const result = validateCompletionContract(
+    remoteCompletionContract(ledgerPath, applicableRemoteChecks({
+      status: "passed",
+      evidenceUrl: "https://example.test/actions/passed",
+      checks: [
+        { name: "Backend", required: true, status: "passed" },
+        { name: "Frontend", required: true, status: "passed" },
+        { name: "Optional", required: false, status: "failed" },
+      ],
+    })),
+    ledgerPath,
+    { requireRemoteChecks: true, currentRevision: "a".repeat(40) },
+  );
+  assert.deepEqual(result, { errors: [], blockers: [] });
+});
+
+test("remote completion invalidates passed evidence from a stale revision", () => {
+  const ledgerPath = "/tmp/remote-stale.md";
+  const result = validateCompletionContract(
+    remoteCompletionContract(ledgerPath, applicableRemoteChecks({
+      status: "passed",
+      evidenceUrl: "https://example.test/actions/passed",
+      checks: [{ name: "Frontend", required: true, status: "passed" }],
+    })),
+    ledgerPath,
+    { requireRemoteChecks: true, currentRevision: "b".repeat(40) },
+  );
+  assert.deepEqual(result.errors, []);
+  assert.match(result.blockers.join("\n"), /is stale/);
+});
+
+test("remote completion allows evidenced not-applicable policy", () => {
+  const ledgerPath = "/tmp/remote-not-applicable.md";
+  const result = validateCompletionContract(
+    remoteCompletionContract(ledgerPath, {
+      applicable: false,
+      status: "not_applicable",
+      reason: "repository has no applicable remote validation policy",
+      checks: [],
+    }),
+    ledgerPath,
+    { requireRemoteChecks: true, currentRevision: "a".repeat(40) },
+  );
+  assert.deepEqual(result, { errors: [], blockers: [] });
+});

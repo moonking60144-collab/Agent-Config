@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,7 @@ import {
 const EXCEPTION_STATUSES = new Set(["accepted_risk", "deferred", "out_of_scope", "blocked_external"]);
 const MAX_EVIDENCE_ARTIFACT_BYTES = 5 * 1024 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const GIT_REVISION_PATTERN = /^[a-f0-9]{40,64}$/;
 const COMPLETION_SCHEMA = JSON.parse(
   readFileSync(new URL("./project-ledger-completion.schema.json", import.meta.url), "utf8"),
 );
@@ -79,15 +81,128 @@ function validateUniqueIds(items, prefix, errors) {
   });
 }
 
+function inspectGitContext(scopeRoot) {
+  const head = spawnSync("git", ["-C", scopeRoot, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (head.error || head.status !== 0) return { hasRemote: false, currentRevision: null, error: null };
+
+  const remotes = spawnSync("git", ["-C", scopeRoot, "remote"], {
+    encoding: "utf8",
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (remotes.error || remotes.status !== 0) {
+    return {
+      hasRemote: true,
+      currentRevision: head.stdout.trim().toLowerCase(),
+      error: `cannot inspect git remotes: ${(remotes.stderr || remotes.error?.message || "unknown error").trim()}`,
+    };
+  }
+
+  return {
+    hasRemote: remotes.stdout.split(/\r?\n/).some((value) => value.trim()),
+    currentRevision: head.stdout.trim().toLowerCase(),
+    error: null,
+  };
+}
+
+function deriveRemoteCheckStatus(checks) {
+  const required = checks.filter((item) => item.required === true);
+  if (required.length === 0) return "unknown";
+  if (required.some((item) => item.status === "failed")) return "failed";
+  if (required.some((item) => item.status === "unknown")) return "unknown";
+  if (required.some((item) => item.status === "pending")) return "pending";
+  return required.every((item) => item.status === "passed") ? "passed" : "unknown";
+}
+
+function validateRemoteChecks(contract, errors, blockers, options) {
+  const remote = contract.remoteChecks;
+  const requiredByPolicy = options.requireRemoteChecks === true || contract.schemaVersion === 3;
+  if (requiredByPolicy && contract.schemaVersion !== 3) {
+    errors.push("remote validation completion requires schemaVersion 3");
+  }
+  if (!remote) {
+    if (requiredByPolicy) errors.push("remoteChecks is required for current completion policy");
+    return;
+  }
+  if (contract.schemaVersion !== 3) {
+    errors.push("remoteChecks requires schemaVersion 3");
+    return;
+  }
+
+  if (remote.applicable === false) {
+    if (remote.status !== "not_applicable") errors.push("remoteChecks.status must be not_applicable when applicable is false");
+    if (!hasText(remote.reason)) errors.push("remoteChecks.reason is required when remote validation is not applicable");
+    if (remote.checks.length > 0) errors.push("remoteChecks.checks must be empty when remote validation is not applicable");
+    return;
+  }
+
+  if (remote.applicable !== true) return;
+  for (const field of ["provider", "repository", "ref", "revision", "policySource", "checkedAt"]) {
+    if (!hasText(remote[field])) errors.push(`remoteChecks.${field} is required when remote validation applies`);
+  }
+  if (hasText(remote.revision) && !GIT_REVISION_PATTERN.test(remote.revision)) {
+    errors.push("remoteChecks.revision must be a lowercase full Git SHA");
+  }
+  if (hasText(remote.policyFingerprint) && !SHA256_PATTERN.test(remote.policyFingerprint)) {
+    errors.push("remoteChecks.policyFingerprint must be a lowercase SHA-256 digest");
+  }
+  if (hasText(remote.checkedAt) && Number.isNaN(Date.parse(remote.checkedAt))) {
+    errors.push("remoteChecks.checkedAt must be an ISO-8601 timestamp");
+  }
+  if (remote.status === "not_applicable") {
+    errors.push("remoteChecks.status cannot be not_applicable when remote validation applies");
+  }
+
+  const names = new Set();
+  remote.checks.forEach((item, index) => {
+    if (names.has(item.name)) errors.push(`remoteChecks.checks[${index}].name duplicates ${JSON.stringify(item.name)}`);
+    names.add(item.name);
+  });
+  const requiredChecks = remote.checks.filter((item) => item.required === true);
+  if (remote.checks.length > 0) {
+    const derived = deriveRemoteCheckStatus(remote.checks);
+    if (remote.status !== derived) {
+      errors.push(`remoteChecks.status ${remote.status} does not match required-check aggregate ${derived}`);
+    }
+  }
+  if (remote.status === "passed") {
+    if (requiredChecks.length === 0) errors.push("remoteChecks passed requires at least one identified required check");
+    if (!hasText(remote.evidenceUrl)) errors.push("remoteChecks.evidenceUrl is required when remote checks passed");
+  }
+  if (remote.status === "failed") {
+    if (!requiredChecks.some((item) => item.status === "failed")) {
+      errors.push("remoteChecks failed requires an identified failed required check");
+    }
+    if (!hasText(remote.evidenceUrl)) errors.push("remoteChecks.evidenceUrl is required when remote checks failed");
+  }
+  if (remote.status === "unknown" && !hasText(remote.reason)) {
+    errors.push("remoteChecks.reason is required when remote-check state is unknown");
+  }
+  if (
+    hasText(options.currentRevision) &&
+    hasText(remote.revision) &&
+    remote.revision !== options.currentRevision.toLowerCase()
+  ) {
+    blockers.push(`remote checks revision ${remote.revision} is stale; current revision is ${options.currentRevision.toLowerCase()}`);
+  }
+  if (["pending", "failed", "unknown"].includes(remote.status)) {
+    blockers.push(`remote checks for revision ${remote.revision || "unknown"} are ${remote.status}`);
+  }
+}
+
 function validateEvidencePolicy(contract, errors, { requireEvidencePolicy = false } = {}) {
   const usesEvidencePolicyFields = contract.requiredEvidence.some((item) =>
     ["claim", "claimScope", "evidenceClass", "artifactBase", "artifactSha256"].some((field) => Object.hasOwn(item, field))
   );
-  if (requireEvidencePolicy && contract.schemaVersion !== 2) {
-    errors.push("current Stop completion requires schemaVersion 2 evidence contract");
+  if (requireEvidencePolicy && contract.schemaVersion < 2) {
+    errors.push("current Stop completion requires schemaVersion 2 or newer evidence contract");
     return;
   }
-  const policyApplies = contract.schemaVersion === 2 || contract.evidencePolicyVersion === 1 || usesEvidencePolicyFields;
+  const policyApplies = contract.schemaVersion >= 2 || contract.evidencePolicyVersion === 1 || usesEvidencePolicyFields;
   if (!policyApplies) return;
   if (contract.evidencePolicyVersion !== 1) {
     errors.push("evidencePolicyVersion must be 1 when evidence policy fields are present");
@@ -174,6 +289,7 @@ export function validateCompletionContract(contract, expectedLedgerPath, options
   validateUniqueIds(contract.requiredEvidence, "requiredEvidence", errors);
   validateUniqueIds(contract.preflights, "preflights", errors);
   validateEvidencePolicy(contract, errors, options);
+  validateRemoteChecks(contract, errors, blockers, options);
 
   if (Array.isArray(contract.findings)) {
     contract.findings.forEach((finding, index) => {
@@ -225,7 +341,7 @@ const MAX_EVIDENCE_MANIFEST_ITEMS = 128;
 const MAX_EVIDENCE_MANIFEST_BYTES = 16 * 1024 * 1024;
 
 async function verifyEvidenceArtifacts(contract, contractPath, scopeRoot) {
-  if (contract.schemaVersion !== 2) return [];
+  if (contract.schemaVersion < 2) return [];
   const errors = [];
   if (contract.requiredEvidence.length > MAX_EVIDENCE_MANIFEST_ITEMS) {
     return [`requiredEvidence exceeds the ${MAX_EVIDENCE_MANIFEST_ITEMS}-item manifest limit`];
@@ -330,7 +446,7 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
   } catch (error) {
     return { errors: [`cannot read completion contract: ${error.message}`], blockers: [], ledger };
   }
-  if (contract.schemaVersion === 2) {
+  if (contract.schemaVersion >= 2) {
     if (!isExpectedSibling) {
       return {
         errors: [`schemaVersion 2 completion_contract must be the sibling sidecar ${expectedContractPath}`],
@@ -340,7 +456,13 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
       };
     }
   }
-  const result = validateCompletionContract(contract, ledger.filePath, options);
+  const gitContext = inspectGitContext(resolvedScopeRoot);
+  const result = validateCompletionContract(contract, ledger.filePath, {
+    ...options,
+    requireRemoteChecks: options.requireEvidencePolicy === true && gitContext.hasRemote,
+    currentRevision: gitContext.currentRevision,
+  });
+  if (gitContext.error) result.errors.push(gitContext.error);
   if (result.errors.length === 0) {
     result.errors.push(...await verifyEvidenceArtifacts(contract, ledger.completionContract, resolvedScopeRoot));
   }

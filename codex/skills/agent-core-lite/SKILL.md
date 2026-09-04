@@ -61,11 +61,13 @@ Use subagents when they are expected to improve coverage, reduce main-context pr
 
 Verify the real source of truth for the task, not the easiest proxy. Code changes normally need the relevant lint/build/test or a stated reason if not run. Config changes need the active consumer or a clear reload/restart boundary. Review findings need a reachable trigger chain. Do not mark work complete with missing files, failed tests, stale state, or indirect evidence.
 
+Commit, push, and remote validation are separate evidence states. When an authorized push targets a repository with applicable remote CI or required checks, push success proves only that the remote ref was updated. Do not claim the change complete until the checks for the exact pushed revision pass. If they are pending, failed, unknown, or not being awaited, report that state explicitly and keep the work unfinished.
+
 If any conditional preflight reference applied, verify the final change against its preflight model and collect evidence appropriate to the claim. Tests and builds do not substitute for architecture/concurrency, async-mutation convergence, or representative interaction-performance runtime evidence.
 
 ### Report
 
-Report changed files/settings, verification evidence, residual risk, and required reload/restart/push steps. Keep it concise. If no edit was made, say what was inspected and what conclusion follows.
+Report changed files/settings, verification evidence, residual risk, and required reload/restart/push steps. After a push with applicable remote validation, distinguish `push complete` from `remote checks passed` and identify the exact revision and evidence URL when available. Keep it concise. If no edit was made, say what was inspected and what conclusion follows.
 
 ## Gates
 
@@ -82,7 +84,7 @@ These gates are blocking. If a gate is not satisfied, do not proceed as if it is
 | Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
 | Config gate | The actual consumer is identified before saying a config change worked |
 | Failure gate | After two similar failures, switch to `agent-failure-debugging` |
-| Completion gate | Every explicit requirement has direct evidence or a stated remaining gap; otherwise do not claim completion |
+| Completion gate | Every explicit requirement has direct evidence or a stated remaining gap; after an applicable push, remote checks for the exact current revision have passed; otherwise do not claim completion |
 
 ## Quality Gates
 
