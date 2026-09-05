@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { validateCompletionContract } from "../codex/hooks/validate-project-ledger.mjs";
+import { attachVerification } from "./fixtures/verification-receipt.mjs";
+import { runPlan } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const guardPath = path.join(repoRoot, "codex", "hooks", "guard-project-completion.mjs");
@@ -722,6 +724,7 @@ test("Stop hook accepts schema-v2 evidence only when artifact digests match", as
     preflights: [{ id: "async-mutation-convergence", scope: "cross-boundary", status: "resolved" }],
   }));
 
+  await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
     session_id: "strict-completion-session",
@@ -1019,6 +1022,7 @@ test("Stop hook accepts legal relative names that only begin with dot-dot or til
     preflights: [],
   }));
 
+  await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
     session_id: "legal-prefixes-session",
@@ -1155,6 +1159,7 @@ test("Stop hook caches repeated artifact digests within the bounded manifest", a
     preflights: [],
   }));
 
+  await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
     session_id: "cached-evidence-session",
@@ -1337,6 +1342,7 @@ test("schema-v2 Stop accepts contract-relative evidence beside the ledger", asyn
     preflights: [],
   }));
 
+  await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
     session_id: "contract-relative-session",
@@ -1470,6 +1476,165 @@ function applicableRemoteChecks(overrides = {}) {
     checks: [],
     ...overrides,
   };
+}
+
+test("Stop schema v3 preserves evidence integrity and preflight scope requirements", async (t) => {
+  const { home, repo, ledgerDir } = await fixture(t);
+  const ledgerPath = path.join(ledgerDir, "v3-integrity.md");
+  const contractPath = path.join(ledgerDir, "v3-integrity.completion.json");
+  const ledgerText = (status) => `project_status: ${status}\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`;
+  await fs.mkdir(path.join(repo, "evidence"));
+  await fs.writeFile(path.join(repo, "evidence", "local.txt"), "verified behavior\n");
+  const contract = remoteCompletionContract(ledgerPath, {
+    applicable: false, status: "not_applicable", reason: "local fixture without remote checks", checks: [],
+  });
+  contract.requiredEvidence[0].artifactSha256 = sha256("verified behavior\n");
+  contract.preflights.push({ id: "local-change", scope: "local", status: "resolved" });
+  await fs.writeFile(ledgerPath, ledgerText("active"));
+  await fs.writeFile(contractPath, JSON.stringify(contract));
+  contract.verification = await attachVerification(repo, contractPath);
+  contract.requiredEvidence[0].verificationChecks = ["fixture-marker"];
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "v3-integrity", hook_event_name: "SessionStart" });
+  await fs.writeFile(ledgerPath, ledgerText("complete"));
+  const input = { cwd: repo, session_id: "v3-integrity", hook_event_name: "Stop", stop_hook_active: false };
+  assert.deepEqual(runHook(guardPath, repo, home, input), { continue: true });
+
+  for (const [field, mutate] of [
+    ["artifactBase", (value) => { delete value.requiredEvidence[0].artifactBase; }],
+    ["artifactSha256", (value) => { delete value.requiredEvidence[0].artifactSha256; }],
+    ["artifactSha256", (value) => { value.requiredEvidence[0].artifactSha256 = "invalid-digest"; }],
+    ["scope", (value) => { delete value.preflights[0].scope; }],
+    ["artifact cannot be verified", (value) => { value.requiredEvidence[0].artifact = "missing.txt"; }],
+  ]) {
+    const invalid = structuredClone(contract);
+    mutate(invalid);
+    await fs.writeFile(contractPath, JSON.stringify(invalid));
+    const result = runHook(guardPath, repo, home, input);
+    assert.equal(result.decision, "block", field);
+    assert.ok(result.reason.includes(field), result.reason);
+  }
+});
+
+test("Stop rejects null completion sidecars without escaping contract validation", async (t) => {
+  const { home, repo, ledgerDir } = await fixture(t);
+  const ledgerPath = path.join(ledgerDir, "null-contract.md");
+  const contractPath = path.join(ledgerDir, "null-contract.completion.json");
+  await fs.writeFile(ledgerPath, `project_status: active\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "null-contract", hook_event_name: "SessionStart" });
+  await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
+  for (const value of [null, [], "invalid root"]) {
+    await fs.writeFile(contractPath, JSON.stringify(value));
+    const result = runHook(guardPath, repo, home, { cwd: repo, session_id: "null-contract", hook_event_name: "Stop" });
+    assert.equal(result.decision, "block", JSON.stringify(result));
+    assert.match(result.reason, /completion contract must be object/);
+  }
+});
+
+for (const version of [2, 3]) {
+  test(`Stop v${version} consumes the shared verification receipt and rejects stale or relabeled proof`, async (t) => {
+    const { home, repo, ledgerDir } = await fixture(t);
+    const ledgerPath = path.join(ledgerDir, "verified.md");
+    const contractPath = path.join(ledgerDir, "verified.completion.json");
+    await fs.mkdir(path.join(repo, "evidence"));
+    await fs.writeFile(path.join(repo, "evidence", "local.txt"), "behavior\n");
+    const contract = remoteCompletionContract(ledgerPath, { applicable: false, status: "not_applicable", reason: "fixture", checks: [] });
+    contract.schemaVersion = version;
+    if (version === 2) delete contract.remoteChecks;
+    contract.requiredEvidence[0].artifactSha256 = sha256("behavior\n");
+    await fs.writeFile(contractPath, JSON.stringify(contract));
+    await fs.writeFile(ledgerPath, `project_status: active\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
+    runHook(provenancePath, repo, home, { cwd: repo, session_id: "verified", hook_event_name: "SessionStart" });
+    await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
+    const input = { cwd: repo, session_id: "verified", hook_event_name: "Stop" };
+    const missingReceipt = runHook(guardPath, repo, home, input);
+    assert.equal(missingReceipt.decision, "block", "VERIFICATION_REQUIRED_GATE");
+    assert.match(missingReceipt.reason, /requires a shared verification receipt/);
+    contract.verification = await attachVerification(repo, contractPath);
+    contract.requiredEvidence[0].verificationChecks = ["fixture-marker"];
+    assert.deepEqual(runHook(guardPath, repo, home, input), { continue: true });
+    const receiptPath = path.join(ledgerDir, contract.verification.artifact);
+    const content = await fs.readFile(receiptPath, "utf8");
+    const staticPlan = JSON.parse(content).plan;
+    staticPlan.checks[0].kind = "static";
+    delete staticPlan.checks[0].challenges;
+    const staticReceipt = await runPlan(staticPlan, repo);
+    assert.equal(staticReceipt.status, "passed");
+    const staticContent = JSON.stringify(staticReceipt);
+    await fs.writeFile(receiptPath, staticContent);
+    contract.verification.artifactSha256 = sha256(staticContent);
+    await fs.writeFile(contractPath, JSON.stringify(contract));
+    assert.match(runHook(guardPath, repo, home, input).reason, /cannot support local behavioral evidence/);
+    await fs.writeFile(receiptPath, '{"version":1,"status":"passed"}');
+    contract.verification.artifactSha256 = sha256('{"version":1,"status":"passed"}');
+    await fs.writeFile(contractPath, JSON.stringify(contract));
+    assert.equal(runHook(guardPath, repo, home, input).decision, "block");
+    await fs.writeFile(receiptPath, content);
+    contract.verification.artifactSha256 = sha256(content);
+    await fs.writeFile(contractPath, JSON.stringify(contract));
+    await fs.appendFile(path.join(repo, "verification-marker.txt"), "changed");
+    assert.match(runHook(guardPath, repo, home, input).reason, /stale/);
+  });
+}
+
+async function verificationSession(t, version, local = false) {
+  const { home, repo, ledgerDir } = await fixture(t);
+  const directory = local ? path.join(repo, ".codex", "ledgers") : ledgerDir;
+  await fs.mkdir(directory, { recursive: true });
+  if (local) await fs.writeFile(path.join(repo, ".gitignore"), ".codex/\n");
+  await fs.mkdir(path.join(repo, "evidence"));
+  await fs.writeFile(path.join(repo, "evidence", "local.txt"), "behavior\n");
+  const ledgerPath = path.join(directory, "source-scope.md");
+  const contractPath = path.join(directory, "source-scope.completion.json");
+  const contract = remoteCompletionContract(ledgerPath, { applicable: false, status: "not_applicable", reason: "fixture", checks: [] });
+  contract.schemaVersion = version;
+  if (version === 2) delete contract.remoteChecks;
+  contract.requiredEvidence[0].artifactSha256 = sha256("behavior\n");
+  await fs.writeFile(contractPath, JSON.stringify(contract));
+  const ledger = (status) => `project_status: ${status}\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`;
+  await fs.writeFile(ledgerPath, ledger("active"));
+  const sessionId = `scope-${version}`;
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: sessionId, hook_event_name: "SessionStart" });
+  return { home, repo, ledgerPath, contractPath, ledger, input: { cwd: repo, session_id: sessionId, hook_event_name: "Stop" } };
+}
+
+for (const version of [2, 3]) {
+  for (const gitMode of ["none", "unborn"]) {
+    test(`Stop v${version} verifies current files without HEAD (${gitMode}) through the real runner CLI`, async (t) => {
+      const { home, repo, ledgerPath, contractPath, ledger, input } = await verificationSession(t, version);
+      if (gitMode === "none") await fs.rmdir(path.join(repo, ".git"));
+      await fs.writeFile(ledgerPath, ledger("complete"));
+      assert.match(runHook(guardPath, repo, home, input).reason, /requires a shared verification receipt/);
+      const reference = await attachVerification(repo, contractPath, { gitMode, useCli: true });
+      const receipt = JSON.parse(await fs.readFile(path.join(path.dirname(contractPath), reference.artifact), "utf8"));
+      assert.equal(receipt.plan.discovery.snapshot.head, null);
+      assert.ok(receipt.plan.discovery.candidates.includes("verification-probe.mjs"));
+      assert.deepEqual(runHook(guardPath, repo, home, input), { continue: true });
+      const cli = spawnSync(process.execPath, [validatorPath, "--ledger", ledgerPath, "--require-evidence-policy", "--require-verification"], { encoding: "utf8" });
+      assert.equal(cli.status, 0, cli.stderr || cli.stdout);
+      await fs.writeFile(path.join(repo, "new-source.mjs"), "export const added = true;\n");
+      assert.match(runHook(guardPath, repo, home, input).reason, /stale/);
+    });
+  }
+
+  for (const gitMode of ["commit", "unborn"]) {
+  test(`Stop v${version} completes ignored repo-local controls without a snapshot cycle (${gitMode})`, async (t) => {
+    const { home, repo, ledgerPath, contractPath, ledger, input } = await verificationSession(t, version, true);
+    await attachVerification(repo, contractPath, { gitMode, useCli: true });
+    await fs.writeFile(ledgerPath, ledger("complete"));
+    assert.deepEqual(runHook(guardPath, repo, home, input), { continue: true });
+    const cli = spawnSync(process.execPath, [validatorPath, "--ledger", ledgerPath, "--require-evidence-policy", "--require-verification"], { encoding: "utf8" });
+    assert.equal(cli.status, 0, cli.stderr || cli.stdout);
+    const before = await fs.readFile(ledgerPath, "utf8");
+    const tracked = spawnSync("git", ["-C", repo, "add", "-f", "--", ledgerPath], { encoding: "utf8" });
+    assert.equal(tracked.status, 0, tracked.stderr);
+    assert.match(runHook(guardPath, repo, home, input).reason, /untracked and Git-ignored/);
+    const runner = path.join(repoRoot, "codex", "skills", "agent-core-lite", "scripts", "verify-change.mjs");
+    const overwrite = spawnSync(process.execPath, [runner, "discover", "--repo", repo, "--output", ledgerPath], { encoding: "utf8" });
+    assert.equal(overwrite.status, 1);
+    assert.match(overwrite.stderr, /untracked and Git-ignored/);
+    assert.equal(await fs.readFile(ledgerPath, "utf8"), before);
+  });
+  }
 }
 
 test("remote completion blocks pending, failed, and unknown states", () => {

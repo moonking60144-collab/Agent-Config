@@ -84,30 +84,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 當任務涉及新 UI、重設計、prototype、從 URL / screenshot / Figma / image 實作，或使用者要你「參考某個產品 / 畫面」時，現在讀取 `references/product-design-integration.md`。
 
-### 先鎖定 design brief
-
-若需求已足夠明確，用 2 到 4 句回放 brief 後直接開始；不要為了流程感重問已提供的資訊。brief 至少要能回答：
-
-- 這是什麼產品、頁面、feature、flow 或 component？
-- 使用者在這裡要完成什麼任務？
-- 視覺來源是現有 codebase、design system、URL、screenshot、Figma、reference image，還是完全新方向？
-- 需要完整可互動、重點互動，還是靜態 prototype？
-- 這次成功標準是探索方向、production UI、faithful recreation，還是 audit / critique？
-
-如果缺少的資訊會改變方向，例如沒有目標畫面、沒有品牌限制、沒有要延續或打掉重來的判斷，先問一個最關鍵問題。若只是內容細節、mock data 或元件狀態，可以自行做合理假設並在交付摘要說明。
-
-### 分清 brief 與 visual target
-
-文字 brief 不是 visual target。只有 screenshot、Figma frame、live URL 實際截圖、既有 app render、使用者選定的 mock / image，才是 visual target。
-
-- 沒有 visual target 的全新產品或大改版：先提出 2 到 3 個明確 visual direction，等使用者選方向後再 build。
-- 已有 codebase / design system 的 production screen：可把既有系統當 visual source，直接延續並精煉。
-- URL / screenshot / image-to-code：先 capture / inspect source，再寫 code，不從記憶或猜測 CSS 開始。
-
-### Audit 與 QA 不混用
-
-- 使用者要求 review、audit、critique、inspect、evaluate 畫面或 flow：輸出 evidence-based findings，引用 screenshot / step / state。
-- 你實作完 UI 後交付前檢查：做 design QA，對照 source visual target、implementation screenshot、viewport、state、互動與 responsive。
+以 product-design-integration reference 為 brief、visual target 與 audit/QA 邊界的單一來源。既有資訊足夠就開始；需求會改變方向才釐清。新視覺方向、既有 design system 延續及 source-to-code 任務依該 reference 選擇，不另維護一份同義清單。
 
 ---
 
@@ -371,27 +348,9 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ## Phase 4.5 - Evidence-Based Design QA
 
-交付前要以最小可行成本驗證真實畫面。大型 UI、prototype、image-to-code、URL-to-code、landing page、dashboard、responsive 改版都要開本機頁面或實際檔案檢查；不能只看原始碼就說完成。
+交付前依 `references/product-design-integration.md` 的 Design QA Gate 比較真實畫面與 visual target，保留相同 viewport/theme/state/content 的視覺與互動證據。裝置特有情境用 responsive checklist。
 
-### 必查項目
-
-- 桌機與行動 viewport 都能正常閱讀與操作；必要時加 tablet
-- 文字不重疊、不被截斷、不溢出 button / card / nav / table
-- 主 CTA、表單、tab、modal、drawer、filter、menu 等可見 controls 有互動
-- Loading、empty、error、disabled、focus state 不破版
-- 圖片與 icon 沒有 placeholder、拉伸、模糊、透明毛邊或比例錯誤
-- 字體、spacing、color token、radius、shadow 與 chosen visual direction 一致
-- 前台文案沒有出現 agent 自己的設計策略說明
-
-### Fidelity 任務的額外門檻
-
-若任務是依照 URL、screenshot、Figma、mockup 或 selected image 實作：
-
-- source visual target 與 implementation screenshot 要是同一 viewport、theme、state、內容密度
-- 對照 typography、layout、color、asset、copy、interaction state
-- P0/P1/P2 等級問題修完再交付；P3 polish 可列為後續建議
-
-如果環境限制導致無法截圖或無法開頁，要明確回報限制與替代檢查，不把未驗證說成已驗證。
+功能／caller／反例敏感度與效能量測統一依 Lite 的 [verification contract](../agent-core-lite/references/verification.md)。效能風險成立時才讀 interaction-performance reference；視覺通過不能代替效能或行為證據。無法執行的畫面／互動保持 unverified。
 
 ---
 

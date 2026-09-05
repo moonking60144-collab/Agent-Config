@@ -41,6 +41,7 @@
           "artifact": { "type": "string", "minLength": 1 },
           "artifactBase": { "enum": ["repo", "contract"] },
           "artifactSha256": { "type": "string", "minLength": 64 },
+          "verificationChecks": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1 } },
           "owner": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 },
           "evidence": { "type": "array", "items": { "type": "string", "minLength": 1 } }
@@ -61,6 +62,16 @@
           "reason": { "type": "string", "minLength": 1 },
           "evidence": { "type": "array", "items": { "type": "string", "minLength": 1 } }
         }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactBase", "artifact", "artifactSha256"],
+      "properties": {
+        "artifactBase": { "enum": ["repo", "contract"] },
+        "artifact": { "type": "string", "minLength": 1 },
+        "artifactSha256": { "type": "string", "minLength": 64 }
       }
     },
     "remoteChecks": {

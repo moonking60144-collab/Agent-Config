@@ -1,147 +1,58 @@
 ---
 name: agent-core-lite
-description: "Use for ordinary cross-file or 3+ step implementation, config/runtime drift, sync/deploy/commit/push, and work needing architecture, async-mutation, or interaction-performance preflight. Do not use for pure read-only review, a repeated failure that needs agent-failure-debugging, or project-grade work requiring a durable ledger."
+description: "Use for ordinary cross-file or 3+ step implementation, config/runtime drift, sync/deploy/commit/push, and evidence-driven verification. Keeps execution ownership while selecting applicable domain contracts. Do not use for pure read-only review or work requiring a durable Project ledger."
 ---
 
 # Agent Core Lite
 
-## Trigger Rule
+Own a bounded implementation through Observe → Scope → Plan → Act → Verify → Report. Simple questions and single-step edits do not need this process.
 
-Invoke this skill when its frontmatter description matches. If the same failure or hypothesis already appeared twice, route to agent-failure-debugging instead.
+## Ownership
 
-Do not trigger this skill solely because a task involves implementation, refactoring, architecture, data flow, production, or verification. Simple questions and single-file/single-step edits stay on the direct path.
+- Pure read-only review belongs to Review.
+- Requested orientation with missing implementation context belongs to Onboarding. During authorized implementation, perform bounded reconnaissance in Observe and continue the requested deliverable.
+- Repeated failures route to agent-failure-debugging.
+- Escalate to Project only for independently verifiable subsystems, required durable handoff, irreversible/high-blast-radius work, or audit-first implementation with an unknown worklist. File or layer count alone does not justify escalation.
+- Engine and frontend skills supply technical/domain contracts; they do not replace execution ownership, authorization or verification responsibility.
 
-## Iron Law
+## Observe and Scope
 
-```text
-NO COMPLEX ACTION WITHOUT SCOPE, EVIDENCE, AND A STOP CONDITION.
-```
+Read the governing instructions, actual diff, callers, producers, consumers and existing tests. Identify the real source of truth and distinguish repo, active settings, runtime/cache and external state.
 
-No edits before scope. No completion claim without direct evidence. No third blind retry after two similar failures.
+For shared behavior, use the discovery and coverage method in [verification](references/verification.md). A manually completed consumer list is not completeness evidence. Account for discovered candidates and unresolved dynamic paths; mark concrete intentional divergence.
 
-## Internal Routing
+Name the files, behaviors and success criteria before edits. Preserve unrelated working-tree changes. Keep global assets in the Config repo and user-level Codex directories.
 
-Native skill descriptions are the candidate-routing canonical. After invocation, apply the global Native skill routing precedence:
+## Plan
 
-- If this is pure code review or audit, switch to `review`.
-- If this is first contact with an unfamiliar repo or subsystem, switch to `repo-onboarding-audit`.
-- If the same failure, mismatch, or hypothesis has appeared twice, switch to `agent-failure-debugging`.
-- If the task is about a custom runtime, tool loop, retry engine, compactor, transcript, resume, or typed tick context, switch to `agent-core-engine`.
-- If the task exceeds lite scope because it spans 3+ independently verifiable subsystems, cannot fit safely in one context, requires a durable plan/ledger across compaction/resume/handoff, has irreversible or high-blast-radius effects such as schema migration, data backfill, or production deploy, or needs audit-first discovery with an unknown worklist followed by prioritized multi-phase implementation, switch to `agent-core-project`.
+Use update_plan when available for multi-step work; otherwise keep a concise explicit plan in the conversation. Each task delivers independently testable behavior, with setup/config/docs included in the task they support.
 
-## Required Loop
+Read only the relevant design reference before Act:
 
-Use this loop for every triggered task:
+- [Architecture](references/architecture-preflight.md): shared state/contracts, authority, versions, concurrency and ownership.
+- [Async mutation](references/async-mutation-convergence.md): uncertain outcomes and durable settlement/recovery.
+- [Interaction performance](references/interaction-performance.md): high-frequency/high-density UI or shared scheduling resources.
 
-```text
-Observe -> Scope -> Plan -> Act -> Verify -> Report
-```
+Record unresolved design decisions that change the contract; resolve them before implementation. These references supply domain invariants, while verification supplies the evidence method.
 
-### Observe
+## Act
 
-Confirm the active goal, cwd/repo, governing instructions, current surface, available tools, and whether the problem depends on runtime/cache/state outside files. For config/context/token issues, identify the consumer: config, catalog, profile, session snapshot, app-server cache, state DB, log, account/server limit, or UI.
+Follow existing patterns and make scoped edits. Parallelize independent reads; serialize writes, Git and external side effects. Use bounded read-only subagents when they increase coverage, passing raw artifacts rather than expected answers. The main agent integrates findings and owns writes and final verification.
 
-### Scope
+When a hypothesis or action fails twice, stop blind retries and diagnose with one observable reversible check.
 
-State what this turn will touch and what it will not touch. Before edits, name the exact files or setting surfaces expected to change. Global Codex settings stay in `~/.codex` and the config repo; do not place global agent assets inside business repos.
+## Verify
 
-### Plan
+Read [verification](references/verification.md) before defining evidence for a code-changing slice. Use its single discover → oracle/invariant → actual checks → sensitivity/performance → receipt flow.
 
-For 3+ steps, cross-file changes, review sweeps, or commit/push work, use `update_plan`. Each step needs a verifiable completion condition. Keep exactly one step in progress unless a true multi-agent workflow is active.
+The deployed entrypoint is `scripts/verify-change.mjs`. Reuse native tests and traces; the runner binds their actual results to the captured source. Select methods by the invariant rather than applying every technique mechanically. A failed probe, unaccounted consumer, stale source, surviving meaningful challenge, or missing required performance measurement prevents a passed receipt.
 
-When cross-boundary architecture, async mutation convergence, or high-frequency interaction risk applies, read the matching file under references/ before Act: architecture-preflight.md, async-mutation-convergence.md, or interaction-performance.md. Select only the applicable reference; do not fill unrelated checklists.
+Use the same method for Lite and Project. A Lite receipt does not require a Project ledger. Existing repo enforcement remains the primary protection; global instructions do not prove a business invariant.
 
-### Act
+Commit, push and remote validation are separate states. After an authorized push with applicable remote checks, verify the exact revision before claiming completion. Pending/failed/unknown checks remain explicit unfinished work.
 
-Parallelize independent read-only checks. Keep writes, shell mutations, git, MCP side effects, and external calls sequential. Treat unknown tools as write-capable until proven otherwise. Avoid broad file dumps; keep large outputs as paths, summaries, or reproducible commands.
+## Report
 
-Use subagents when they are expected to improve coverage, reduce main-context pressure, or provide independent verification for large codebase scans, review/audit work, adversarial checks, or isolated project tasks. No per-use permission is required for bounded read-only subagent investigation, but the main agent owns scope, synthesis, writes, git actions, external side effects, and final verification.
+State what changed, the evidence that supports it, remaining boundaries and required runtime reload. Reference the receipt for detailed results. Do not replay logs or present tests as broader proof than they provide.
 
-### Verify
-
-Verify the real source of truth for the task, not the easiest proxy. Code changes normally need the relevant lint/build/test or a stated reason if not run. Config changes need the active consumer or a clear reload/restart boundary. Review findings need a reachable trigger chain. Do not mark work complete with missing files, failed tests, stale state, or indirect evidence.
-
-Commit, push, and remote validation are separate evidence states. When an authorized push targets a repository with applicable remote CI or required checks, push success proves only that the remote ref was updated. Do not claim the change complete until the checks for the exact pushed revision pass. If they are pending, failed, unknown, or not being awaited, report that state explicitly and keep the work unfinished.
-
-If any conditional preflight reference applied, verify the final change against its preflight model and collect evidence appropriate to the claim. Tests and builds do not substitute for architecture/concurrency, async-mutation convergence, or representative interaction-performance runtime evidence.
-
-### Report
-
-Report changed files/settings, verification evidence, residual risk, and required reload/restart/push steps. After a push with applicable remote validation, distinguish `push complete` from `remote checks passed` and identify the exact revision and evidence URL when available. Keep it concise. If no edit was made, say what was inspected and what conclusion follows.
-
-## Gates
-
-These gates are blocking. If a gate is not satisfied, do not proceed as if it is.
-
-| Gate | Must be true before proceeding |
-| --- | --- |
-| Scope gate | Target files/settings/surfaces are named before edits |
-| Consumer coverage gate | When shared contract or multi-surface consumer inventory applies, the producer -> contract -> all production consumers inventory is complete and every consumer is marked must-align or intentional-divergence |
-| Architecture preflight gate | When references/architecture-preflight.md applies, canonical state, ownership, authority, version semantics, round-trips, async/cache behavior, and relevant UI lifecycle are resolved with evidence before Act |
-| Async mutation convergence gate | When references/async-mutation-convergence.md applies, the chosen state model minimizes lifecycle surface, every non-terminal state converges, and durable repo enforcement plus production-equivalent evidence are identified; prompt analysis alone does not close the gate |
-| Interaction performance gate | When references/interaction-performance.md applies, representative load, controlled baseline, measurement environment, phase timing, budget, update strategy, complexity, geometry contract, and runtime acceptance are defined before Act |
-| Read-only gate | If the user asked read-only/review/analysis, no writes happen |
-| Evidence gate | Claims are backed by current files, logs, runtime output, official docs, or direct UI behavior |
-| Config gate | The actual consumer is identified before saying a config change worked |
-| Failure gate | After two similar failures, switch to `agent-failure-debugging` |
-| Completion gate | Every explicit requirement has direct evidence or a stated remaining gap; after an applicable push, remote checks for the exact current revision have passed; otherwise do not claim completion |
-
-## Quality Gates
-
-Apply these gates when writing or reviewing code:
-
-- Trace caller -> changed function/module -> downstream consumer before making correctness claims.
-- Prefer project conventions over generic best practice unless there is a concrete risk.
-- Make surgical edits; every changed line must map to the request.
-- Do not add speculative abstractions, unused options, broad defensive wrappers, or style-only churn.
-- Trust documented APIs and local dominant patterns; avoid redundant `typeof`, `getattr`, `isinstance`, broad `try/except`, or existence checks around known contracts.
-- Use structured parsers/APIs for structured data instead of ad hoc string surgery when the project already provides them.
-- Treat SQL injection, XSS, command injection, auth bypass, data loss, migration drift, and source-of-truth conflicts as blocker risks.
-- For frontend work, verify actual rendered/user behavior when the task depends on layout, interaction, accessibility, or browser state.
-- When tests are added, moved, renamed, nested, generated, or selected by custom globs or patterns, verify the intended test is discovered or direct-run it once; an aggregate green exit is not enough.
-- Before changing an external black-box write payload, required field, idempotency rule, or create/update timing, establish a baseline and negative control and protect critical payload behavior with a focused contract test. If live writes are unavailable, use mock or staging evidence and report the live boundary.
-- For external APIs, product limits, versions, specs, legal/financial/medical facts, or latest behavior, use official or primary sources.
-
-## Good / Bad Patterns
-
-| Situation | Good | Bad |
-| --- | --- | --- |
-| Config diagnosis | Identify `config`, `catalog`, `profile`, `session snapshot`, `app cache`, `state DB`, `log`, or server/account limit | Read one TOML value and claim runtime behavior changed |
-| Review scope | Match the user's requested mode: diff review, re-review, or system audit | Check only `git diff` when the user asked for architecture/data-flow audit |
-| Code edits | Touch only files required by the request and local data flow | Opportunistic rename, cleanup, formatting, or abstraction |
-| Tests | Run the smallest relevant command and explain any missing coverage | Treat unrelated green build as proof of user-facing behavior |
-| External facts | Use official/primary sources and cite exact source | Rely on memory, search snippets, or model recall |
-| Large output | Return summary, path, command, and key lines | Paste giant logs into the conversation |
-| Defensive code | Trust known APIs and validate only at real boundaries | Add redundant `typeof`, `getattr`, `isinstance`, broad `try/except`, or existence checks |
-
-## Failure Brake
-
-After the same failure or hypothesis appears twice, stop the original loop and switch to `agent-failure-debugging`. Classify the issue as logic, state, environment, tool, policy, context, or runtime drift. Do not attempt a third blind variation.
-
-## Red Flags
-
-These thoughts mean stop and take the required action:
-
-| Thought | Required action |
-| --- | --- |
-| "This involves implementation, so Lite must apply." | Apply the global Native skill routing boundary; simple single-file/single-step work stays on the direct path |
-| "The config value changed, so behavior must have changed." | Identify and verify the live consumer |
-| "The test/build passed, so the user-facing flow is fine." | Verify the actual user-facing path if behavior depends on UI/runtime |
-| "This is probably a cache issue." | Name the cache/state layer and the reload boundary |
-| "The repo is familiar enough." | Re-check current files before touching a new subsystem |
-| "This review is only a diff." | Confirm the user did not ask for system/audit/data-flow coverage |
-| "The tool output is huge, but I can paste it all back." | Persist or summarize; return path/key lines |
-| "One more retry should work." | If this is the third similar attempt, stop and debug systematically |
-| "I can fill in details later." | Replace placeholders with exact file, command, expected result, or state the gap |
-
-## Before Final Checklist
-
-Run this checklist silently before final response:
-
-- Did I answer the newest user request, not an older thread goal?
-- Did I satisfy every explicit requirement or report the missing evidence?
-- Did I avoid edits when the user asked for read-only/review/analysis?
-- Did I keep changes scoped to requested files/settings?
-- Did I verify the real source of truth, or clearly state why verification was not run?
-- Did I report restart/reload/cache/push boundaries when they affect whether changes take effect?
-- Did I avoid claiming a broad audit from a narrow check?
+Before final delivery: verify the actual diff/status, inspect accepted reviewer findings directly, and confirm every requirement has appropriate evidence or an explicitly unresolved boundary.

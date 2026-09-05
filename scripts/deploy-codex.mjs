@@ -213,9 +213,8 @@ async function deployDirectory(source, target, backupRoot, retention) {
   }
 }
 
-async function deployTopLevelFiles(sourceDirectory, targetDirectory, options = {}) {
-  const journal = [];
-  if (!(await exists(sourceDirectory))) return journal;
+async function deployTopLevelFiles(sourceDirectory, targetDirectory, journal, options = {}) {
+  if (!(await exists(sourceDirectory))) return;
   await mkdir(targetDirectory, { recursive: true });
   const entries = await readdir(sourceDirectory, { withFileTypes: true });
   for (const entry of entries) {
@@ -227,7 +226,6 @@ async function deployTopLevelFiles(sourceDirectory, targetDirectory, options = {
       { backupRoot: options.backupRoot, retention: options.retention }
     ));
   }
-  return journal;
 }
 
 async function rollbackJournal(journal) {
@@ -388,8 +386,8 @@ async function renderConfigTemplate(home) {
         : "bash";
 
   text = text
-    .replaceAll("__SERENA_COMMAND__", serena.replaceAll("\\\\", "/"))
-    .replaceAll("__NPX_COMMAND__", npx.replaceAll("\\\\", "/"))
+    .replaceAll("__SERENA_COMMAND__", serena.split(path.sep).join("/"))
+    .replaceAll("__NPX_COMMAND__", npx.split(path.sep).join("/"))
     .replaceAll("__CODEX_TERMINAL_SHELL__", terminalShell);
 
   if (process.platform === "win32") {
@@ -422,8 +420,8 @@ async function main() {
 
   try {
     journal.push(await deployFile(path.join(sourceRoot, "AGENTS.md"), path.join(codexHome, "AGENTS.md"), { retention: options.backupRetention }));
-    journal.push(...await deployTopLevelFiles(path.join(sourceRoot, "compact-prompts"), path.join(codexHome, "compact-prompts"), { retention: options.backupRetention }));
-    journal.push(...await deployTopLevelFiles(path.join(sourceRoot, "profiles"), codexHome, { extension: ".toml", retention: options.backupRetention }));
+    await deployTopLevelFiles(path.join(sourceRoot, "compact-prompts"), path.join(codexHome, "compact-prompts"), journal, { retention: options.backupRetention });
+    await deployTopLevelFiles(path.join(sourceRoot, "profiles"), codexHome, journal, { extension: ".toml", retention: options.backupRetention });
 
     await moveLegacySkillBackups(skillsTarget, skillBackupRoot);
     await mkdir(skillsTarget, { recursive: true });
@@ -433,14 +431,14 @@ async function main() {
       }
     }
 
-    journal.push(...await deployTopLevelFiles(path.join(sourceRoot, "agents"), path.join(codexHome, "agents"), { extension: ".toml", retention: options.backupRetention }));
-    journal.push(...await deployTopLevelFiles(path.join(sourceRoot, "hooks"), path.join(codexHome, "hooks"), { retention: options.backupRetention }));
+    await deployTopLevelFiles(path.join(sourceRoot, "agents"), path.join(codexHome, "agents"), journal, { extension: ".toml", retention: options.backupRetention });
+    await deployTopLevelFiles(path.join(sourceRoot, "hooks"), path.join(codexHome, "hooks"), journal, { retention: options.backupRetention });
 
     const hooksTemplate = path.join(sourceRoot, "hooks.json");
     if (await exists(hooksTemplate)) {
       journal.push(await deployFile(hooksTemplate, path.join(codexHome, "hooks.json"), {
         retention: options.backupRetention,
-        transform: (value) => value.replaceAll("__CODEX_HOME__", codexHome.replaceAll("\\\\", "/")),
+        transform: (value) => value.replaceAll("__CODEX_HOME__", codexHome.split(path.sep).join("/")),
       }));
     }
 

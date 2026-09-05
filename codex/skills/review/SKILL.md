@@ -1,165 +1,61 @@
 ---
 name: review
-description: "Use for read-only review, audit, inspect, re-review, PR/diff/architecture/integration/security/data-flow/UI evaluation, or requests to list issues. Report findings first and do not implement unless the user explicitly switches from review to modification."
+description: "Use for read-only review, audit, inspection, PR/diff/architecture/integration/security/data-flow/UI evaluation or requests to list issues. Report evidence-backed findings first. Do not implement unless the user authorizes modification."
 ---
 
 # Review
 
-## 核心立場
+採用 issue-first、唯讀立場。找可達 bug、回歸、資料流／部署風險與缺漏證據；不要把風格偏好或無證據推測當 finding。
 
-採取 code-review stance。優先找 bugs、行為回歸、資料流或整合風險、安全問題、缺漏測試、部署風險與可觀察性缺口。不要把摘要、稱讚、風格偏好或可選 refactor 放在 findings 前面。
+## 範圍與方法
 
-預設唯讀。除非使用者明確要求「修」、「改」、「execute」、「implement」、「直接做」，不要修改檔案、不要 stage、不要 commit、不要 push。
+1. 確認模式：uncommitted、branch/PR、system audit、re-review。Uncommitted 看實際 status、staged/unstaged diff 和相關新檔；PR 用 merge-base；system audit 依系統邊界；re-review 只查原 finding 是否消除及修補直接回歸。
+2. 讀 governing instructions 與現有模式，用 rg／symbol graph／test names 索引後追 caller → implementation → downstream。廣義 audit 不得縮成只看 diff。
+3. 從 producer／contract 反查 consumers，包含 sibling/history/detail/admin/不同裝置入口；盤點依據與排除理由依 [verification](../agent-core-lite/references/verification.md)。Agent 自填的完整清單不是 discovery proof。
+4. 以需求與獨立 oracle 判斷行為；看實際輸入、輸出、狀態、I/O、副作用及 guards。共享架構／並發問題讀 architecture-preflight；符合 async 適用條件才讀 async-mutation-convergence；互動效能風險才讀 interaction-performance。
+5. 使用 shared verification contract 評估既有 checks、生成反例、故障敏感度與效能證據。可執行已授權的唯讀測試或隔離 fixtures；不因 Review 自動執行 mutation、部署、formatter --write、migration 或外部寫入。
+6. 分開記錄程式正確性、test discovery、實際 runner 結果、runtime 與未驗證邊界；artifact 存在／hash 正確不代表內容足以支持 claim。
 
-## 審查流程
+## Finding 標準
 
-1. 先確認審查範圍：使用者指定的檔案、diff、branch、PR、功能或錯誤路徑。若範圍不明且會影響方向，先問一個必要問題；若可從 repo 狀態推斷，直接查。
-2. 具體化 scope mode：
-   - Uncommitted review：先看 `git status -sb`、`git diff`、`git diff --cached`，再檢查相關 untracked files。
-   - Branch/PR review：先找 merge-base，再看相對 base 的 diff；使用者給明確命令時照命令。
-   - Audit/system review：以使用者指定的系統邊界、資料流、模組或風險面為 scope，不以 diff 為唯一來源。
-   - Re-review：先驗證原 finding 的觸發條件是否已消除，再檢查修補 diff 直接引入的任何 severity regression；不要擴張成與修補無關的 P3 backlog 或 system audit。
-3. 不要把廣義 audit 降格成 diff review。若使用者要求「掃整個系統」、「找所有 bug」、「flag conflicts」、「inconsistencies」、「system-wide refactor opportunities」、「architecture/integration 全面檢查」或類似語意，預設是 Audit/system review；不能只檢查 uncommitted changes 後宣稱沒有問題。一般「review this refactor」或「看這次 refactor diff」仍是 PR/diff/branch review，除非使用者明確要求系統級重構盤點。若系統邊界過大到無法一次完成，先提出分區掃描計畫或問一個必要問題。
-4. 命令要符合目前 OS 與 shell。先依環境、路徑與使用者語境判斷是 macOS/Linux 的 zsh/bash、Windows PowerShell、CMD、WSL 或 Git Bash；不要在 Windows PowerShell 情境輸出只適用 Bash 的語法，例如 `VAR=value cmd`、`2>/dev/null`、`/tmp/...`、`rm -rf`、`sed/awk` pipeline、process substitution，也不要在 Windows PowerShell 5.1 假設 `cmd1 && cmd2` 可用。若命令需要跨平台交付，優先用 npm scripts、git、Node/Python 小片段或同時列 PowerShell 與 zsh/bash 版本；使用者給明確命令時照命令。
-5. 先索引後讀取。用 `rg`、symbol search、test names、route names 或 diff hunk 先定位高風險區，再讀必要檔案；確認高風險後才擴大到完整檔案或完整 caller/downstream。
-6. 讀專案規範與現有模式。優先看 `AGENTS.md`、相關 README、鄰近實作、測試、呼叫端與 downstream。
-7. 追完整路徑。對每個高風險點，至少追 caller -> changed function/module -> downstream consumer/test/UI/API/storage/deploy effect。
-8. Audit/system review 要先建立風險地圖，再抽查與追路徑。依 scope 搜尋 feature flags/config/env keys、互斥狀態、重複 source of truth、frontend/backend contract、cache/invalidation、event/SSE/watchers、DB/schema/read model、background jobs、test discovery、deployment scripts 與錯誤處理；不能只用 build/lint 綠燈替代系統審查。
-9. 比對使用者意圖與實際行為。確認 edge cases、錯誤處理、快取/並發、狀態同步、資料格式、權限、安全邊界與部署環境。
-10. 能實測就實測，但維持唯讀邊界。可跑 test/build/typecheck/lint；不要跑 formatter `--write`、lint `--fix`、codegen、migration、會改資料的腳本或外部系統寫入。若測試產生檔案或快取，在驗證結果中註明。
-11. 測試先精準 scope；若 runner 無法 scope、pattern 被忽略、glob 不含新測試、custom runner 其實跑全測、或 dist/generated/nested tests 沒被 discovery，要明確回報。測試失敗先歸因：PR/diff/branch/re-review 中，確認失敗是確定性、可隔離、且由本次變更造成，再列為 finding；audit/system review 中，可列確定性的既有失敗，但要標成 `既有順帶發現`；flaky、資源搶佔或既有環境問題要標明，不混進變更風險。
-12. 對外部 API、規格、workflow/automation API、版本行為或產品功能的主張，不憑印象；查官方文件或一手來源後再下結論。
-13. 不確定時明確標示不確定點、原因、驗證方式。不要把猜測包裝成 finding。
+每個 finding 必須有：
 
-審查 concurrency、versioning、cache/freshness、observer/mutation ownership 或 restart recovery 時，使用 ../agent-core-lite/references/architecture-preflight.md 的 evidence 與 timeline 邊界；畫不出可達 timeline 的主張只能列 hypothesis。
+- 優先級 P0/P1/P2/P3，精準檔案與行號。
+- 來源：本次引入、既有被放大、既有順帶發現。
+- 驗證：已重現或已追可達路徑；推測另列。
+- 入口 → 狀態／I/O／呼叫鏈 → observable failure；確認 caller guards、feature flags、權限與例外是否已擋住。
+- 影響、證據與最小修正方向。
 
-審查 mutation 時，依 ../agent-core-lite/references/async-mutation-convergence.md 的 trigger 與 exemption 判斷；不得只因 optimistic／async／background／external 關鍵字觸發。適用時，non-terminal state 必須有 owner、timeout、restart/resume 與 terminal convergence path。
-When it applies, read ../agent-core-lite/references/async-mutation-convergence.md; review whether the mutation lifecycle can be simplified and whether enforceable invariants live in types, shared modules, composed contract tests, CI, or runtime reconciliation rather than only in instructions.
+P0 是 production/data/security 阻塞；P1 是常見路徑錯誤且無合理 workaround；P2 是 edge case 或有 workaround；P3 是輕微維護問題。兩級間取低級；blast radius 只作同級排序。P0/P1 先嘗試推翻自己的觸發鏈。
 
-## Findings 標準
+Race、torn read、stale write、duplicate side effect、deadlock、supersession 與 recovery 主張必須有可達 timeline；無法構造時只列 hypothesis。測試失敗也要歸因；PR/re-review 不把無關既有環境問題算成本次回歸。
 
-只列可辯護、可重現、會造成實際風險的問題。每個 finding 必須包含：
+PR/branch 只列本次引入與既有被放大；system audit 可列既有問題並標明。合併同 root cause，不湊 finding 數量。
 
-- 嚴重度：`[P0]`、`[P1]`、`[P2]`、`[P3]`，依下方校準。
-- 精準位置：檔案與行號；沒有行號時給出最小可定位的符號、route、component、workflow 或設定 key。
-- 來源：`本次引入`、`既有被放大`、或 `既有順帶發現`。
-- 驗證程度：`已重現` 或 `已追路徑`。`推測` 不進 findings，改列待確認問題或丟掉。
-- 觸發鏈：進入點 -> 狀態/資料流轉 -> 錯誤結果。列不出可達觸發鏈就不要列為 finding；無法證實可達時，改列待確認問題或丟掉；只有「可達但影響程度不確定」時才允許降級。P0/P1 必須先嘗試推翻自己，確認沒有被 guard、feature flag、schema、caller contract、權限或環境條件擋掉。
-- 問題機制：說明機制來自讀到的程式碼、設定、log、測試或文件，不是依常識腦補。
-- 影響：說明實際破壞的使用者行為、資料正確性、安全性、部署或維運結果。
-- 修正方向：簡短指出可行修法或需要補的測試。
+## 證據審核
 
-嚴重度校準：
+[Verification contract](../agent-core-lite/references/verification.md) 是共同方法來源；Review 不擁有另一份 evidence checklist 或 completion implementation。
 
-- `P0`：資料遺失、安全外洩、弄壞 production、或必須擋 merge 的問題。
-- `P1`：常見路徑行為錯，且沒有合理 workaround。
-- `P2`：edge case、低頻路徑、或有合理 workaround。
-- `P3`：輕微問題，不影響行為或只影響維護成本。
-- 兩級之間猶豫時取低一級，並說明為何不是更高級。
-- Blast radius 只作同級排序的 tie-breaker：影響面較大者先列，但不要用它覆寫上面的 P0-P3 定義。
+特別核對：
 
-避免列：
+- Discovery 是否真能找出 diff 未提及的 consumer，動態入口是否有相應 trace／registration 證據。
+- Oracle 是否獨立於受測判斷，生成序列是否可重播，fault 是否真正到達目標 assertion。
+- Helper／unit 是否被冒稱跨邊界 proof；參考相同 producer/wrapper/consumer 的 composed execution。
+- 效能是否有可比較的負載、環境、原始樣本與 budget；功能綠燈不是效能證據。
+- Receipt 與目前 source/test snapshot 是否一致；實際 command、timeout、失敗及未知狀態是否如實呈現。
 
-- 單純個人風格偏好。
-- 沒有證據的「可能會壞」。
-- 沒有行為風險的命名、排版或微重構。
-- 同一 root cause 的重複 findings；合併成一條，列出多個位置。
+## 風險地圖
 
-依 review mode 過濾來源：
+依 task 選取：API/serializer/read model、ownership/authority、auth/secret、state/cache/invalidation、events/retry/recovery、test discovery、deployment/rollback、觀測性、UI lifecycle與高負載互動。不要每個任務機械填完整張地圖，也不要只查 helper 就替系統下結論。
 
-- PR/diff/branch review：只列 `本次引入` 與 `既有被放大`。
-- Audit/system review：可列 `既有順帶發現`，但要明確標記，避免混成必修 PR blocker。
+外部版本/API/產品行為查一手來源。OS、shell、runner 命令沿目前環境。必要時分區審核並寫清楚覆蓋邊界。
 
-若使用者明確要求 refactor、inconsistency、cleanup、architecture smell 或 flag conflict：
+## 子 Agent
 
-- 會造成錯誤行為、資料風險、安全風險或部署風險的，仍列 findings。
-- 不足以構成 finding、但會增加維護風險或讓後續 bug 更容易發生的，列在 `改善建議`，不要硬塞 P3，也不要省略。
-- `改善建議` 需要有具體位置、衝突點與整理方向；不要列個人偏好。
+大型或可分區 review、獨立驗證與對抗檢查可使用 read-only reviewers。傳 raw task/diff/path，不餵 expected finding；主 agent 直接核對所有引用證據。小範圍本地完成即可，工具不可用時用 rg 與分區閱讀。
 
-停止準則：範圍掃完就停；trigger 證明可達即可；不要為湊數繼續挖無關區，也不要因為找到一個問題就停止看同一風險面的直接 downstream。
+## 輸出與停止
 
-## 輸出格式
+Findings 先按嚴重度排列，再說明範圍、證據／測試、殘餘風險與必要的定義改善。沒有 finding 時明確說明已覆蓋的範圍；沒有 runtime 證據不能包裝成完整驗證。只有使用者要求行內 review 時才加 actionable inline comments。
 
-有 finding 時，先列 findings，依嚴重度排序：
-
-```text
-發現問題
-- 3 findings：1xP1、2xP2
-- [P1] path/to/file.ts:123 - 標題
-  來源：本次引入；驗證程度：已重現。
-  觸發鏈：進入點 -> 狀態/資料流轉 -> 錯誤結果。
-  說明機制、影響與修正方向。
-```
-
-接著列：
-
-```text
-審查範圍與覆蓋
-- mode、base/diff 或 audit system boundary。
-- 已索引/抽查/追路徑的區域、關鍵檔案、測試與入口。
-- 未涵蓋區域與原因。Audit/system review 若只看 uncommitted changes，必須明確說「這不是完整 system audit」。
-
-改善建議
-- 只在使用者要求 refactor/inconsistency/cleanup/architecture smell/flag conflict，或審查中看到具體維護風險時列出；若使用者明確要求但沒有具體建議，要寫「沒有發現具體改善建議」。
-
-待確認問題
-- 只列會影響判斷或修法的問題；合理但未證實可達的觸發鏈放這裡，不放 findings。
-
-驗證
-- 已跑的檢查與結果。
-- 未跑的檢查與原因。
-
-摘要
-- 只在最後用 1-3 句補充整體判斷。
-```
-
-沒有 finding 時，直接說「沒有發現需要阻擋的問題」，但仍必須列 `審查範圍與覆蓋`、測試缺口或殘餘風險。若使用者要求 refactor/inconsistency/cleanup/architecture smell/flag conflict，也必須列 `改善建議`；沒有具體建議時明確說沒有。若使用者要求的是 Audit/system review，而實際只檢查 diff、少數檔案或只跑 build/lint，不得用「沒有發現需要阻擋的問題」包裝成完整結論；要明確說明目前只完成哪一段掃描。
-
-## 行內 Comment
-
-若環境支援 inline code comments，且使用者要求行內 review，才對 actionable findings 加行內 comment；不要把摘要、測試缺口、待確認問題或低信心推測寫成行內 comment。
-
-## 常見審查焦點
-
-- Correctness：輸入輸出、邊界條件、資料格式、時間/時區、null/undefined、錯誤分支。
-- Integration：frontend/backend contract、API response shape、DB schema/read model、cache invalidation、事件/SSE/watchers、背景刷新與 stale response。
-- Data ownership：誰是 source of truth、誰是 read model/cache、同步與 invalidation 責任是否清楚。
-- Concurrency：request race、in-flight key、abort/cancel、重試、idempotency、all-or-nothing 行為。
-- Mutation lifecycle：outcome taxonomy、terminal／non-terminal closure、durable intent、authoritative reconciliation、overlay／retry cleanup、restart/resume、idempotent compensation 與 point of no return。
-- Contract proof：actual producer output 是否通過真實 wrapper／classifier／API／consumer；手寫 mock、重複型別或各層獨立 fixture 不構成唯一 integration proof。
-- Security：SQL/XSS/command injection、權限檢查、secret exposure、trusted boundary、server-side validation。
-- Tests：測試是否真的被 test runner discovery、是否覆蓋失敗路徑、是否只測 helper 沒測使用者流程。
-- Deployment：env key、`.env.example`、migration、build package、feature flag、rollback、dirty worktree impact。
-- Observability：錯誤是否被吞掉、log context 是否足夠、metrics/tracing/alert 是否能看出新失敗模式。
-- UI：實際畫面、loading/disabled/error state、background refresh flicker、responsive layout、表單互動與可用性。
-- Performance：高頻事件的 update rate、render／selector complexity、DOM／layout／paint、virtualization、canonical geometry、代表性最大負載與實際瀏覽器 runtime evidence；unit test、lint 與 build 不構成互動效能證據。
-- Domain workflow/API：automation 是否循環觸發、side effect 是否可重入、欄位/資源 ID 是否正確、dry-run/apply 是否共用錯誤路徑、canonical 值是否被 round-trip 破壞。
-
-## 子 Agent 使用
-
-子 agent 由主 agent 依審查範圍與風險自動判斷，不需要等使用者明確說「使用 subagent」，也不需要逐次詢問。不要為了形式感分派；只有分工能提高覆蓋率、降低主 context 壓力、或提供獨立驗證時才使用。
-
-符合下列任一條件時，主 agent 應優先考慮使用子 agent：
-
-- 審查範圍很大，且可切成互不污染的 frontend/backend/security/data-flow 子問題。
-- 需要快速掃描大型 codebase 的多個互不相依區域，且本地單一路徑閱讀會壓縮覆蓋率。
-- 已有 P0/P1 候選 finding，需要第二個獨立 pass 依 `觸發鏈` 欄位標準驗證路徑與機制。
-- 需要對抗式檢查主 agent 的根因假設、payload contract、黑盒 API 行為或高風險寫入邊界。
-- 使用者明確要求多 agent 或獨立交叉審查。
-- 使用者要求完整 system audit、找所有 bug、跨模組 architecture/integration review，且單一 agent 會被 context 或時間壓縮影響覆蓋率。
-
-符合下列任一條件時，不使用子 agent：
-
-- 審查範圍小，直接讀 diff / 少數檔案即可完成。
-- 任務需要立即互動判斷、使用者剛要求先不要發散，或分派會比本地檢查更慢。
-- 沒有可用子 agent 工具；此時回報「子 agent 工具不可用」，並用本地索引、`rg`、分區閱讀替代。
-
-使用子 agent 時，傳 raw artifact、diff、檔案路徑與任務，不傳自己的結論、預期答案或懷疑點。要求子 agent 使用本 skill 做獨立 review，回收結果後再由主 agent 去重、校準嚴重度、直接驗證證據，最後決定是否上報。
-
-## Shared Contract Coverage
-
-當 diff 修改共享 contract、reader、serializer、資料模型、UI default 或互動契約時，套用 global evidence contract 的 shared-consumer inventory。從 producer -> contract 反查所有 production consumers，包含 sibling、history、detail、admin 與不同裝置 surface；不能停在 diff 已出現的 caller。
-
-## 回覆約束
-
-用繁體中文回覆，保留程式碼、CLI、路徑、API 名稱與錯誤原文。檔案位置用 markdown link 或清楚的路徑加行號。CLI 指令要符合使用者目前 OS/shell；若不確定，標明假設或提供 PowerShell 與 zsh/bash 兩版。保持精簡，但 findings 的證據鏈要完整。
+使用者要求 cleanup/inconsistency 或觀察到具體維護衝突時，列有位置及修法的改善建議，與 behavioral findings 分開。範圍查完即停，不擴張與 re-review 無關的 backlog。沒有實作授權時不寫檔、stage、commit、push。

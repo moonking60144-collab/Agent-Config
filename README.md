@@ -125,7 +125,7 @@ config/
 
 #### Codex workflow 架構
 
-目前架構刻意凍結在四層：routing、execution、verification、risk rules。除非真實重複失敗至少 2 次，且會造成檔案、git、設定、外部服務或長任務狀態損害，否則不新增 trace schema、typed ledger schema、MCP/plugin governance matrix、workflow DAG 或完整 agent framework。
+目前架構維持 routing、execution、verification、risk rules 四層。Lite、Project、Review 共用同一份 verification contract；Project 只增加持久進度與完成門檻，不另建測試流程。沒有新增 router、ledger 類型、workflow DAG 或完整 agent framework。
 
 ~~~mermaid
 flowchart TD
@@ -139,8 +139,10 @@ flowchart TD
   H --> I["frontend-ui-designer / other domain skills"]
   F --> J["Conditional preflight references"]
   E --> K["Evidence / findings"]
-  J --> K
-  K --> L["Versioned routing-classifier cases"]
+  J --> V["Shared discovery / oracle / checks / receipt"]
+  V --> K
+  V --> S["Shared completion evaluator: CLI + Stop"]
+  B -.-> L["Routing classifier: classification only"]
 ~~~
 
 Read-only、destructive、升降級與 historical classifier cases 維護在 codex/evals/workflow-routing.cases.jsonl。run-codex-evals.mjs 驗證 schema-constrained routing classification、repeat 與 threshold；它不宣稱 native skill body 或 conditional reference 已被 runtime 載入。
@@ -198,7 +200,22 @@ pwsh -File scripts/validate-config.ps1 -SkipActive
 
 Node validator會檢查 repo-managed skills、TOML、hooks、routing-classifier cases 與 output schema；PowerShell validator轉交同一 Node canonical validation，避免維護第二份 Codex contract。只有明確執行 --run 才會呼叫模型並產生用量。
 
-Project-grade ledger 可在 header 指定同名 `.completion.json`；`project-ledger-completion.schema.json` 是 shape contract 的 canonical source，`validate-project-ledger.mjs` 依該 schema 驗證後再執行唯一 ID、exception metadata、evidence class、artifact integrity 與 blocker 語意檢查。一般 CLI 仍可讀取舊 schema-v1 ledger，但目前 Stop hook 只接受 `schemaVersion: 2`、`evidencePolicyVersion: 1` 的完成契約；因此舊工作可續接，重新宣告完成前必須升級。SessionStart 會記錄當下 ledger、內容與 contract digest baseline；Stop 會 strict 驗證已綁定 ledger，以及本 session 後新增、重新完成或內容／contract 改變的 complete ledgers，並在唯一一次 continuation 中彙整所有不合規 ledger。每個 preflight 必須明示 `scope: local | cross-boundary`，不由自由文字 ID 猜測。Completion sidecar 必須是最多 1 MiB 的一般非 symlink 檔案；schema-v2 另要求同名 sibling sidecar。每筆 present evidence 需以 `artifactBase` 指定 repo／contract 相對路徑並提供 `artifactSha256`；hook 只讀取 declared base 內不超過 5 MiB 的一般檔案，單一 manifest 最多 128 筆 evidence、最多雜湊 16 MiB 的唯一 artifacts，重複路徑共用 digest cache。helper/unit 只能關閉 local claim；跨 producer／persistence／consumer 的 claim 需要 present composed/runtime/production evidence，所有 behavioral proof 不可 waiver，independent review 必須 present 或有明確 waiver。治理案例、false-positive boundary 與退役條件記錄於 `tests/fixtures/project-ledger-evidence-policy.md`。這是 session-bound、bounded enforcement：Stop hook 最多要求一次 continuation，hash 只證明 artifact 完整性，不證明 native skill／reference activation或業務語意正確。
+Project-grade ledger 使用同名 `.completion.json`，完成契約與遷移規則以 [Project skill 的 Shared Completion Contract](codex/skills/agent-core-project/SKILL.md#shared-completion-contract) 為準；[completion schema](codex/hooks/project-ledger-completion.schema.json) 管理 shape，[validator](codex/hooks/validate-project-ledger.mjs) 管理證據、artifact integrity 與 remote-check 語意。SessionStart 記錄 baseline，Stop 檢查 session-bound 與新完成／變動的 ledger，最多要求一次 continuation。Hash 不證明業務語意或 native skill activation；remoteChecks 的一手遠端結果仍需由實際 provider query 提供。治理案例及退役條件見 [evidence policy fixture](tests/fixtures/project-ledger-evidence-policy.md)。
+
+程式變更採用 [shared verification](codex/skills/agent-core-lite/references/verification.md)：從 Git diff 的前後版本與 references 找候選 consumer，用獨立 oracle、實際 entrypoint、可重播生成／狀態序列、乾淨副本中的 sensitivity challenge 或受控效能樣本產生 receipt。CLI 與 v2/v3 completion 共用 [同一個 executable contract](codex/skills/agent-core-lite/scripts/verification-contract.mjs)，不讓版本實作互相依賴。新完成的 Project 必須有 current-source receipt，且每個 behavioral evidence 透過 `verificationChecks` 指向足以支持該層級的 check；舊完成紀錄仍可非 strict 讀取，不把歷史紀錄批次變成未完成。
+
+```text
+node codex/skills/agent-core-lite/scripts/verify-change.mjs discover --repo <scope-root> --output <external-control-dir>/discovery.json
+node codex/skills/agent-core-lite/scripts/verify-change.mjs run --repo <scope-root> --plan <external-control-dir>/plan.json --output <external-control-dir>/receipt.json
+node codex/skills/agent-core-lite/scripts/verify-change.mjs validate --repo <scope-root> --result <external-control-dir>/receipt.json
+node codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-verification
+```
+
+Lite 使用同一 runner，不為收據升級成 Project；純文件修改用直接檢查。無 Git HEAD 時改用 current-file snapshot，仍產生同一 receipt、通過同一 CLI／Stop，不必建立 Git repo 或跳過驗證。Control artifacts 預設放 scope 外；repo-local ledger／sidecar／receipt 必須預先 untracked 且 Git-ignored，避免 snapshot 自我相依。非 Git 目錄使用外部 control artifacts。
+
+文字 discovery 不是完整 call graph、V8 executed-file 不是 branch／side-effect coverage，其他語言需 native trace adapter。目前 snapshot 仍拒絕 symlink、非 regular file 與超過 32 MiB 的檔案；補充 native checks 不會繞過此限制，不適用的 scope 保持未驗證，不能宣稱 strict complete。Receipt 是可重跑證據，不是 agent 誠實度認證。反例、false-positive boundary 與被替代規則見 [verification protocol fixture](tests/fixtures/verification-protocol.md)。
+
+Canonical validator 會比較 repo 管理的可攜設定與 MCP 參數，並確認 managed MCP command 可解析至 executable；它不執行任意 active command。模型、reasoning effort、service tier、desktop／plugin 選擇、hook trust 與 project／marketplace runtime state 可與 template 不同。新增 runtime-only MCP 不回寫 repo。完整回歸測試可執行 `node --test --test-concurrency=1 tests/*.test.mjs`；測試檔涵蓋實際 Stop、批次部署回滾、active config 正反例及 verification 的生成案例、敏感度與效能負對照。效能 probe 序列化，不能用平行測試的總時間冒充效能指標。
 
 ---
 

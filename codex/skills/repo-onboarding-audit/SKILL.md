@@ -5,7 +5,7 @@ description: "Use for read-only mapping of an unfamiliar repo or subsystem when 
 
 # Repo Onboarding Audit
 
-Use this skill before implementation or review in an unfamiliar repo. Build a compact map of the real project from files on disk, then use that map to choose the next action.
+Use this skill for requested read-only orientation when the relevant implementation context is not known. Build a compact map from files on disk. When implementation is already authorized, bounded reconnaissance remains a step in the owning Lite or Project workflow; it does not become a separate onboarding deliverable or require renewed implementation approval.
 
 ## Ground Rules
 

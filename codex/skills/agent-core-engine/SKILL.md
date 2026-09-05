@@ -13,11 +13,15 @@ This is a global Codex skill. Do not write `src/agent-core` into the current bus
 
 ## Required Workflow
 
+When Review, Lite, or Project owns the task, this skill supplies runtime-specific design and evidence requirements without replacing that process. Preserve read-only review mode and return findings to Review; return implementation evidence to the owning Lite plan or Project ledger. Domain expertise does not remove durable handoff requirements or authorize writes.
+
 1. Read the target repo's governing instructions and package/test tooling first.
 2. Keep user preferences and global runtime rules separate from project-specific implementation details.
 3. Implement the engine as a deterministic lifecycle, not a loose model/tool loop.
 4. Add focused tests for lifecycle transitions, tool validation, retry classification, context compaction, and stop conditions.
 5. Run the target package's typecheck/build/test command that covers the new engine.
+
+Verification method, independent oracle, generated sequences, sensitivity and receipt requirements use [Lite's shared contract](../agent-core-lite/references/verification.md). This skill supplies runtime invariants and transition boundaries; it does not own a parallel evidence protocol.
 
 If no target repo is specified, stop at the global layer:
 

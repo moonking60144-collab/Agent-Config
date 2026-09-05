@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import {
   access,
   readFile,
@@ -86,10 +85,6 @@ function resolvePython() {
   for (const name of names) {
     for (const directory of directories) {
       const command = path.join(directory, name);
-      if (!existsSync(command)) {
-        continue;
-      }
-
       const prefix = name === "py.exe" ? ["-3"] : [];
       const result = spawnSync(
         command,
@@ -140,6 +135,69 @@ function validateTomlFile(target, label, python) {
   }
 
   ok(label + " TOML parse OK");
+}
+
+function validateActiveConfigContract(target, python) {
+  const code = `
+import json, os, shutil, sys, tomllib
+with open(sys.argv[1], encoding="utf-8-sig") as handle:
+    expected = tomllib.loads(handle.read())
+with open(sys.argv[2], encoding="utf-8-sig") as handle:
+    actual = tomllib.loads(handle.read())
+errors = []
+def compare(wanted, observed, key):
+    if isinstance(wanted, dict):
+        if not isinstance(observed, dict):
+            errors.append(key + " must be a table")
+            return
+        for name, value in wanted.items():
+            compare(value, observed.get(name), key + "." + name if key else name)
+    elif type(wanted) is not type(observed) or wanted != observed:
+        errors.append(key + " differs from the repo-managed value")
+
+# Session selections and machine/UI state are intentionally not portable defaults.
+runtime_roots = {"model", "model_reasoning_effort", "service_tier", "desktop", "plugins", "hooks", "projects", "marketplaces", "mcp_servers"}
+for key, value in expected.items():
+    if key not in runtime_roots:
+        compare(value, actual.get(key), key)
+if "review_model" in actual:
+    errors.append("review_model must not pin a separate review model")
+
+servers = actual.get("mcp_servers", {})
+if not isinstance(servers, dict):
+    errors.append("mcp_servers must be a table")
+    servers = {}
+for name, settings in expected.get("mcp_servers", {}).items():
+    prefix = "mcp_servers." + name
+    live = servers.get(name)
+    if not isinstance(live, dict):
+        errors.append(prefix + " is missing")
+        continue
+    for key, value in settings.items():
+        if key == "command":
+            continue
+        if key == "env":
+            value = dict(value)
+            if value.get("SystemRoot") == "__SYSTEM_ROOT__":
+                if os.name == "nt":
+                    value["SystemRoot"] = os.environ.get("SystemRoot", "C:\\\\Windows")
+                else:
+                    value.pop("SystemRoot")
+        compare(value, live.get(key, {} if isinstance(value, dict) else None), prefix + "." + key)
+    if "command" in settings:
+        command = live.get("command")
+        if not isinstance(command, str) or not command or not shutil.which(command):
+            errors.append(prefix + ".command cannot resolve to an executable")
+print(json.dumps(errors))
+`;
+  const result = runPython(python, code, [path.join(sourceRoot, "config.toml"), target]);
+  if (result.error || result.status !== 0) {
+    fail("active config contract 無法驗證：" + (result.stderr || result.error?.message || result.stdout));
+    return;
+  }
+  const errors = JSON.parse(result.stdout);
+  for (const error of errors) fail(error);
+  if (errors.length === 0) ok("active portable config／managed MCP contract 一致且 command 可解析");
 }
 
 function parseYamlScalar(raw, label) {
@@ -607,6 +665,7 @@ async function validateActive(codexHome, python) {
       await readFile(activeConfigPath, "utf8"),
       "~/.codex/config.toml"
     );
+    validateActiveConfigContract(activeConfigPath, python);
   }
 
   const activeSkillsRoot = path.join(codexHome, "skills");
@@ -634,7 +693,7 @@ async function main() {
   await validateRepo(python);
   const hookTests = spawnSync(
     process.execPath,
-    ["--test", path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs")],
+    ["--test", "--test-concurrency=1", path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs"), path.join(repoRoot, "tests", "verification-pipeline.test.mjs"), path.join(repoRoot, "tests", "deploy-codex.test.mjs")],
     { cwd: repoRoot, encoding: "utf8", shell: false }
   );
   if (hookTests.error || hookTests.status !== 0) {
@@ -643,7 +702,7 @@ async function main() {
         (hookTests.stderr || hookTests.stdout || hookTests.error?.message)
     );
   } else {
-    ok("project ledger hook tests 全部通過");
+    ok("project ledger／verification pipeline／deployment tests 全部通過");
   }
 const evalValidation = spawnSync(
   process.execPath,

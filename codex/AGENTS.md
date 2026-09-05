@@ -12,8 +12,7 @@
 ## 2. 證據與範圍
 
 - 動手前確認真正目標、操作對象、成功標準、環境與資料歸屬；不要混淆 UI、App、CLI、API、repo、workspace、active config、cache、history 或 runtime。
-- 先讀同類功能與完整 caller → implementation → downstream 路徑。Review 不得只看單一 function 就下結論。
-- 共享 contract 或多個 production surface 受影響時，盤點 producer、contract 與 production consumers；標記 must-align 或 intentional-divergence。未完成前不關閉 scope。
+- 追 caller → implementation → downstream；影響範圍要由 diff、references／registration 與適用的 runtime trace 支持，不能只接受 agent 自填清單。共用驗證方法在 agent-core-lite 的 verification reference。
 - 證據衝突時停止延伸舊假設，指出衝突並重新判斷。Race、stale write、duplicate side effect 等主張需有可達 timeline；否則只能列 hypothesis。
 - 外部 API 或黑盒行為先建立 baseline／negative control。版本、旗標、官方行為與近期資訊先查一手來源。
 - 宣稱 tool、pipeline 或同步流程在目前環境可用，必須同時證明 implementation 存在、entrypoint 可解析、且在該環境實際成功執行。靜態程式碼只證明 latent capability；手動結果不能冒充正式 pipeline。
@@ -60,8 +59,7 @@
 
 ## 7. 驗證、Git 與交付
 
-- 綠色 lint／build／unit test 只證明對應層級；不得冒充 runtime、data-flow、browser、external API 或 production evidence。
-- 高風險改動需驗證 failure path、rollback／recovery 與 representative runtime。無法執行時寫明限制與替代證據。
+- 驗證使用獨立 oracle、可重播反例與真正受測入口；高風險檢查要能抓到刻意注入的錯誤，效能結論要有受控量測。各 process 共用 verification contract，不能用綠燈、檔案 hash 或 metadata 代替對應層級的證據。
 - Final report 前以 git diff --stat 與實際 status 為準，不對著記憶敘述。
 - Commit 使用 Conventional Commits 並沿用 repo 語言；不加 Co-Authored-By，不用 --no-verify／--no-gpg-sign，除非使用者明確要求。
 - 不提交 secrets、.env、backup、temporary output 或 machine-specific runtime state。

@@ -92,7 +92,7 @@ async function main() {
   const invalidLedgers = [];
   for (const ledger of ledgersToEvaluate) {
     if (ledger.status !== "complete") continue;
-    const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, { requireEvidencePolicy: true });
+    const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, { requireEvidencePolicy: true, requireVerification: true });
     if (result.errors.length === 0 && result.blockers.length === 0) continue;
 
     const details = [...result.errors, ...result.blockers].slice(0, 6).join("; ");

@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { evaluateReceipt, validateEvidenceLinks, digest, MAX_RECEIPT_BYTES } from "../skills/agent-core-lite/scripts/verification-contract.mjs";
+import { snapshot, validateControlArtifact } from "../skills/agent-core-lite/scripts/verify-change.mjs";
 import {
   canonicalPath,
   expandHome,
@@ -232,10 +234,10 @@ function validateEvidencePolicy(contract, errors, { requireEvidencePolicy = fals
     if (item.evidenceClass === "independent-review" && item.claimScope !== "review") {
       errors.push(`${prefix} independent-review evidence can only satisfy a review claim`);
     }
-    if (contract.schemaVersion === 2 && item.status === "present") {
-      if (!hasText(item.artifactBase)) errors.push(`${prefix}.artifactBase is required by schemaVersion 2`);
+    if (contract.schemaVersion >= 2 && item.status === "present") {
+      if (!hasText(item.artifactBase)) errors.push(`${prefix}.artifactBase is required by schemaVersion 2 or newer`);
       if (!hasText(item.artifactSha256)) {
-        errors.push(`${prefix}.artifactSha256 is required by schemaVersion 2`);
+        errors.push(`${prefix}.artifactSha256 is required by schemaVersion 2 or newer`);
       } else if (!SHA256_PATTERN.test(item.artifactSha256)) {
         errors.push(`${prefix}.artifactSha256 must be a lowercase SHA-256 digest`);
       }
@@ -322,7 +324,7 @@ export function validateCompletionContract(contract, expectedLedgerPath, options
     contract.preflights.forEach((item, index) => {
       const prefix = `preflights[${index}]`;
       if (!hasText(item?.id)) errors.push(`${prefix}.id is required`);
-      if (contract.schemaVersion === 2 && !hasText(item?.scope)) errors.push(`${prefix}.scope is required by schemaVersion 2`);
+      if (contract.schemaVersion >= 2 && !hasText(item?.scope)) errors.push(`${prefix}.scope is required by schemaVersion 2 or newer`);
       if (!["open", "resolved", "not_applicable", "waived"].includes(item?.status)) errors.push(`${prefix}.status is invalid`);
       if (item?.status === "waived") validateExceptionMetadata(item, prefix, errors);
       if (item?.status === "open") blockers.push(`preflight ${item.id || index} is open`);
@@ -446,6 +448,9 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
   } catch (error) {
     return { errors: [`cannot read completion contract: ${error.message}`], blockers: [], ledger };
   }
+  const rootErrors = [];
+  validateSchemaNode(contract, COMPLETION_SCHEMA, "completion contract", rootErrors);
+  if (rootErrors.length > 0) return { errors: rootErrors, blockers: [], ledger, contract };
   if (contract.schemaVersion >= 2) {
     if (!isExpectedSibling) {
       return {
@@ -466,6 +471,27 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
   if (result.errors.length === 0) {
     result.errors.push(...await verifyEvidenceArtifacts(contract, ledger.completionContract, resolvedScopeRoot));
   }
+  if (result.errors.length === 0 && result.blockers.length === 0 && (options.requireVerification || contract.verification)) {
+    if (!contract.verification) result.errors.push("current completion requires a shared verification receipt");
+    else {
+      try {
+        const reference = contract.verification;
+        await validateControlArtifact(resolvedScopeRoot, ledger.filePath);
+        await validateControlArtifact(resolvedScopeRoot, actualContractPath);
+        const base = reference.artifactBase === "contract" ? path.dirname(actualContractPath) : resolvedScopeRoot;
+        if (path.isAbsolute(reference.artifact)) throw new Error("verification artifact must be relative");
+        const target = await fs.realpath(path.resolve(base, reference.artifact));
+        if (escapesDeclaredBase(await fs.realpath(base), target)) throw new Error("verification artifact escapes its declared base");
+        await validateControlArtifact(resolvedScopeRoot, target);
+        const content = await readBoundedRegularFile(target, { maxBytes: MAX_RECEIPT_BYTES, label: "verification receipt" });
+        if (digest(content) !== reference.artifactSha256) throw new Error("verification receipt digest mismatch");
+        const receipt = JSON.parse(content.toString("utf8"));
+        result.errors.push(...evaluateReceipt(receipt).map((error) => `verification: ${error}`));
+        if (result.errors.length === 0) result.errors.push(...validateEvidenceLinks(contract.requiredEvidence, receipt));
+        if (result.errors.length === 0 && (await snapshot(resolvedScopeRoot)).digest !== receipt.sourceAfter) result.errors.push("verification receipt is stale for the current working tree");
+      } catch (error) { result.errors.push(`verification receipt cannot be verified: ${error.message}`); }
+    }
+  }
   return { ...result, ledger, contract };
 }
 
@@ -479,6 +505,7 @@ async function main() {
     : await canonicalPath(process.argv[repoIndex + 1]);
   const result = await evaluateLedgerCompletion(ledgerPath, scopeRoot, {
     requireEvidencePolicy: process.argv.includes("--require-evidence-policy"),
+    requireVerification: process.argv.includes("--require-verification"),
   });
   const payload = { ledgerPath, errors: result.errors, blockers: result.blockers, valid: result.errors.length === 0 && result.blockers.length === 0 };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

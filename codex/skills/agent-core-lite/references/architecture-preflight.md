@@ -23,7 +23,7 @@
 7. Version／revision／snapshot 的 immutable、publish、pinning、supersession。
 8. Originating mutation、observer、completion、retry、rollback authority。
 9. Cache validity、live freshness、mutation safety 與 UI observability 是否由不同機制正確負責。
-10. 架構主張的實際 I/O、state transition 或 component-boundary evidence。
+10. 將以上 decision 轉為 [shared verification](verification.md) 的 invariant 與 boundary check；本檔定義架構判準，不另維護驗證程序。
 
 Race、torn read、lost update、duplicate side effect、deadlock、supersession、restart recovery 等主張必須畫可達 timeline，標明 mutable source、I/O、version／lock、commit 與 observable failure。畫不出來時只能列 hypothesis。
 

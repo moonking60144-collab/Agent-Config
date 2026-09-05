@@ -2,7 +2,10 @@
 
 ## 何時讀取
 
-只有 agent-core-lite 判定 async mutation convergence risk 適用時才讀本檔。這是條件式分析與驗證參考，不是每個 mutation 都要填滿的固定表單。
+Lite、Project 與 Review 共用下列判準；本檔是條件式分析與驗證參考，不是每個 mutation 都要填滿的固定表單。
+
+- 適用：本次修改涉及可存活於單一請求之外的 operation state、response 遺失後無法判定的外部結果，或 external side effect 與 local finalize 之間的非原子恢復責任；需定義 settlement、retry、restart/resume 或 authoritative reconciliation。
+- 不因而適用：單純 `async`／`await` 語法、唯讀背景 fetch、純本機等待，或沿用既有 lifecycle 且不改變 ownership、settlement、recovery contract 的修改。仍需驗證原本的錯誤處理及資料流，不另建立 durable workflow。
 
 ## 先縮小狀態機
 
@@ -94,48 +97,13 @@ Canonical outcome contract 必須由 producer、wrapper、classifier、persisten
 
 只測 classifier fixture 或只證明 TypeScript/build 通過，不代表 contract 沒有 drift。
 
-## 必要證據
+## 驗證與治理
 
-### Evidence matching rule
+Oracle、不變條件生成、操作序列、fault sensitivity、trace 覆蓋與 receipt 完成要求，統一依 [verification](verification.md)。本檔只提供需要驗證的 mutation 狀態與邊界，不再重述 evidence-class 表。
 
-證據層級必須覆蓋宣稱邊界：
+依本次風險選擇完整 transition：response-loss、duplicate delivery、supersession、第三值衝突、partial success、restart/rehydration、external success + local finalize crash，以及 UI pending/conflict/manual resolution。使用真實 producer output 穿過 wrapper、persistence/recovery 與 consumer；in-memory object recreation 不等於 process restart。
 
-| Evidence class | 可關閉的 claim |
-| --- | --- |
-| helper | 單一 predicate、serializer、selector 或純函式 |
-| unit | 單一 module／owner contract |
-| composed | 真實 producer、persistence、classifier 與 consumer 的組合 transition |
-| runtime | browser、process restart、storage、network、route lifecycle 或 cache/hydration 行為 |
-| production | 已授權正式環境的 observable behavior |
-| independent-review | 額外 coverage；不能單獨關閉 behavioral claim |
-
-跨 producer、storage、retry、task registry、provider、hydration、route 或 UI consumer 的 invariant，最低需要 composed evidence。多個 helper/unit 綠燈不能相加成 cross-boundary evidence。測試應以完整失敗時間線命名，例如 `late hydration cannot overwrite a settled observation`，而不是只描述 helper 回傳值。
-
-當同一 agent 設計並實作狀態機時，完成前使用 fresh reviewer 從 raw task/diff 重新畫至少一條 failure timeline。不要先餵 expected finding。Reviewer 只能補 coverage；沒有 composed test 時不得因 review 無 finding 而宣稱收斂。
-
-依風險選擇，不是全部機械執行：
-
-- Transition matrix：每個 state 的 reachable next states 與 owner。
-- Production-equivalent durable store 的 process restart／rehydration。
-- Response-loss、duplicate delivery、supersession、partial success、third-value conflict。
-- Stale overlay 不會在 authoritative refresh 後重新套回。
-- Idempotency 與 compensation 可在 crash 後繼續。
-- Runtime／UI 可觀測到 pending、conflict、manual action，而不是永久 spinner。
-
-In-memory fake、同一 process 內重建 object、self-authored forward probe，只能當局部證據。
-
-## Historical backtest
-
-若此規則源自既有事故，且原始 prompt、diff、commit、log 或 artifact 可取得：
-
-1. 使用當時的任務 framing，而不是改寫成明顯會命中 gate 的新情境。
-2. 判斷新 router 是否實際觸發。
-3. 檢查它是否會要求正確的 repo-level ratchet，而不只產生更多文字。
-4. 記錄 false positive、miss 與仍需人工判斷的邊界。
-
-無法取得歷史 artifact 時，結論標記 provisional。Forward positive／negative probes只證明 wording 與 routing，不能宣稱已防住原事故。
-
-若 replay 依賴 stochastic model routing，使用原始 framing 做多次獨立執行；預設至少 3 次作為 smoke sample，記錄 hits／runs、模型、reasoning effort、有效設定與失敗型態。單次命中只能證明可能觸發，不能支持穩定性或防回歸結論。Deterministic contract／fixture backtest 不需重複執行來製造假統計。
+當變更的是 Config 工作流規則，才依 Config repo governance 做 incident lineage、historical backtest 與 retirement；一般業務 mutation 不另填規則治理表。
 
 ## 完成條件
 
