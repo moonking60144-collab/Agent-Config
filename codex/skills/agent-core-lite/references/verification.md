@@ -4,7 +4,7 @@ Use this method for code-changing slices and reviews of their evidence. Lite own
 
 ## One evidence flow
 
-1. Discover from the actual diff, static references/registrations and runtime observations. Do not start and end with an agent-authored consumer list.
+1. Discover from the actual diff, static references/registrations and runtime observations. Do not start and end with an agent-authored consumer list. Reassess affected consumers and verification scope whenever the implementation changes shared elements, state, resources or lifecycle ownership; the task name and edit location do not bound the impact. For temporary behavior, verify that exiting, cancelling or handing back control preserves the existing consumers' contracts. Keep verification local when the actual change remains local.
 2. Define the oracle independently of the implementation: requirement, authoritative contract, simple reference model, differential behavior, or metamorphic relation. A second agent is not itself an oracle. Describe why the expected result is not calculated by the code under test.
 3. Select checks that cross the claimed boundary. Generated data/stateful sequences explore an invariant; preserve seed, sequence and minimized failure. Cross-layer claims need a real entrypoint through producer and consumers, not a collection of separate unit fixtures.
 4. Challenge the checks: a healthy baseline passes, a deliberate behavioral mutation/fault reaches the target assertion and fails. Surviving or unapplied changes, syntax errors, missing dependencies and unrelated timeouts do not prove sensitivity. Equivalent mutations require analysis and replacement with a meaningful challenge, not an inflated score.
