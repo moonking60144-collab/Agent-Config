@@ -1,4 +1,4 @@
-# Compact Prompt: Context Preserve
+# 壓縮提示：保留工作脈絡
 
 你正在壓縮一條 Codex thread。請產出精簡 handoff 摘要，讓下一回合可以延續同一件工作，不需要重讀完整對話。
 

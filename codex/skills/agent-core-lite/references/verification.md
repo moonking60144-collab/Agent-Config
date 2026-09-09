@@ -1,19 +1,21 @@
-# Verification contract
+# 驗證契約
 
-Use this method for code-changing slices and reviews of their evidence. Lite owns execution; Project persists the same plan/receipt; Review remains read-only. Domain references define which invariants matter. This file defines how to test them. Simple prose or formatting changes use a direct check and do not require a generated/mutation campaign.
+程式修改範圍及其證據審查使用此方法。Lite 負責執行；Project 持久保存相同 plan／receipt；Review 維持唯讀。領域 references 定義應守住哪些不變條件，本檔定義如何驗證。單純文字或格式修改直接檢查即可，不需要生成測試／mutation 測試活動。
 
-## One evidence flow
+## 單一證據流程
 
-1. Discover from the actual diff, static references/registrations and runtime observations. Do not start and end with an agent-authored consumer list. Reassess affected consumers and verification scope whenever the implementation changes shared elements, state, resources or lifecycle ownership; the task name and edit location do not bound the impact. For temporary behavior, verify that exiting, cancelling or handing back control preserves the existing consumers' contracts. Keep verification local when the actual change remains local.
-2. Define the oracle independently of the implementation: requirement, authoritative contract, simple reference model, differential behavior, or metamorphic relation. A second agent is not itself an oracle. Describe why the expected result is not calculated by the code under test.
-3. Select checks that cross the claimed boundary. Generated data/stateful sequences explore an invariant; preserve seed, sequence and minimized failure. Cross-layer claims need a real entrypoint through producer and consumers, not a collection of separate unit fixtures.
-4. Challenge the checks: a healthy baseline passes, a deliberate behavioral mutation/fault reaches the target assertion and fails. Surviving or unapplied changes, syntax errors, missing dependencies and unrelated timeouts do not prove sensitivity. Equivalent mutations require analysis and replacement with a meaningful challenge, not an inflated score.
-5. For performance claims, run controlled baseline/candidate probes serially with the same workload, metric, unit and environment. Keep raw repeated samples and predeclared absolute/relative budgets. Ordinary test duration, a screenshot, `runtime` labels and best-of-N results are insufficient.
-6. Validate the receipt against the current source snapshot, then report the proven scope and limitations. A source/test change invalidates the prior receipt.
+1. 從已核准需求、實際 diff、靜態引用／註冊與 runtime 觀察探索。不能只靠 agent 自填的 consumer 清單起頭與結案。實作改變共享元素、狀態、資源或生命週期責任時，重新判定受影響 consumer 與驗證範圍；任務名稱和修改位置不能限定影響。暫態行為須驗證退出、取消或交還控制權後，既有 consumer 契約仍成立。實際影響仍屬局部時，驗證維持局部。
+2. 獨立於實作定義判定依據（oracle）：需求、權威契約、簡單參考模型、差異行為或變形關係。另一個 agent 本身不是 oracle。說明為何預期結果不是由受測程式計算。
+3. 選擇跨越主張邊界的檢查。以生成資料／有狀態序列探索不變條件；保留 seed、序列與最小化失敗案例。跨層主張須由真正入口走過 producer 與 consumers，不能由一組彼此獨立的 unit fixtures 代替。
+4. 挑戰檢查本身：正常基準必須通過；刻意注入的行為 mutation／fault 必須到達目標 assertion 並失敗。未被攔截或未套用的修改、語法錯誤、缺依賴及無關 timeout，都不能證明敏感度。等價 mutation 須分析並換成有意義的挑戰，不能灌高分數。
+5. 效能主張須在相同負載、指標、單位與環境下，依序執行受控 baseline／candidate probes。保留重複量測原始樣本，以及事先宣告的絕對／相對預算。一般測試耗時、截圖、runtime 標籤與只取多次最佳結果都不足。
+6. 依目前原始碼快照驗證 receipt，再回報已證明範圍與限制。原始碼／測試變更會使先前 receipt 失效。
 
-## Entrypoint shared by Lite and Project
+產品定案已明確要求替換或退場時，定義新行為、必須停止提供的行為，以及須保留的舊資料／恢復能力。由被取代的契約反查可達入口，包括未修改的 routes、預設分支、fallbacks 與背景 consumers；只看 diff 的盤點可能漏掉它們。驗證淘汰操作不能繞過新政策，且保留的恢復功能仍可運作。保留舊資料不代表保留舊建立或管理能力。不自行發明相容性需求，不從單純新增功能要求推定舊功能退場，也不由本規則推定刪除授權。確認剩餘用途與遷移／恢復依賴後，才在授權範圍內移除淘汰實作。分階段退場時，回報尚存入口與退出條件；必要退場工作仍未完成，不得宣稱替換完成。
 
-The deployed scripts are under `~/.codex/skills/agent-core-lite/scripts/`:
+## Lite 與 Project 共用入口
+
+部署後的 scripts 位於 ~/.codex/skills/agent-core-lite/scripts/：
 
 ```text
 node verify-change.mjs discover --repo <scope-root> --output <external-control-dir>/discovery.json
@@ -21,9 +23,9 @@ node verify-change.mjs run --repo <scope-root> --plan <external-control-dir>/pla
 node verify-change.mjs validate --repo <scope-root> --result <external-control-dir>/receipt.json
 ```
 
-The canonical executable contract is `scripts/verification-contract.mjs`; the runner and completion evaluator import the same implementation. Do not reproduce its validation rules in another skill, schema adapter or version-specific validator.
+唯一權威的可執行契約是 scripts/verification-contract.mjs；runner 與 completion evaluator 匯入同一實作。不在其他 skill、schema adapter 或版本專屬 validator 複製驗證規則。
 
-Plan shape:
+Plan 結構：
 
 ```json
 {
@@ -42,32 +44,32 @@ Plan shape:
 }
 ```
 
-Adapt the example to the actual repo; placeholders are rejected. Command arrays use `shell:false`, so a shell pipeline must be an explicitly reviewed script/command. `${REPO}` in arguments resolves to the working root, including challenge copies. Commands must not embed absolute paths back to the live source under test. The runner is execution orchestration, not a permissions sandbox; tools and the user's existing authorization still govern side effects.
+範例須依實際 repo 調整；placeholder 會被拒絕。命令陣列使用 shell:false，因此 shell pipeline 必須是已明確審查的 script／command。引數中的 ${REPO} 會解析為執行中的工作根目錄，包括 challenge 副本。命令不得嵌入指回受測 live source 的絕對路徑。Runner 負責協調執行，不是權限 sandbox；工具與使用者既有授權仍約束副作用。
 
-For a Git repository, scope-root must be its root; discovery records tracked/untracked non-ignored files and combines HEAD/current symbols so removed exports/files retain their callers. Without HEAD, the same runner captures all current candidates: Git's file inventory for an unborn repository, or the actual filesystem tree excluding Git metadata for a non-Git folder. The receipt has `head:null` and no historical-discovery claim; commands, traces, challenges and current-file integrity still use the same contract. No Git initialization or skip-verification flag is needed.
+Git repo 的 scope-root 必須是 repo 根目錄；探索記錄 tracked／untracked 且未被忽略的檔案，結合 HEAD／current symbols，使已刪 exports／檔案仍保有 caller 線索。沒有 HEAD 時，同一 runner 擷取所有目前候選：unborn repo 使用 Git 檔案清單；非 Git 資料夾則使用排除 Git metadata 的實際檔案樹。Receipt 記錄 head:null，不聲稱有歷史探索能力；命令、trace、challenges 與目前檔案完整性仍使用同一契約。不需要初始化 Git 或使用 skip-verification 旗標。
 
-Keep ledger, sidecar, plan and receipt outside the source scope by default. Repo-local control artifacts are supported only when untracked and Git-ignored before discovery; the CLI permits outputs there, and completion applies the same placement check. Tracked controls must move outside the scope rather than be silently excluded from source hashes. Non-Git folders use external controls. Updating completion state then cannot invalidate its own snapshot.
+Ledger、sidecar、plan 與 receipt 預設放在 source scope 外。Repo-local 控制產物只有在 discovery 前已是 untracked 且 Git-ignored 才受支援；CLI 允許輸出到該處，完成驗證採相同放置檢查。Tracked 控制產物須移到 scope 外，不能靜默排除於原始碼 hashes。非 Git 資料夾使用外部控制產物。如此更新完成狀態才不會使自己的快照失效。
 
-Every discovered candidate must map to checks or a concrete exclusion reason. Textual performance/stateful hints require `riskDecisions:[{kind,checks,reason}]`; use an applicable check or concrete non-applicability reason. Text hints are not complete semantic discovery: use compiler/LSP references, registrations and runtime traces when material. Snapshot currently rejects symlinks, non-regular files and files above 32 MiB. Native tests can supplement evidence but cannot bypass these bounds or strict completion; such a scope stays unverified until a suitable supported adapter exists. Do not silently narrow the task's scope to obtain a pass.
+每個探索出的候選都須對應檢查或具體排除理由。文字式 performance／stateful 提示須有 riskDecisions:[{kind,checks,reason}]，指定適用檢查或具體不適用理由。文字提示不是完整語意探索：重要時使用 compiler／LSP references、registrations 與 runtime traces。Snapshot 目前拒絕 symlinks、非一般檔案及超過 32 MiB 的檔案。原生測試可補充證據，但不能繞過這些限制或嚴格完成檢查；沒有合適、受支援的 adapter 前，該 scope 保持未驗證。不為取得通過而靜默縮小任務範圍。
 
-The default trace adapter collects Node V8 executed-file coverage from the actual subprocess tree. A listed consumer that was not observed blocks the receipt. Executed-file coverage proves the module ran, not every branch or required side effect. Other languages may use `trace:"probe"` with a native coverage/trace adapter emitting `observedConsumers`; that is probe-reported evidence and must be reviewed against the actual producer. A hand-written array is not trace evidence.
+預設 trace adapter 從實際 subprocess tree 收集 Node V8 executed-file coverage。列入覆蓋但未被觀察到的 consumer 會阻擋 receipt。檔案執行覆蓋只能證明模組跑過，不代表每個分支或必要副作用都發生。其他語言可使用 trace:"probe"，由原生 coverage／trace adapter 輸出 observedConsumers；這是 probe 回報的證據，須對照實際 producer 審查。手填陣列不構成 trace 證據。
 
-Property/stateful probes read `VERIFICATION_SEED` and `VERIFICATION_ITERATIONS`, assert their invariants, and end with JSON containing `kind`, `seed`, `cases`. The runner checks these receipts; the test implementation must genuinely generate the cases. For Python use existing Hypothesis/native coverage; for JS/TS use existing generators or fast-check. Do not install a new framework when existing tests can express the property.
+Property／stateful probes 讀取 VERIFICATION_SEED 與 VERIFICATION_ITERATIONS，斷言其不變條件，最後輸出含 kind、seed、cases 的 JSON。Runner 檢查這些紀錄；測試實作本身必須真的生成案例。Python 使用既有 Hypothesis／原生 coverage；JS／TS 使用既有 generators 或 fast-check。既有測試能表達該性質時，不安裝新框架。
 
-Sensitivity challenges run in separate copies of the captured source; they never patch the live source. The pristine control must first pass the same command/seed; the mutant starts from another clean copy so control artifacts cannot cause a false kill. Targets must use exact canonical snapshot paths and cannot alias the oracle. Each replacement must match exactly once. Shared failure classification rejects parse/import failures in either stdout or stderr. Copy isolation is not OS sandboxing. Ignored dependencies/build outputs are not copied: use a self-contained probe or a repo-native isolated test environment, and report unavailable prerequisites as unverified.
+敏感度挑戰在擷取原始碼的獨立副本執行，永遠不 patch live source。Pristine control 必須先通過相同命令／seed；mutant 從另一份乾淨副本開始，避免 control 產物導致假攔截。目標須使用精確的 canonical snapshot paths，且不能透過別名指向 oracle。每次替換須精確匹配一次。共用失敗分類拒絕 stdout 或 stderr 中的 parse／import failures。複製隔離不是 OS sandbox。被忽略的依賴／build 輸出不會複製：使用自足的 probe 或 repo 原生隔離測試環境；前置條件不可用時，回報未驗證。
 
-Performance checks use `kind:"performance"` and `performance:{baselineCommand,metric,unit,workload,repeats,maxValue,maxRatio}`. At least three serial baseline/candidate pairs must emit JSON `{metric,unit,workload,environment,samples}`. Samples are measurements in the named unit, not process startup time unless that is explicitly the target. The runner recomputes p95 and budget results and rejects missing or mismatched payloads. Record hardware, browser/process version, worker/queue state and contention controls in the probe's environment evidence. A matching environment string cannot prove there was no unrelated load; independently control and inspect it.
+效能檢查使用 kind:"performance" 與 performance:{baselineCommand,metric,unit,workload,repeats,maxValue,maxRatio}。至少三組依序執行的 baseline／candidate 配對都須輸出 JSON {metric,unit,workload,environment,samples}。樣本是指定單位的量測值；除非明確以程序啟動時間為目標，否則不能用程序啟動時間代替。Runner 重新計算 p95 與預算結果，拒絕缺漏或不一致的 payload。在 probe 環境證據中記錄硬體、瀏覽器／程序版本、worker／queue 狀態與競爭控制。環境字串相同不能證明沒有無關負載；須獨立控制並檢查。
 
-## Completion and review
+## 完成與審查
 
-Project completion references a passed receipt through `verification:{artifactBase,artifact,artifactSha256}` in the existing shared completion contract. Each behavioral requiredEvidence item links to real check IDs through `verificationChecks`; static-only checks cannot close behavioral evidence, and cross-boundary evidence needs integration/stateful/performance checks. Use a repo- or contract-relative path. Strict completion validates contents, links, aggregation and current source, not only the outer hash. CLI:
+Project completion 在既有共用完成契約中，以 verification:{artifactBase,artifact,artifactSha256} 引用通過的 receipt。每項 behavioral requiredEvidence 透過 verificationChecks 連結實際 check IDs；純 static checks 不能滿足行為證據，跨邊界證據需要 integration／stateful／performance checks。使用相對於 repo 或 contract 的路徑。嚴格完成驗證檢查內容、連結、彙總及目前 source，不只檢查外層 hash。CLI：
 
 ```text
 node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-verification
 ```
 
-The Stop hook applies the same check. Legacy completion records remain readable through non-strict CLI/resume; a newly completed slice must produce current evidence. Lite uses the same verification runner without creating a Project ledger merely to hold a receipt. Pure Review can run read-only checks and examine receipts but never starts mutation/deployment commands without implementation authorization.
+Stop hook 使用相同檢查。舊完成紀錄仍可透過非嚴格 CLI／resume 讀取；新完成範圍須產生目前證據。Lite 使用相同 runner，不為保存 receipt 而建立 Project ledger。純 Review 可執行唯讀檢查與檢視 receipts，但沒有實作授權時，絕不啟動 mutation／部署命令。
 
-When the same agent designs and implements a state machine covered by the async reference, a fresh reviewer must reconstruct at least one producer-to-consumer failure timeline before completion; this applies to Lite as well as Project. Independent review evaluates omitted consumers, oracle independence, mutation relevance, trace boundaries and representative load. It supplements real measurements and composed tests. Receipts are reproducible evidence, not cryptographic attestations of model honesty or proofs of arbitrary program semantics; a model can still choose an inadequate invariant or probe. Preserve that limit rather than adding a boolean claiming universal completeness.
+當同一 agent 設計並實作 async reference 涵蓋的狀態機時，完成前須由新的 reviewer 重建至少一條 producer → consumer 失敗時間線；Lite 與 Project 都適用。獨立 review 評估遺漏 consumers、oracle 獨立性、mutation 關聯性、trace 邊界與代表性負載，作為真實量測與 composed tests 的補充。Receipts 是可重現證據，不是模型誠實度的密碼學證明，也不能證明任意程式語意；模型仍可能選錯不變條件或 probe。保留此限制，不新增聲稱全面完整的布林值。
 
-Only relevant existing checks run. For a local predicate use a focused invariant and meaningful mutation; for ownership use generated graphs/permutations/non-interference; for recovery use operation sequences and fault boundaries; for UI cost use representative runtime probes. Quality is determined by the claim's evidence, not by checklist length or test count.
+只執行相關既有檢查。局部 predicate 使用聚焦的不變條件與有意義 mutation；ownership 使用生成圖、排列與互不干擾性；恢復使用操作序列與故障邊界；UI 成本使用代表性 runtime probes。品質取決於主張的證據，不取決於 checklist 長度或測試數量。

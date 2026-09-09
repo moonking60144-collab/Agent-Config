@@ -1,364 +1,364 @@
 ---
 name: agent-core-engine
-description: "Use only to design, implement, review, or extend a custom agent runtime, typed tick loop, tool runner, retry engine, compactor, transcript, memory, or resume implementation. Do not use for ordinary business workflows, Config routing rules, or application-level async mutations."
+description: "只適用於設計、實作、審查或擴充自訂 agent runtime、具型別的 tick loop、tool runner、retry engine、compactor、transcript、memory 或 resume 實作。不適用於一般業務流程、Config 路由規則或應用層非同步異動。"
 ---
 
 # Agent Core Engine
 
-Use this skill when the user asks to build, integrate, optimize, or review an agent runtime, tool loop, compactor, retry engine, or production-grade autonomous coding agent core.
+使用者要求建立、整合、優化或審查 agent runtime、工具迴圈、compactor、retry engine，或可用於 production 的自主 coding agent 核心時，使用此 skill。
 
-For ordinary Codex tasks, do not invoke the full runtime template by default. The day-to-day integration lives in the `agent-core-lite` skill for scoped multi-step work, config/runtime drift, context pressure, and commit/push tasks; repeated failures route to `agent-failure-debugging`. Use this full skill only when the task is about agent/runtime architecture itself.
+一般 Codex 任務不預設啟用完整 runtime 範本。日常整合由 agent-core-lite 負責範圍明確的多步工作、設定／runtime 漂移、context 壓力及 commit／push；重複失敗轉交 agent-failure-debugging。只有任務涉及 agent／runtime 架構本身，才使用此完整 skill。
 
-This is a global Codex skill. Do not write `src/agent-core` into the current business repo unless the user explicitly names that repo as the target runtime implementation. If the user asks to improve "Codex settings", update global AGENTS/skills/templates instead of project source.
+這是全域 Codex skill。除非使用者明確指定目前業務 repo 為 runtime 實作目標，否則不將 src/agent-core 寫入該 repo。使用者要求改善「Codex 設定」時，更新全域 AGENTS／skills／templates，不修改專案原始碼。
 
-## Required Workflow
+## 必要工作流程
 
-When Review, Lite, or Project owns the task, this skill supplies runtime-specific design and evidence requirements without replacing that process. Preserve read-only review mode and return findings to Review; return implementation evidence to the owning Lite plan or Project ledger. Domain expertise does not remove durable handoff requirements or authorize writes.
+任務由 Review、Lite 或 Project 負責時，本 skill 提供 runtime 專屬設計與證據要求，不取代原流程。保留唯讀 review 模式，把 findings 回交 Review；實作證據回交負責執行的 Lite plan 或 Project ledger。領域專業不免除持久化交接要求，也不授予寫入權限。
 
-1. Read the target repo's governing instructions and package/test tooling first.
-2. Keep user preferences and global runtime rules separate from project-specific implementation details.
-3. Implement the engine as a deterministic lifecycle, not a loose model/tool loop.
-4. Add focused tests for lifecycle transitions, tool validation, retry classification, context compaction, and stop conditions.
-5. Run the target package's typecheck/build/test command that covers the new engine.
+1. 先讀目標 repo 適用規範與套件／測試工具。
+2. 使用者偏好、全域 runtime 規則與專案實作細節分開。
+3. 將 engine 實作成確定性的生命週期，而非鬆散的模型／工具迴圈。
+4. 為生命週期轉移、工具驗證、重試分類、context 壓縮與停止條件加入聚焦測試。
+5. 執行目標套件涵蓋新 engine 的 typecheck／build／test 命令。
 
-Verification method, independent oracle, generated sequences, sensitivity and receipt requirements use [Lite's shared contract](../agent-core-lite/references/verification.md). This skill supplies runtime invariants and transition boundaries; it does not own a parallel evidence protocol.
+驗證方法、獨立 oracle、生成序列、敏感度與 receipt 要求使用 [Lite 共用契約](../agent-core-lite/references/verification.md)。本 skill 提供 runtime 不變條件與轉移邊界，不另維護一套證據協定。
 
-If no target repo is specified, stop at the global layer:
+未指定目標 repo 時，停在全域層：
 
-1. Update `~/.codex/AGENTS.md` for behavior rules.
-2. Update this skill for reusable workflow.
-3. Update `templates/` for copyable implementation skeletons.
-4. Report any project-level files that look like prior mistaken placement, but do not delete them without explicit user approval.
+1. 行為規則更新至 ~/.codex/AGENTS.md。
+2. 可重用流程更新至本 skill。
+3. 可複製的實作骨架更新至 templates/。
+4. 回報疑似先前誤放的專案檔案，但沒有使用者明確批准就不刪除。
 
-When integrating agent-core into normal Codex behavior rather than implementing a runtime, keep the change at the global layer:
+將 agent-core 整合到一般 Codex 行為，而非實作 runtime 時，變更維持全域層：
 
-1. Add or adjust the `agent-core-lite` skill description/body so Codex can trigger the workflow through skill discovery.
-2. Keep `AGENTS.md` as short routing and non-negotiable global policy, not the whole architecture contract.
-3. Update `config.toml` only with short skill routing instructions.
-4. Keep this skill focused on full agent/runtime work.
-5. Do not copy `templates/typescript-agent-core/` into a project unless the user explicitly asks for a runtime implementation there.
+1. 新增或調整 agent-core-lite 的 description／內文，讓 Codex 透過 skill discovery 觸發流程。
+2. AGENTS.md 保持簡短路由與不可妥協的全域政策，不放整份架構契約。
+3. config.toml 只更新簡短的 skill 路由指令。
+4. 本 skill 維持聚焦完整 agent／runtime 工作。
+5. 未獲使用者明確要求在專案實作 runtime，不複製 templates/typescript-agent-core/ 進專案。
 
-## Reference Extraction
+## 參考資料提煉
 
-When learning from terminal agent mirrors such as Claude Code source mirrors, extract only the reusable engineering shape:
+從 Claude Code 原始碼鏡像等終端 agent 鏡像學習時，只提煉可重用工程結構：
 
-- immutable query/session config separated from mutable tick state
-- lifecycle transition reasons and transcript reconstruction
-- tool contract with schema validation, permission checks, read-only/concurrency/destructive metadata, interrupt behavior, timeout, and result normalization
-- orchestration that runs read-only concurrency-safe tools in bounded parallel and serializes writes, shell mutations, and external side effects
-- streaming tool execution with ordered transcript integration
-- lifecycle hook contracts with typed JSON payloads, bounded timeout, explicit blocking semantics, and clear stdout/stderr routing
-- retry classification that handles transient errors below the model layer, turns explicit timeout reasons into retryable errors, and returns deterministic errors as tool output
-- multi-stage context compaction before summary compaction
-- API-round grouping and cache-hot/cache-cold distinctions for microcompaction
-- post-compaction cleanup for caches and tracking state invalidated by compact boundaries
-- append-only transcript persistence with compact boundaries, preserved segment relinks, and resume-safe metadata re-append
-- resume reconstruction that handles snipped ranges, stale usage, and parallel tool-result siblings
-- shell safety based on parsing and conservative fallback, not string intuition; treat Bash and PowerShell as separate languages
-- deferred tool schema discovery for large registries, with exact-select and keyword lookup paths
-- large tool output storage with model-visible previews and replay-stable replacement records
-- permission-rule parsing, canonical tool-name aliases, and shadowed-rule detection
-- skill package loading, conditional activation, permission review, and inline/fork invocation
-- persistent memory taxonomy, relevance retrieval, and drift checks
-- current-session task lists with ownership, dependencies, and verification gates
-- multi-agent worker/leader coordination with mailbox-backed permission routing
+- 不可變 query／session config 與可變 tick state 分離
+- 生命週期轉移原因與 transcript 重建
+- 工具契約包含 schema 驗證、權限檢查、唯讀／並行／破壞性 metadata、中斷行為、timeout 與結果正規化
+- 協調執行時，唯讀且可安全並行的工具有限度平行；寫入、shell 異動與外部副作用依序執行
+- 串流工具執行仍按序整合 transcript
+- 生命週期 hook 契約具備 typed JSON payload、有限 timeout、明確阻塞語意與 stdout／stderr 路由
+- 重試分類在模型層之下處理暫時錯誤，將明確 timeout 原因轉為可重試錯誤，確定性錯誤則回傳為工具輸出
+- 摘要壓縮前的多階段 context 壓縮
+- Microcompaction 依 API round 分組，並區分 cache-hot／cache-cold
+- 壓縮後清理因 compact 邊界失效的快取與追蹤狀態
+- 僅追加的 transcript 持久化，包含 compact 邊界、保留片段重新連結，以及支援安全續接的 metadata 重新追加
+- Resume 重建處理裁剪範圍、過期 usage 與並行工具結果的 sibling 節點
+- Shell 安全依解析與保守 fallback，不憑字串直覺；Bash 與 PowerShell 視為不同語言
+- 大型工具 registry 延遲探索 schema，同時提供精確選取與關鍵字查詢
+- 大型工具輸出外存，提供模型可見預覽及重播穩定的替換紀錄
+- 權限規則解析、canonical 工具名稱別名與規則遮蔽偵測
+- Skill 套件載入、條件啟用、權限審查與 inline／fork 呼叫
+- 持久記憶分類、相關性檢索與漂移檢查
+- 本 session 任務清單具備 ownership、依賴與驗證門檻
+- 多 agent worker／leader 協調，以及透過 mailbox 傳遞權限請求
 
-Ignore UI rendering, product telemetry, brand-specific behavior, statusline/voice features, and copied internal naming.
+忽略 UI render、產品遙測、品牌專屬行為、statusline／語音功能與照搬的內部命名。
 
-When doing another source-mirror pass, read `references/claude-code-mirror-audit.md` first and update it with any new source-path evidence before changing this skill.
+再次審查原始碼鏡像時，先讀 references/claude-code-mirror-audit.md；修改本 skill 前，先將新的來源路徑證據更新到該檔。
 
-## Claude Code Mirror Audit
+## Claude Code 鏡像審計
 
-Last audited: 2026-06-30.
+最近審計日期：2026-06-30。
 
-Reference mirrors:
+參考鏡像：
 
-- `tanbiralam/claude-code` at `6f6f12b37f529488b10e53928dd5508bb93535c7`.
-- `starkdcc/claude-code-original-src` at `cd17021a7ebdf403a67df707ac02f6bf27b6c993`.
-- `nirholas/claude-code` at `0252b1cc4381ea33ceb8d567c01cb8922a0229ef`; current tree contains only `README.md`, so it is not usable as implementation evidence unless that repo later adds source files.
+- tanbiralam/claude-code，revision 6f6f12b37f529488b10e53928dd5508bb93535c7。
+- starkdcc/claude-code-original-src，revision cd17021a7ebdf403a67df707ac02f6bf27b6c993。
+- nirholas/claude-code，revision 0252b1cc4381ea33ceb8d567c01cb8922a0229ef；目前樹中只有 README.md，除非日後加入原始碼，否則不能作為實作證據。
 
-Coverage notes:
+覆蓋說明：
 
-- `tanbiralam` and `starkdcc` are substantially the same TypeScript snapshot: `1902` shared `src/` paths; a 300-file hash sample from the shared set matched exactly. Prefer `tanbiralam` for newer A-only files and `starkdcc` for the research README/source map.
-- `tanbiralam` adds relevant A-only SDK/control files such as `src/entrypoints/sdk/controlSchemas.ts`, `src/entrypoints/sdk/coreSchemas.ts`, and stubbed `src/query/transitions.ts`.
-- Query lifecycle guidance comes from `src/QueryEngine.ts`, `src/query/config.ts`, `src/query/deps.ts`, and `src/query/stopHooks.ts`.
-- Tool contract guidance comes from `src/Tool.ts`, `src/tools.ts`, and concrete tools under `src/tools/`, especially `BashTool`, `PowerShellTool`, `FileReadTool`, `FileEditTool`, `AgentTool`, `Task*Tool`, and `ToolSearchTool`.
-- Hook contract guidance comes from `src/schemas/hooks.ts`, `src/utils/hooks.ts`, and settings schema expansion in `src/utils/settings/types.ts`.
-- Permission and shell safety guidance comes from `src/utils/permissions/*`, `src/tools/BashTool/*`, `src/tools/PowerShellTool/*`, `src/tools/BashTool/readOnlyValidation.ts`, and `src/tools/PowerShellTool/readOnlyValidation.ts`.
-- Context compaction guidance comes from `src/commands/compact/compact.ts`, `src/services/compact/compact.ts`, `src/services/compact/microCompact.ts`, `src/services/compact/sessionMemoryCompact.ts`, `src/services/compact/postCompactCleanup.ts`, and `src/services/compact/autoCompact.ts`. `src/commands/compact/compact.ts` references a feature-gated `reactiveCompact` path, but `src/services/compact/reactiveCompact.ts` is not present in the audited checkout, so do not cite that missing file as implementation evidence.
-- Transcript/resume guidance comes from `src/bootstrap/state.ts`, `src/utils/sessionStorage.ts`, `src/utils/toolResultStorage.ts`, `src/cli/transports/ccrClient.ts`, `src/cli/print.ts`, and `src/entrypoints/sdk/coreSchemas.ts`.
-- Multi-agent permission and mailbox guidance comes from `src/utils/swarm/*`, `src/tools/AgentTool/*`, `src/utils/teammateMailbox.ts`, and `src/utils/swarm/permissionSync.ts`.
-- Skill packaging guidance comes from `src/skills/bundledSkills.ts`, `src/skills/loadSkillsDir.ts`, `src/tools/SkillTool/*`, and `src/skills/mcpSkillBuilders.ts`.
-- Persistent memory guidance comes from `src/memdir/*`, `src/services/extractMemories/*`, and `src/services/autoDream/*`.
-- Session task guidance comes from `src/tools/TodoWriteTool/*`, `src/tools/TaskCreateTool/*`, `src/tools/TaskUpdateTool/prompt.ts`, and `src/utils/todo/types.ts`.
-- Streaming execution guidance comes from `src/services/tools/StreamingToolExecutor.ts`, `src/services/tools/toolExecution.ts`, and `src/services/toolUseSummary/toolUseSummaryGenerator.ts`.
+- tanbiralam 與 starkdcc 大致是同一份 TypeScript 快照：共用 1902 條 src/ 路徑；從共用集合抽取 300 檔的 hash 樣本完全一致。較新的 A-only 檔案優先看 tanbiralam，研究 README／來源地圖看 starkdcc。
+- tanbiralam 增加相關的 A-only SDK／control 檔案，例如 src/entrypoints/sdk/controlSchemas.ts、src/entrypoints/sdk/coreSchemas.ts，以及 stubbed src/query/transitions.ts。
+- Query 生命週期依據來自 src/QueryEngine.ts、src/query/config.ts、src/query/deps.ts、src/query/stopHooks.ts。
+- 工具契約依據來自 src/Tool.ts、src/tools.ts 及 src/tools/ 下的實際工具，尤其 BashTool、PowerShellTool、FileReadTool、FileEditTool、AgentTool、Task*Tool、ToolSearchTool。
+- Hook 契約依據來自 src/schemas/hooks.ts、src/utils/hooks.ts，以及 src/utils/settings/types.ts 的設定 schema 擴充。
+- 權限與 shell 安全依據來自 src/utils/permissions/*、src/tools/BashTool/*、src/tools/PowerShellTool/*、src/tools/BashTool/readOnlyValidation.ts、src/tools/PowerShellTool/readOnlyValidation.ts。
+- Context 壓縮依據來自 src/commands/compact/compact.ts、src/services/compact/compact.ts、src/services/compact/microCompact.ts、src/services/compact/sessionMemoryCompact.ts、src/services/compact/postCompactCleanup.ts、src/services/compact/autoCompact.ts。src/commands/compact/compact.ts 引用受 feature gate 控制的 reactiveCompact 路徑，但審計 checkout 沒有 src/services/compact/reactiveCompact.ts，不能引用該缺檔作實作證據。
+- Transcript／resume 依據來自 src/bootstrap/state.ts、src/utils/sessionStorage.ts、src/utils/toolResultStorage.ts、src/cli/transports/ccrClient.ts、src/cli/print.ts、src/entrypoints/sdk/coreSchemas.ts。
+- 多 agent 權限與 mailbox 依據來自 src/utils/swarm/*、src/tools/AgentTool/*、src/utils/teammateMailbox.ts、src/utils/swarm/permissionSync.ts。
+- Skill 套件依據來自 src/skills/bundledSkills.ts、src/skills/loadSkillsDir.ts、src/tools/SkillTool/*、src/skills/mcpSkillBuilders.ts。
+- 持久記憶依據來自 src/memdir/*、src/services/extractMemories/*、src/services/autoDream/*。
+- Session 任務依據來自 src/tools/TodoWriteTool/*、src/tools/TaskCreateTool/*、src/tools/TaskUpdateTool/prompt.ts、src/utils/todo/types.ts。
+- 串流執行依據來自 src/services/tools/StreamingToolExecutor.ts、src/services/tools/toolExecution.ts、src/services/toolUseSummary/toolUseSummaryGenerator.ts。
 
-When extending this skill from those mirrors, keep a source-path note in the edit or commit message. Do not claim the `nirholas` mirror proves an implementation detail while it remains README-only.
+依這些鏡像擴充本 skill 時，在修改或 commit 訊息保留來源路徑註記。nirholas 仍只有 README 時，不得聲稱它證明某項實作細節。
 
-## Architecture Contract
+## 架構契約
 
-The default engine shape is:
+預設 engine 結構：
 
 ```text
 Observe -> Plan -> Act -> AwaitTool -> Integrate -> CheckStop -> Compact/Retry -> Next
 ```
 
-Each tick context must track:
-
-- `iterationId` and `maxIterations`
-- `timeBudget.startTime` and absolute `timeBudget.deadline`
-- `tokenBudget.maxContextTokens`, `currentUsage`, and compaction threshold
-- `lastProgressMarker.workspaceHash` and `consecutiveFailures`
-- `scratchpad`
-- transcript messages
-- pending tool calls and tool results
-- current lifecycle state and transition log
+每個 tick context 必須追蹤：
+
+- iterationId 與 maxIterations
+- timeBudget.startTime 與絕對 timeBudget.deadline
+- tokenBudget.maxContextTokens、currentUsage 與壓縮門檻
+- lastProgressMarker.workspaceHash 與 consecutiveFailures
+- scratchpad
+- transcript 訊息
+- 待執行工具呼叫與工具結果
+- 目前生命週期狀態與轉移 log
 
-## Tool Contract
+## 工具契約
 
-Tools must be registered through a typed registry. A tool definition should include:
+工具必須透過具型別的 registry 註冊。工具定義應包含：
 
-- stable `name`
-- `schema.parse(input)` or equivalent validation
-- `checkPermissions(input, context)` or equivalent permission gate
-- `isReadOnly(input)`
-- `isConcurrencySafe(input)`
-- `isDestructive(input)`
-- `interruptBehavior`
-- `timeoutMs`
-- `maxResultSizeChars`
-- `execute(input, context, signal)`
-- result normalization to a standard tool message
+- 穩定的 name
+- schema.parse(input) 或等效驗證
+- checkPermissions(input, context) 或等效權限門檻
+- isReadOnly(input)
+- isConcurrencySafe(input)
+- isDestructive(input)
+- interruptBehavior
+- timeoutMs
+- maxResultSizeChars
+- execute(input, context, signal)
+- 將結果正規化為標準工具訊息
 
-Defaults must fail closed:
+預設必須 fail closed：
 
-- not concurrency-safe unless explicitly declared
-- not read-only unless explicitly declared
-- destructive operations require explicit permission interception
-- security-relevant tools must override classifier input; default is classifier-hidden
-- model-facing input may be backfilled for observers, but the API-bound input must not be mutated after cache-sensitive serialization
+- 未明確宣告，就不視為可安全並行
+- 未明確宣告，就不視為唯讀
+- 破壞性操作須有明確權限攔截
+- 安全相關工具須覆寫 classifier input；預設對 classifier 隱藏
+- 可為 observers 補上模型可見輸入，但送 API 的輸入在快取敏感序列化完成後不得再修改
 
-## Streaming Tool Execution Contract
+## 串流工具執行契約
 
-If tool calls can start while the model response is still streaming, execution must still preserve deterministic transcript order:
+模型回覆仍在串流時若能開始工具呼叫，執行仍須保有確定性的 transcript 順序：
 
-- Parse and validate tool input before asking whether a tool is concurrency-safe. If parsing or safety classification throws, treat the call as not concurrency-safe.
-- Concurrency-safe tools may run together only with other concurrency-safe tools. A non-safe tool must execute exclusively.
-- Progress messages may be yielded immediately, but final tool results must be integrated in the original tool_use order.
-- Unknown tools, interrupted tools, and sibling-cancelled tools must still produce model-visible `tool_result` error blocks tied to the original assistant message/tool_use ID.
-- Shell mutation failures may cancel sibling subprocesses, but read/search/fetch failures should not cancel unrelated siblings.
-- Respect per-tool `interruptBehavior`: user interruption cancels cancellable tools and blocks until non-cancellable tools finish.
-- Context modifiers are a non-concurrent feature unless the runtime explicitly designs merge semantics for concurrent modifiers.
-- Non-critical summaries or labels for tool output must fail soft; a failed summarizer must not turn successful tool execution into a failed turn.
+- 判斷工具可否安全並行前，先解析並驗證輸入。解析或安全分類拋錯時，視為不可安全並行。
+- 可安全並行的工具只能與其他可安全並行工具一起跑；不安全的工具必須獨占執行。
+- 進度訊息可立即送出，但最終工具結果須依原始 tool_use 順序整合。
+- 未知、遭中斷或因 sibling 取消而停止的工具，仍須產生模型可見的 tool_result error blocks，綁定原始 assistant message／tool_use ID。
+- Shell 異動失敗可取消 sibling subprocesses；但 read／search／fetch 失敗不應取消無關 siblings。
+- 遵守各工具 interruptBehavior：使用者中斷取消可取消工具，並等待不可取消工具結束。
+- Context modifiers 預設不可並行，除非 runtime 明確設計並行 modifier 的合併語意。
+- 非關鍵工具輸出摘要或標籤應允許失敗而不阻塞；summarizer 失敗不得讓已成功工具執行變成整個 turn 失敗。
 
-## Deferred Tool Schema Contract
+## 延遲載入工具 Schema 契約
 
-For large or dynamic tool registries, the initial prompt should not always carry every full schema. A deferred tool system should include:
+大型或動態 registry 的初始 prompt 不應總是攜帶所有完整 schema。延遲工具系統應包含：
 
-- a small always-loaded discovery tool that is both read-only and concurrency-safe
-- `shouldDefer` / `alwaysLoad` metadata on every tool
-- exact selection by stable tool name for deterministic recovery
-- keyword search with bounded `max_results`
-- a result format that returns callable schema references, not prose instructions
-- pending-provider visibility, so a no-match result can distinguish "missing" from "still connecting"
+- 小型、常駐、唯讀且可安全並行的 discovery tool
+- 每項工具的 shouldDefer／alwaysLoad metadata
+- 依穩定工具名稱精確選取，以確定性方式恢復
+- 有 max_results 上限的關鍵字搜尋
+- 回傳可呼叫 schema 引用的結果格式，而非散文指令
+- 顯示仍在連線的 provider，讓查無結果能分辨「不存在」與「尚在連線」
 
-Never invoke a deferred tool from its name alone. The full schema must be fetched and validated first.
+絕不只憑名稱呼叫延遲工具；必須先取得並驗證完整 schema。
 
-## Retry Contract
-
-Classify errors before retrying:
+## 重試契約
+
+重試前先分類：
 
-- Transient: 429, rate limit, explicit timeout errors, stream idle timeout, temporary 5xx, `ECONNRESET`, `EPIPE`, `ETIMEDOUT`, `EAI_AGAIN`.
-- Deterministic: schema errors, missing path, permission denied, syntax errors, explicit non-zero command failures.
-- User action required: permission prompt, missing credential/login, destructive confirmation.
+- 暫時性：429、rate limit、明確 timeout errors、stream idle timeout、暫時 5xx、ECONNRESET、EPIPE、ETIMEDOUT、EAI_AGAIN。
+- 確定性：schema errors、缺少路徑、permission denied、syntax errors、明確的命令非零失敗。
+- 需使用者動作：權限提示、缺憑證／登入、破壞性確認。
 
-Only transient errors may be retried internally. Default retry limit is 2, using exponential backoff with jitter and abort-signal support.
+只有暫時性錯誤可在內部重試。預設重試上限為 2，使用含 jitter 的指數退避並支援 abort signal。
 
-Do not rely on ambiguous `AbortError` strings alone. Tool timeouts, API request timeouts, and stream idle timeouts should become explicit error classes or abort reasons before classification.
+不只依賴模糊的 AbortError 字串。工具、API request 與 stream idle timeout 應先轉成明確錯誤類別或 abort reason，再分類。
 
-## Hook Contract
+## Hook 契約
 
-If the runtime supports hooks, define them as typed lifecycle events instead of arbitrary shell callbacks:
+Runtime 支援 hooks 時，定義為具型別的生命週期事件，不使用任意 shell callbacks：
 
-- `PreToolUse`: runs before tool execution; may block only through explicit contract.
-- `PostToolUse`: runs after successful tool execution; observability by default.
-- `PostToolUseFailure`: runs after tool failure with `tool_name`, `tool_input`, `tool_use_id`, `error`, `error_type`, `is_interrupt`, and `is_timeout`.
-- `PermissionDenied` / `PermissionRequest`: permission-specific hooks with explicit retry or allow/deny semantics.
-- `SessionStart` / `SessionEnd`: session lifecycle hooks with source or reason payloads.
-- `Stop` / `StopFailure`: turn-end hooks; API-error paths must not be misreported as normal stop.
-- `PreCompact` / `PostCompact`: compaction hooks; `PreCompact` may append custom compact instructions or block only if the contract says so.
+- PreToolUse：工具執行前觸發；只有明確契約允許才可阻擋。
+- PostToolUse：工具成功後觸發；預設用於觀測。
+- PostToolUseFailure：工具失敗後觸發，包含 tool_name、tool_input、tool_use_id、error、error_type、is_interrupt、is_timeout。
+- PermissionDenied／PermissionRequest：權限專屬 hooks，明確定義 retry 或 allow／deny 語意。
+- SessionStart／SessionEnd：session 生命週期 hooks，payload 包含來源或原因。
+- Stop／StopFailure：turn 結束 hooks；API error 路徑不得誤報為正常 stop。
+- PreCompact／PostCompact：壓縮 hooks；只有契約明訂時，PreCompact 才能附加自訂 compact 指令或阻擋。
 
-Every hook must declare payload schema, timeout, whether it is blocking, stdout/stderr routing, and exit-code behavior. Observability hooks should fail open. Permission and safety hooks should fail closed or ask the user.
+每個 hook 必須宣告 payload schema、timeout、是否阻塞、stdout／stderr 路由及 exit-code 行為。觀測 hooks 應 fail open；權限與安全 hooks 應 fail closed 或詢問使用者。
 
-## Shell Permission Contract
+## Shell 權限契約
 
-Shell permission logic must be parser-driven per shell family:
+Shell 權限邏輯必須依各 shell 家族使用 parser：
 
-- Bash and PowerShell need separate parsers, allowlists, path validation, wrapper stripping, and command-injection checks.
-- Do not treat a command as read-only if parsing fails, if a script block/subexpression/nested command is present, or if redirection writes to a file.
-- Strip safe wrappers such as `timeout`, `time`, `nice`, `nohup`, and safe env prefixes only through a validated parser/argv path.
-- Deny and ask rules must be harder to bypass than allow rules. For deny/ask matching, normalize all leading env prefixes and wrappers to a fixed point.
-- PowerShell read-only validation must reject script blocks, subexpressions, expandable strings, splatting, member/static invocations, assignments, stop-parsing, UNC paths, non-filesystem providers, cwd-changing compounds, and unsafe pipeline arguments.
-- Bash validation must reject shell metacharacter ambiguity, command substitution, unsafe wrapper values, redirection/path escapes, compound `cd` plus relative path confusion, and git-operation path bypasses.
-- A synchronous `isReadOnly()` can be a fast conservative prefilter, but the load-bearing permission path must re-parse and re-check before execution.
-- Permission rule strings need a parser, not ad hoc splitting. Support canonical aliases for renamed tools and escape/unescape parentheses in rule content.
-- Detect unreachable allow rules caused by broader ask/deny rules. Deny shadowing is more severe than ask shadowing and should be reported first.
-- Treat shared settings more conservatively than personal session rules; a rule that is safe with one user's sandbox may still be unsafe or confusing for teammates.
-
-## Context Compaction Contract
-
-When context exceeds the configured threshold:
-
-1. Preserve system/global/project instructions.
-2. Preserve the last 3 full conversation/tool rounds.
-3. Trim tool outputs over 50 lines to head/tail snippets with an audit marker.
-4. Store oversized tool results outside the prompt and pass back preview plus path.
-5. Drop superseded read snapshots when a later edit/write covers the same file.
-6. Apply micro/snip compaction before summary compaction.
-7. Only after the above, summarize older conversation state.
-
-Compaction and retry loops must have a circuit breaker. After 3 consecutive same-class failures, stop and report the known facts plus the next verification hypothesis.
-
-After a successful compaction, run cleanup for state invalidated by the compact boundary: microcompact trackers, session/message caches, permission/classifier approvals, speculative checks, context-collapse state, and memory-file caches. Preserve skill content and the user's active objective unless the implementation has an explicit replacement.
-
-Detailed compaction invariants:
-
-- Group message history by API round or assistant response ID, not by the user's apparent turn. Streaming assistant chunks with the same response ID must stay together.
-- When keeping a tail segment, walk backward to include matching tool_use blocks for kept tool_results and prior assistant chunks with the same message ID.
-- Distinguish cache-hot and cache-cold compaction. Cache-hot paths may issue API cache edits without mutating local transcript; cache-cold/time-based paths mutate prompt content because the cache has already expired.
-- Time-based microcompact should trigger on a real idle/cache-TTL gap, run only for main-thread sources, and keep at least one recent round. Avoid `slice(-0)` style bugs that accidentally keep everything.
-- Session-memory compaction should run only when positive thresholds and enough source material exist. Fall back if memory extraction has not completed, no useful memory exists, the template is empty, the summarized ID is missing, or the post-compact estimate is still above threshold.
-- Summary prompts that run without tools must explicitly say tool calls are rejected and waste the turn; otherwise the summary model may spend its only response trying to call tools.
-- After session-memory or cache-cold compaction, reset cache-break baselines so expected token drops are not reported as prompt-cache regressions.
-- Post-compact cleanup must be scoped by query source. Subagent compaction must not reset main-thread module-level state that shares a process with it.
-- Do not reset invoked skill content during cleanup; compaction attachments may need to preserve the full text of a skill across multiple compactions.
-
-## Tool Result Budget Contract
-
-Large tool outputs need two layers of protection:
-
-- Per-tool output limits: individual tools should persist oversized output and return a model-visible preview plus path.
-- Aggregate message limits: multiple parallel tool results can merge into one model-facing user message, so the runner must budget the normalized wire message, not only each raw result.
+- Bash 與 PowerShell 須有各自的 parser、allowlist、路徑驗證、wrapper 剝除與命令注入檢查。
+- 解析失敗、出現 script block／subexpression／nested command，或重新導向寫檔時，不把命令視為唯讀。
+- timeout、time、nice、nohup 等安全 wrapper 與安全 env prefixes，只能透過已驗證的 parser／argv 路徑剝除。
+- Deny 與 ask 規則須比 allow 更難繞過。比對 deny／ask 時，將所有前導 env prefixes 與 wrappers 正規化至固定點。
+- PowerShell 唯讀驗證須拒絕 script blocks、subexpressions、expandable strings、splatting、member／static invocations、assignments、stop-parsing、UNC paths、非檔案系統 providers、會改 cwd 的複合命令與不安全 pipeline 引數。
+- Bash 驗證須拒絕 shell metacharacter 歧義、command substitution、不安全 wrapper 值、重新導向／路徑逃逸、複合 cd 加相對路徑混淆，以及 Git 操作的路徑繞過。
+- 同步 isReadOnly() 可作快速保守前置篩選；真正負責權限的執行路徑仍須在執行前重新解析與檢查。
+- 權限規則字串需要 parser，不使用臨時字串切割。支援改名工具的 canonical aliases，並處理規則內容括號的 escape／unescape。
+- 偵測被較廣 ask／deny 規則遮蔽、因而不可達的 allow 規則。Deny 遮蔽比 ask 遮蔽嚴重，優先回報。
+- 共享設定比個人 session 規則採更保守處理；在某位使用者 sandbox 內安全的規則，仍可能對隊友不安全或產生混淆。
+
+## Context 壓縮契約
+
+Context 超過設定門檻時：
+
+1. 保留 system／global／project 指令。
+2. 保留最後 3 個完整對話／工具 rounds。
+3. 工具輸出超過 50 行時，縮成頭尾片段並附審計標記。
+4. 超大工具結果存至 prompt 外，回傳預覽與路徑。
+5. 後續 edit／write 已涵蓋同檔案時，丟棄被取代的 read snapshots。
+6. 先做 micro／snip compaction，再做摘要壓縮。
+7. 完成以上步驟後，才摘要較舊的對話狀態。
+
+Compaction 與 retry loops 必須有斷路器。同類失敗連續 3 次後，停止並回報已知事實與下一個驗證假設。
+
+壓縮成功後，清理因 compact 邊界失效的狀態：microcompact trackers、session／message caches、permission／classifier approvals、speculative checks、context-collapse state、memory-file caches。除非實作有明確替換，否則保留 skill 內容與使用者目前目標。
+
+詳細壓縮不變條件：
+
+- 依 API round 或 assistant response ID 分組訊息歷史，不依使用者表面上的 turn。同 response ID 的串流 assistant chunks 必須留在一起。
+- 保留尾段時，向前回溯納入保留 tool_results 對應的 tool_use blocks，以及同 message ID 的先前 assistant chunks。
+- 區分 cache-hot 與 cache-cold 壓縮。Cache-hot 路徑可發出 API cache edits 而不改本地 transcript；cache-cold／時間型路徑因快取已過期，會修改 prompt 內容。
+- 時間型 microcompact 應由真實 idle／cache-TTL 間隔觸發，只處理 main-thread sources，至少保留一個近期 round。避免 slice(-0) 這類意外保留全部內容的 bug。
+- Session-memory 壓縮只在門檻為正且來源素材足夠時執行。Memory extraction 尚未完成、無可用記憶、範本為空、缺 summarized ID，或壓縮後估計仍高於門檻時，走 fallback。
+- 不帶工具執行的摘要 prompt，必須明說工具呼叫會被拒絕且浪費 turn；否則摘要模型可能把唯一回覆用於嘗試呼叫工具。
+- Session-memory 或 cache-cold 壓縮後，重設 cache-break baselines，避免預期 token 下降被回報成 prompt-cache 回歸。
+- 壓縮後清理須依 query source 限定範圍。Subagent 壓縮不得重設同一程序中 main-thread 共用的 module-level state。
+- 清理時不重設已呼叫 skill 的內容；compaction attachments 可能需要跨多次壓縮保留 skill 全文。
+
+## 工具結果預算契約
+
+大型工具輸出需要兩層保護：
+
+- 單一工具輸出上限：個別工具應持久保存超大輸出，回傳模型可見預覽與路徑。
+- 彙總訊息上限：多個並行工具結果可能合成一則模型可見 user message，因此 runner 須計算正規化後 wire message 的預算，不只計算各原始結果。
 
-Replacement decisions must be stable across turns:
-
-- Track seen tool result IDs and frozen replacement choices in per-thread state.
-- Persist replacement records into the transcript so resume reconstructs the same model-visible preview bytes.
-- Re-apply cached replacements by ID without file I/O when possible.
-- Never later replace a result that the model already saw unreplaced; that breaks prompt-cache and resume consistency.
-- Group candidates the same way the API serializer groups user/tool-result messages, including parallel tool result edge cases.
-- Tools whose output is already self-bounded, such as full file reads, may opt out through an explicit infinite or no-persist limit.
-
-## Transcript Persistence Contract
-
-For runtimes that support resume, transcript persistence is part of the agent core:
-
-- Write transcript entries append-only with stable message IDs and parent links.
-- Represent compaction with an explicit compact-boundary message rather than silently replacing history.
-- Preserve recent messages verbatim when possible, and record preserved-segment metadata when compacted history needs relinking.
-- Keep a full transcript path in compact summaries so the agent can recover exact old snippets or error output when needed.
-- Re-append session metadata after compaction and on session exit so tail-window readers still see current title, tag, mode, worktree, PR, and last prompt.
-- Avoid letting deduped preserved messages advance parent pointers past the compact boundary during resume reconstruction.
-- Refresh SDK- or UI-mutable metadata from a tail scan before re-appending cached metadata, so old cache values do not overwrite fresher external writer values.
-- Relink preserved segments only after validating the tail-to-head chain. If the chain is broken or the preserved segment is stale, no-op and log rather than mutating transcript pointers.
-- Zero stale usage on preserved assistant messages after compaction so resume does not immediately trigger another autocompact from old usage numbers.
-- Snip compaction must replay removed UUIDs and relink dangling `parentUuid` pointers through removed ranges; otherwise resume can reconstruct unsnipped history.
-- Parallel tool_use/tool_result streaming forms a DAG even if parentUuid storage is a linked list. Recovery should group assistant chunks by provider message ID and splice off-chain siblings back after the last on-chain member.
-- Add a consistency checkpoint that compares expected message count or latest checkpoint position against the reconstructed chain, and log drift before the mismatch becomes a silent resume bug.
+替換決策必須跨 turns 穩定：
+
+- 在各 thread 狀態追蹤已見 tool result IDs 與凍結的替換選擇。
+- 將替換紀錄持久寫入 transcript，讓 resume 重建相同的模型可見預覽位元組。
+- 可行時依 ID 套用快取替換，不做檔案 I/O。
+- 模型已看過未替換的結果，後續絕不再替換它；否則會破壞 prompt-cache 與 resume 一致性。
+- 依 API serializer 組合 user／tool-result messages 的方式分組候選，包含並行工具結果邊界情況。
+- 輸出本身已受限的工具，例如完整檔案讀取，可透過明確的 infinite 或 no-persist limit 選擇不參與。
+
+## Transcript 持久化契約
+
+支援 resume 的 runtime，其 transcript 持久化屬於 agent 核心：
+
+- Transcript entries 僅追加，使用穩定 message IDs 與 parent links。
+- 用明確 compact-boundary message 表示壓縮，不靜默取代歷史。
+- 可行時逐字保留近期訊息；壓縮歷史需重新連結時，記錄 preserved-segment metadata。
+- Compact 摘要保留完整 transcript 路徑，讓 agent 必要時恢復精確舊片段或錯誤輸出。
+- 壓縮後與 session 退出時重新追加 session metadata，讓尾端視窗讀取者仍看到目前 title、tag、mode、worktree、PR 與 last prompt。
+- Resume 重建時，避免去重後保留的訊息讓 parent pointers 越過 compact boundary。
+- 重新追加快取 metadata 前，先從尾端掃描更新 SDK／UI 可變 metadata，避免舊 cache 值覆蓋外部 writer 的新值。
+- 只有驗證 tail-to-head chain 後才重新連結保留片段。鏈結斷裂或片段過期時，不動作並記 log，不修改 transcript pointers。
+- 壓縮後將保留 assistant messages 的過期 usage 歸零，避免 resume 因舊 usage 立即再觸發 autocompact。
+- Snip compaction 必須重播已移除 UUIDs，並跨被移除範圍重新連結懸空 parentUuid pointers；否則 resume 可能重建未裁剪的歷史。
+- 並行 tool_use／tool_result 串流形成 DAG，即使 parentUuid 儲存是 linked list。恢復時依 provider message ID 分組 assistant chunks，將鏈外 siblings 接回最後一個鏈內成員之後。
+- 加入一致性 checkpoint，比對預期訊息數或最新 checkpoint 位置與重建鏈；在不一致變成靜默 resume bug 前記錄漂移。
 
-## Control/Event Schema Contract
+## 控制／事件 Schema 契約
 
-If the runtime exposes SDK, structured output, replay, or remote-control events, define schemas for the wire format instead of streaming untyped blobs:
+Runtime 提供 SDK、structured output、replay 或 remote-control events 時，為 wire format 定義 schemas，不串流無型別 blobs：
 
-- user, assistant, system, result, error, status, rate-limit, and compact-boundary messages
-- `parent_tool_use_id` on every user/assistant/stream event that can belong to a tool subtree
-- stable `uuid` and `session_id`
-- compact-boundary metadata with trigger, pre-token count, and preserved-segment relink fields
-- permission-denial records with tool name, tool use ID, and original input
-- `transcript_path`, `permission_mode`, `cwd`, active tools, MCP/plugin/skill lists, and model in init/session messages
+- user、assistant、system、result、error、status、rate-limit 與 compact-boundary messages
+- 每個可能屬於工具子樹的 user／assistant／stream event 具有 parent_tool_use_id
+- 穩定 uuid 與 session_id
+- Compact-boundary metadata 包含 trigger、pre-token count 與 preserved-segment relink 欄位
+- Permission-denial 紀錄包含 tool name、tool use ID 與原始 input
+- Init／session messages 包含 transcript_path、permission_mode、cwd、啟用工具、MCP／plugin／skill 清單與 model
 
-Compact boundaries and status changes must be first-class events; do not infer them from prose summaries.
+Compact 邊界與狀態變化必須是一級事件，不能由散文摘要推定。
 
-## Agent Definition Contract
+## Agent 定義契約
 
-If a runtime supports file-defined custom agents, treat the agent registry as configuration parsing, not prompt text concatenation:
+Runtime 支援以檔案定義自訂 agent 時，registry 應採設定解析，不只是串接 prompt 文字：
 
-- Validate each field independently and keep loading after one invalid custom agent; a bad agent file should not break the whole registry.
-- Markdown agent files should require explicit `name` and `description`. Files that lack `name` may be colocated docs and should be skipped safely.
-- Normalize model inheritance such as `inherit`, trim strings, and validate effort, permission mode, max turns, memory scope, background mode, isolation mode, hooks, and MCP server requirements.
-- Parse allowed and disallowed tools through the same permission-rule parser used by runtime permissions. Disallowed rules should match canonical base tool names.
-- Tool allowlists should support `undefined` or `*` for all tools, then subtract disallowed tools. MCP tools may need a separate allow policy because they are dynamically discovered.
-- Source precedence must be explicit: built-in, plugin, user settings, project settings, flags, and policy should not accidentally merge in nondeterministic order.
-- If an agent declares durable memory and the runtime requires file access to manage it, inject the minimal required file tools only when the agent already has an explicit allowlist.
-- Agent prompts should make context boundaries obvious: a new agent starts without ambient context unless forked; foreground agents are for required results, background agents are for independent work.
+- 各欄位獨立驗證；一個 agent 無效後仍繼續載入，單一壞檔不得破壞整個 registry。
+- Markdown agent 檔案應要求明確 name 與 description。缺 name 的檔案可能是同目錄文件，應安全略過。
+- 正規化 inherit 等模型繼承、修剪字串，並驗證 effort、permission mode、max turns、memory scope、background mode、isolation mode、hooks 與 MCP server requirements。
+- Allowed／disallowed tools 使用與 runtime 權限相同的規則 parser；disallowed rules 應比對 canonical base tool names。
+- Tool allowlists 應支援 undefined 或 * 表示所有工具，再扣除 disallowed tools。MCP 工具為動態探索，可能需要獨立 allow policy。
+- 明確定義來源優先序：built-in、plugin、user settings、project settings、flags、policy 不得意外以不確定順序合併。
+- Agent 宣告 durable memory 且 runtime 需檔案存取才能管理時，只有該 agent 已有明確 allowlist，才注入最低必要檔案工具。
+- Agent prompt 應明確說明 context 邊界：除非 fork，否則新 agent 沒有隱含 context；foreground agents 提供必要結果，background agents 處理獨立工作。
 
-## Skill Packaging Contract
+## Skill 套件契約
 
-Skills are runtime capabilities with permission and context semantics, not just markdown snippets:
+Skills 是具有權限與 context 語意的 runtime 能力，不只是 Markdown 片段：
 
-- Use a small frontmatter schema: `name`, `description`, `allowed-tools`, `argument-hint`, `when_to_use`, `model`, `disable-model-invocation`, `user-invocable`, `hooks`, `context`, `agent`, `effort`, `shell`, and optional conditional `paths`.
-- Prefer `skill-name/SKILL.md` for user/project skills. Legacy single-file command formats should be compatibility paths, not the primary authoring style.
-- Conditional path skills should stay hidden until touched files match. Normalize patterns carefully; catch-all patterns are effectively unconditional and should not pretend to be selective.
-- Load managed, user, project, additional, and legacy skill roots in a deterministic order; deduplicate by realpath so symlinked or overlapping roots do not register the same skill twice.
-- Dynamic discovery should walk relevant file ancestors and respect ignore rules, especially for nested dependency folders.
-- Bundled reference files should be extracted lazily on first invocation into a deterministic per-skill directory, reject absolute paths or `..`, avoid symlink-following writes, and memoize concurrent extraction.
-- Initial skill listings must have a strict context budget. Show enough description to route invocation, then load full skill content only when the skill is invoked.
-- New prompt-command properties should default to requiring permission review. Maintain a safe-property allowlist so new fields are not silently trusted.
-- Invocation mode must be explicit. Inline skills add model-visible instructions to the current turn; forked skills run isolated work and return summarized result text.
-- Remote/canonical skills must be discovered before invocation, cached with their base directory, substitute declared session/skill-dir variables only in the skill content, and register invoked content so compaction can preserve it.
+- 使用精簡 frontmatter schema：name、description、allowed-tools、argument-hint、when_to_use、model、disable-model-invocation、user-invocable、hooks、context、agent、effort、shell，以及可選的條件 paths。
+- User／project skills 優先採 skill-name/SKILL.md。舊單檔命令格式作相容路徑，不作主要撰寫方式。
+- 條件式 path skills 應在 touched files 匹配前保持隱藏。謹慎正規化 patterns；catch-all 實際是無條件，不應假裝有選擇性。
+- Managed、user、project、additional 與 legacy skill roots 依確定順序載入；以 realpath 去重，避免 symlink 或重疊 roots 重複註冊同 skill。
+- 動態探索應沿相關檔案的祖先路徑並遵守 ignore 規則，尤其巢狀依賴目錄。
+- Bundled reference files 在首次呼叫時才延遲解出至確定的各 skill 目錄；拒絕絕對路徑或 ..、避免跟隨 symlink 寫入，並記憶化並行解出操作。
+- 初始 skill 清單須有嚴格 context 預算。顯示足以判斷呼叫的描述，只有呼叫時才載入完整內文。
+- 新 prompt-command 屬性預設須經權限審查。維護安全屬性 allowlist，避免靜默信任新欄位。
+- 呼叫模式須明確。Inline skills 在目前 turn 加入模型可見指令；forked skills 隔離執行並回傳摘要結果文字。
+- 遠端／canonical skills 須先探索再呼叫，連同 base directory 快取；只在 skill 內容代換宣告的 session／skill-dir variables，並註冊已呼叫內容供 compaction 保留。
 
-## Persistent Memory Contract
+## 持久記憶契約
 
-Durable memory is for user/project facts that outlive the turn. It is not a substitute for reading the current repo:
+持久記憶保存超出本 turn 的使用者／專案事實，不能取代讀取目前 repo：
 
-- Keep a closed memory taxonomy such as `user`, `feedback`, `project`, and `reference`.
-- Do not save code patterns, architecture, file paths, project structure, git history, recent changes, debugging solutions, or anything already governed by repo instructions.
-- Feedback memory should include both corrections and validated non-obvious successes, with `Why:` and `How to apply:` so the next agent can judge edge cases.
-- Project memory should convert relative dates to absolute dates and lead with the durable fact or decision before rationale.
-- Treat memory as historical claims. Before acting on file names, function names, flags, commands, or repo state from memory, verify against the current filesystem or git state.
-- If the user says to ignore or not use memory, proceed as if memory is empty and do not cite it.
-- Keep the memory index short. The index should route to topic files; it should not become a full transcript or dump of every fact.
-- Background memory extraction should be read-mostly and tightly sandboxed to the memory directory for writes. It should not get shell write, remove, MCP, or nested agent powers by default.
-- Memory consolidation needs gates: elapsed time, session count, current-session exclusion, and a lock so two consolidators do not rewrite the same files.
+- 使用封閉記憶分類，例如 user、feedback、project、reference。
+- 不保存 code patterns、架構、檔案路徑、專案結構、Git 歷史、近期變更、除錯解法，或 repo 指令已管理的內容。
+- Feedback 記憶同時包含修正與已驗證、非顯而易見的成功，附 Why: 與 How to apply:，讓下一個 agent 能判斷邊界情況。
+- Project 記憶將相對日期轉為絕對日期，先寫持久事實或決策，再寫理由。
+- 記憶視為歷史主張。依記憶中的檔名、函式名、旗標、命令或 repo 狀態採取行動前，核對目前檔案系統或 Git 狀態。
+- 使用者要求忽略或不使用記憶時，視為記憶為空，不引用它。
+- 記憶索引保持簡短，負責導向主題檔案，不變成完整 transcript 或全部事實 dump。
+- 背景記憶擷取應以讀取為主，寫入嚴格限定在 memory 目錄 sandbox；預設不授予 shell write、remove、MCP 或巢狀 agent 能力。
+- 記憶整併須有門檻：經過時間、session 數、排除目前 session，以及防止兩個整併程序同時改同檔案的 lock。
 
-## Session Task Contract
+## Session 任務契約
 
-Task lists represent current-session control state. They are not durable memory and they are not a final answer:
+任務清單代表目前 session 的控制狀態，不是持久記憶，也不是最終答案：
 
-- Use a task list for 3+ distinct steps, non-trivial multi-operation work, explicit user request, multiple requested tasks, or newly received requirements.
-- Skip task state for a single straightforward or purely conversational request.
-- At most one task should be `in_progress` at a time unless the runtime has explicit multi-owner task semantics.
-- Mark a task `in_progress` before starting it and `completed` only after the work is genuinely finished, including required tests or verification.
-- Do not mark partial work completed when tests fail, dependencies are missing, files are absent, or errors are unresolved. Keep it in progress or create a blocker task.
-- For 3+ tasks, include a verification/checkpoint task rather than ending with only implementation tasks.
-- In team runtimes, tasks need owner, dependencies, and enough description for another agent to execute without hidden context.
-- Queued commands should preserve isolation: slash commands and shell-mode commands run one at a time; normal prompts may batch only when mode and target context match.
+- 3 步以上、不簡單的多操作、使用者明確要求、多項任務或新收到需求時，使用任務清單。
+- 單一直接或純對話要求不建立任務狀態。
+- 除非 runtime 明確支援多 owner 任務語意，否則同時最多一項 in_progress。
+- 開始前標 in_progress；工作確實完成且含必要測試／驗證後，才標 completed。
+- 測試失敗、缺依賴、缺檔案或錯誤未解時，不將部分工作標 completed；維持進行中或建立 blocker 任務。
+- 3 項以上任務須包含驗證／checkpoint 任務，不只以實作結束。
+- Team runtime 的任務需有 owner、依賴與足夠描述，讓另一個 agent 不靠隱含 context 也能執行。
+- 佇列命令保持隔離：slash commands 與 shell-mode commands 一次一個；一般 prompts 只有 mode 與目標 context 相符才可批次處理。
 
-## Multi-Agent Coordination Contract
+## 多 Agent 協調契約
 
-For worker, teammate, fork, or swarm runtimes:
+Worker、teammate、fork 或 swarm runtime：
 
-- Worker contexts must have their own identity, abort controller, cwd/worktree metadata, permission mode, and tool pool.
-- Background workers that cannot show UI should avoid direct permission prompts; route permission requests to the leader or fail closed.
-- Worker-to-leader permission requests need typed payloads: request ID, worker ID/name, tool name, tool use ID, input, suggestions, decision, updated input, permission updates, and timestamp.
-- Mailbox or queue writes must be atomic enough for concurrent workers; lock or use an append-only protocol when filesystem-backed.
-- Permission updates approved by the leader must be applied to the shared context deliberately without letting a worker silently change the leader's mode.
-- Prefer one active team per leader unless the runtime has a robust namespace story for task lists, inboxes, permissions, and cleanup.
-- Team creation should initialize the corresponding task list and persist leader session/model/cwd metadata so external workers can discover the coordination surface.
-- Agent names used for messaging and task ownership must be stable human-facing names, not opaque generated IDs.
-- Prevent recursive team topologies unless the runtime explicitly supports them; flat rosters are easier to reason about and debug.
-- Worktree or remote isolation must persist enough metadata for resume and cleanup.
-- A worker resume path must reconstruct inherited tool-result replacements and permission context before continuing.
+- Worker contexts 須有自身 identity、abort controller、cwd／worktree metadata、permission mode 與 tool pool。
+- 無法顯示 UI 的 background workers 應避免直接權限提示；改送 leader 或 fail closed。
+- Worker → leader 權限請求須使用 typed payloads：request ID、worker ID／name、tool name、tool use ID、input、suggestions、decision、updated input、permission updates、timestamp。
+- Mailbox／queue 寫入須有足以支援並行 workers 的原子性；以檔案系統實作時使用 lock 或 append-only 協定。
+- Leader 批准的權限更新須明確套用至 shared context，不容許 worker 靜默改變 leader mode。
+- 除非 runtime 對任務清單、inboxes、permissions、cleanup 有穩健 namespace 設計，否則每個 leader 優先只保有一個 active team。
+- 建立 team 應初始化對應任務清單，持久保存 leader session／model／cwd metadata，供外部 workers 探索協調入口。
+- 訊息與任務 ownership 使用的 agent 名稱，須為穩定、使用者可辨識名稱，不是 opaque generated IDs。
+- 除非 runtime 明確支援，否則避免遞迴 team 拓樸；扁平成員清單較易理解與除錯。
+- Worktree 或遠端隔離須持久保存足夠 metadata 以支援 resume 與 cleanup。
+- Worker resume 路徑須先重建繼承的 tool-result replacements 與 permission context，再繼續。
 
-## Template Use
+## 範本使用
 
-The TypeScript skeleton in `templates/typescript-agent-core/` is a starting point, not a file that should be automatically installed into every repo.
+templates/typescript-agent-core/ 的 TypeScript 骨架是起點，不是應自動安裝到每個 repo 的檔案。
 
-Use it only when the user explicitly wants a runtime implementation in a target project. Copy the smallest required files, adapt to the repo's local test runner and module style, then add focused tests before expanding adapters.
+只有使用者明確要求在目標專案實作 runtime 時才使用。複製最低必要檔案，配合 repo 原生 test runner 與 module style，先加聚焦測試再擴充 adapters。
 
-## Preferred Files In TypeScript Repos
+## TypeScript Repo 建議檔案
 
-Use this layout unless the repo has a stronger local convention:
+除非 repo 有更明確本地慣例，否則使用此結構：
 
 ```text
 src/agent-core/
@@ -377,4 +377,4 @@ tests/agent-core/
   *.test.ts
 ```
 
-Keep the first implementation small and testable. Add adapters for real model providers and shell tools outside the core engine.
+首版實作保持精簡、可測試。真實 model providers 與 shell tools 的 adapters 放在核心 engine 外。

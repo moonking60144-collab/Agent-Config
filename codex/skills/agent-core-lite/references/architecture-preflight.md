@@ -1,4 +1,4 @@
-# Architecture Preflight
+# 架構前置檢查
 
 只有 shared-state／shared-contract 或 ownership-boundary 風險成立時讀本檔；單一 consumer、單一 local state、無跨 boundary 的外科式修改不使用。
 

@@ -1,4 +1,4 @@
-# Product Design Integration Reference
+# 產品設計整合參考
 
 這份文件把 Product Design plugin 裡值得長期吸收的工作方式，轉成 `frontend-ui-designer` 的可執行規則。目標不是複製外部 plugin，而是讓前端設計任務更像產品設計流程：先鎖定 brief、確認視覺來源、做可互動原型、用證據 QA，再交付。
 

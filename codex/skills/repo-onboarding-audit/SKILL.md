@@ -1,67 +1,67 @@
 ---
 name: repo-onboarding-audit
-description: "Use for read-only mapping of an unfamiliar repo or subsystem when stack, entry points, tests, tooling, conventions, or the first data flow are not yet known. Do not use when current context already identifies the relevant implementation path or when the user asked to implement immediately."
+description: "使用者要求唯讀盤點陌生 repo 或子系統，且技術棧、入口、測試、工具、慣例或第一條資料流尚不清楚時使用。目前脈絡已指出相關實作路徑，或使用者要求立即實作時，不使用。"
 ---
 
-# Repo Onboarding Audit
+# Repo 入門盤點
 
-Use this skill for requested read-only orientation when the relevant implementation context is not known. Build a compact map from files on disk. When implementation is already authorized, bounded reconnaissance remains a step in the owning Lite or Project workflow; it does not become a separate onboarding deliverable or require renewed implementation approval.
+相關實作脈絡未知，且使用者要求唯讀導覽時，使用此 skill。依磁碟實際檔案建立精簡地圖。已授權實作時，有限範圍盤點仍是負責執行的 Lite 或 Project 步驟，不另變成 onboarding 交付，也不重新要求實作批准。
 
-## Ground Rules
+## 基本規則
 
-- Stay read-only unless the user explicitly asked for implementation.
-- Read `AGENTS.md`, README files, and nearby project rules first. Read `CLAUDE.md` only when the user explicitly asks to compare or import another agent's conventions; do not treat it as Codex governing instructions.
-- Prefer `rg` / `rg --files` and parallel reads for discovery.
-- Ignore bulky generated folders during reconnaissance: `.git`, `node_modules`, `vendor`, `dist`, `build`, `.next`, `coverage`, `__pycache__`, virtualenvs, and IDE caches.
-- Do not infer a framework from one filename; confirm with manifests, config, and entry points.
+- 除非使用者明確要求實作，否則維持唯讀。
+- 先讀 AGENTS.md、README 與鄰近專案規則。只有使用者明確要求比較或匯入其他 agent 慣例時才讀 CLAUDE.md；不能把它當成 Codex 的適用規範。
+- 探索優先使用 rg／rg --files 及平行讀取。
+- 盤點時忽略大型生成目錄：.git、node_modules、vendor、dist、build、.next、coverage、__pycache__、virtualenvs 與 IDE 快取。
+- 不憑單一檔名推定框架；以 manifests、設定與入口確認。
 
-## Reconnaissance
+## 初步盤點
 
-Collect these signals before deep-reading implementation files:
+深入讀取實作前，收集以下線索：
 
-1. Package manifests: `package.json`, `pnpm-lock.yaml`, `yarn.lock`, `pyproject.toml`, `requirements.txt`, `pom.xml`, `build.gradle`, `go.mod`, `Cargo.toml`, `composer.json`, `Gemfile`.
-2. Framework fingerprints: Next/Vite/Nuxt/Angular configs, Spring Boot/Quarkus dependencies, Django/FastAPI/Flask entry points, Rails/Laravel configs, Docker and deployment files.
-3. Entry points: `main`, `index`, `app`, `server`, `cmd/`, routes, controllers, workers, scheduled jobs, CLI entry files.
-4. Top-level tree: two levels deep, excluding generated folders.
-5. Tooling: formatter, lint, typecheck, build scripts, task runners, Makefile, CI workflows, Docker compose, `.env.example`.
-6. Tests: test directories, naming patterns, runner config, fixtures, e2e setup, coverage tooling.
-7. Git conventions: recent commit messages and branch status when inside a git repo.
+1. 套件 manifests：package.json、pnpm-lock.yaml、yarn.lock、pyproject.toml、requirements.txt、pom.xml、build.gradle、go.mod、Cargo.toml、composer.json、Gemfile。
+2. 框架特徵：Next／Vite／Nuxt／Angular 設定、Spring Boot／Quarkus 依賴、Django／FastAPI／Flask 入口、Rails／Laravel 設定、Docker 與部署檔案。
+3. 入口：main、index、app、server、cmd/、routes、controllers、workers、排程工作與 CLI 入口檔。
+4. 頂層目錄樹：深入兩層，排除生成目錄。
+5. 工具：formatter、lint、typecheck、build scripts、task runners、Makefile、CI workflows、Docker compose、.env.example。
+6. 測試：目錄、命名模式、runner 設定、fixtures、e2e 設定與覆蓋工具。
+7. Git 慣例：位於 Git repo 時，查看近期 commit 訊息與分支狀態。
 
-## Architecture Mapping
+## 架構盤點
 
-After reconnaissance, trace one representative data flow:
+初步盤點後，追一條具代表性的資料流：
 
 ```text
 entry point -> validation / parser -> business logic -> persistence or external API -> response / UI / side effect
 ```
 
-Identify:
+辨識：
 
-- tech stack and versions visible from manifests
-- frontend/backend split or monolith shape
-- API style and route ownership
-- persistence layer and source of truth
-- where errors are handled
-- where validation happens
-- where tests attach to the flow
+- manifests 可見的技術棧與版本
+- 前後端分離或單體架構
+- API 風格與 route 責任歸屬
+- 持久化層與權威來源
+- 錯誤在哪裡處理
+- 輸入驗證在哪裡執行
+- 測試接在資料流的哪些位置
 
-## Convention Detection
+## 辨識慣例
 
-Before recommending changes, identify existing local patterns:
+提出修改建議前，辨識既有本地模式：
 
-- file naming and directory ownership
-- dependency injection or direct import style
-- error handling style
-- test style and naming
-- state/cache/invalidation patterns
-- commit message language and format
-- build/test commands already used by scripts or CI
+- 檔案命名與目錄責任
+- 依賴注入或直接 import 風格
+- 錯誤處理風格
+- 測試風格與命名
+- 狀態／快取／失效模式
+- commit 訊息語言與格式
+- scripts 或 CI 已使用的 build／test 命令
 
-Project conventions beat generic best practice unless they cause a concrete bug, security issue, or maintainability risk tied to the user request.
+優先遵守專案慣例；只有它造成具體 bug、安全問題，或與使用者需求相關的可維護性風險時才例外。
 
-## Output Shape
+## 輸出格式
 
-Keep the result short and actionable:
+保持簡短、可執行：
 
 ```markdown
 **Repo Map**

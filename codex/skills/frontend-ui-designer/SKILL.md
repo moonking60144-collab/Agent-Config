@@ -1,6 +1,6 @@
 ---
 name: frontend-ui-designer
-description: "Use for new UI, visual redesign, prototype, image/URL-to-code, landing page, dashboard, or frontend polish where layout, typography, color, motion, responsive behavior, or design QA is part of the goal. Do not use for ordinary frontend logic bugs with no visual or interaction-design decision."
+description: "適用於新 UI、視覺改版、原型、圖片／URL 轉程式、landing page、dashboard 或前端精修，且目標涉及版面、字體排印、色彩、動效、響應式行為或設計 QA。不適用於不涉及視覺或互動設計決策的一般前端邏輯 bug。"
 ---
 
 ## 角色定位
@@ -11,7 +11,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 0 - 環境偵測（開始任何 code 之前）
+## 階段 0 - 環境偵測（開始任何 code 之前）
 
 進入任何設計任務前，先確認以下資訊：
 
@@ -32,7 +32,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 0.5 - 當代參考刷新
+## 階段 0.5 - 當代參考刷新
 
 如果任務是全新頁面、首頁改版、品牌重塑、landing page、活動頁，或使用者明確要求「更現代」「更像現在的一線網站」「參考權威前端網站」，先做一次輕量的當代參考刷新，再開始設計。
 
@@ -80,7 +80,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 0.75 - Product Design Gate
+## 階段 0.75 - 產品設計門檻
 
 當任務涉及新 UI、重設計、prototype、從 URL / screenshot / Figma / image 實作，或使用者要你「參考某個產品 / 畫面」時，現在讀取 `references/product-design-integration.md`。
 
@@ -88,7 +88,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 1 - 任務分類
+## 階段 1 - 任務分類
 
 根據需求判斷任務屬於哪一類，每類的切入點不同：
 
@@ -111,7 +111,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 1.5 - 前台文案邊界
+## 階段 1.5 - 前台文案邊界
 
 這一段是硬規則，尤其適用於 landing page、商家首頁、品牌介紹頁、產品介紹頁。
 
@@ -154,7 +154,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 2 - 視覺方向定義
+## 階段 2 - 視覺方向定義
 
 在寫任何 CSS 之前，先用文字說清楚這次的視覺方向。對於小幅 polish 或局部調整，也至少要在心中完成這一步，不要直接憑直覺堆樣式。
 
@@ -170,7 +170,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 2.5 - 整頁視覺一致性
+## 階段 2.5 - 整頁視覺一致性
 
 這一段是 landing page、品牌頁、商家首頁、產品頁的核心規則。頁面不能只是很多「各自好看」的區塊，而要像同一個系統長出來的結果。
 
@@ -227,9 +227,9 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 3 - 實作原則
+## 階段 3 - 實作原則
 
-### Typography
+### 字體排印
 
 - 預設讓標題與 body 保持明顯 size ratio，確保 hierarchy 清楚；資訊密度高的畫面可適度收斂
 - `line-height`：body 1.6-1.75，heading 1.1-1.3，顯示字 0.95-1.05
@@ -237,7 +237,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 - 避免全站只用預設 Inter 再靠 weight 硬撐差異；優先讓 display font 與 text font 各自有明確角色。若專案本身就是系統化產品或既有字體受限，可用 type scale、字距、字重與層級補強
 - 中文字體處理：確認有 fallback，Noto Serif TC / Noto Sans TC 是可靠選項
 
-### Color
+### 色彩
 
 - 用 CSS custom properties 管理所有色彩，不散落在各處
 - 定義完整的 semantic token：`--color-surface`、`--color-text-primary`、`--color-text-muted`、`--color-border`、`--color-accent`
@@ -264,20 +264,20 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 }
 ```
 
-### Spacing
+### 間距
 
 - 使用 4px 或 8px 為基底的 spacing scale，不使用任意數字
 - Section 層級的 padding：`clamp(4rem, 8vw, 8rem)`，隨螢幕寬度自然縮放
 - 元素間距要能反映「語義相近程度」：相關的東西距離近，不相關的距離遠
 
-### Layout
+### 版面
 
 - 預設用 CSS Grid 做頁面結構、Flexbox 做元件內排列；如果現有元件系統或內容流更適合單軸排列，不要為了套規則硬改
 - 非對稱版型比等寬更有設計感，但要有理由
 - 使用 `max-width` + `margin: auto` 建立閱讀區域，不讓內容貼滿寬螢幕
 - Grid 的 `gap` 要有層級差異：container gap > section gap > element gap
 
-### Assets and Fidelity
+### 素材與還原度
 
 - Logo、product image、hero image、icon、avatar、illustration、texture、video、font 都算設計來源，不是可有可無的裝飾
 - 來源畫面有實際 asset 時，優先使用合法取得的既有 asset；無法取得時才找授權替代或生成相同 art direction 的 bitmap asset
@@ -285,7 +285,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 - icon library 要匹配產品語境；只有在 lucide 本來就符合現有設計語言時才用 lucide
 - Figma / screenshot / URL recreation 任務要記錄替換了哪些 asset、font 或 icon，以及替換原因
 
-### Interaction States
+### 互動狀態
 
 - Production UI 與 prototype 都要設計狀態，不只畫 default state
 - Button / link / input / select / tab / menu / drawer / modal / card 至少考慮 default、hover、focus、active、disabled
@@ -293,7 +293,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 - Dashboard、列表、搜尋、篩選、資料卡要有 loading、empty、error、no result、long content、permission denied 的處理
 - 若使用者只要求靜態 mock，可以縮小實作，但交付摘要要說明哪些互動未做
 
-### Motion
+### 動效
 
 - 動效一定要有目的：引導注意力 / 提供回饋 / 建立空間感三選一
 - Page load：staggered reveal 用 `animation-delay`，間距 60-100ms
@@ -315,7 +315,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 }
 ```
 
-### Animation Reference Rules
+### 動畫參考規則
 
 - 當你參考現代網站時，先拆解它的動效角色：
   - 是品牌氣氛動畫
@@ -329,7 +329,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 - 如果動畫需要依賴重型函式庫、影片、3D 場景或大量資產，先判斷是否真的有轉換價值，再決定要不要做
 - 動效參考的目標是「學語言」，不是「做得像得獎網站」
 
-### Responsive
+### 響應式設計
 
 - 預設採用 mobile-first：先處理 375px 附近的核心版面，再用 min-width 覆寫；若專案明確是桌機內部工具，也要至少確認窄寬度不會崩壞
 - Breakpoint 不死記數字，用 `clamp()` 讓字型、間距流體縮放
@@ -338,7 +338,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 4 - 禁止退化清單
+## 階段 4 - 禁止退化清單
 
 **在開始寫 code 之前，讀取 `references/anti-generic-patterns.md`**，對照清單確認設計決策沒有落入任何退化模式。若某個常見模式在既有產品脈絡中是合理選擇，至少要說清楚為什麼保留它，而不是無意識地複製。
 
@@ -346,7 +346,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 4.5 - Evidence-Based Design QA
+## 階段 4.5 - 以證據驗收設計
 
 交付前依 `references/product-design-integration.md` 的 Design QA Gate 比較真實畫面與 visual target，保留相同 viewport/theme/state/content 的視覺與互動證據。裝置特有情境用 responsive checklist。
 
@@ -354,7 +354,7 @@ description: "Use for new UI, visual redesign, prototype, image/URL-to-code, lan
 
 ---
 
-## Phase 5 - 交付說明
+## 階段 5 - 交付說明
 
 完成 code 後，必須輸出一段設計說明，包含：
 

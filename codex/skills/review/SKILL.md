@@ -1,9 +1,9 @@
 ---
 name: review
-description: "Use for read-only review, audit, inspection, PR/diff/architecture/integration/security/data-flow/UI evaluation or requests to list issues. Report evidence-backed findings first. Do not implement unless the user authorizes modification."
+description: "適用於唯讀 review、審計、檢查、PR／diff／架構／整合／安全／資料流／UI 評估，或要求列出問題。優先回報有證據支持的 findings；使用者未授權修改時不實作。"
 ---
 
-# Review
+# 審查（Review）
 
 採用 issue-first、唯讀立場。找可達 bug、回歸、資料流／部署風險與缺漏證據；不要把風格偏好或無證據推測當 finding。
 

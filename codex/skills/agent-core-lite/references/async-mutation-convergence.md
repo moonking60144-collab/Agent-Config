@@ -1,4 +1,4 @@
-# Async Mutation Convergence
+# 非同步異動收斂
 
 ## 何時讀取
 
@@ -18,7 +18,7 @@ Lite、Project 與 Review 共用下列判準；本檔是條件式分析與驗證
 
 選擇能滿足需求的最小 state surface。低頻內部寫入若可接受等待，不要為了視覺即時性自建 distributed mutation lifecycle。
 
-## Repo enforcement 優先序
+## Repo 強制約束優先序
 
 能持久防回歸的棘輪依可靠度優先考慮：
 
@@ -33,7 +33,7 @@ Lite、Project 與 Review 共用下列判準；本檔是條件式分析與驗證
 
 比例原則：既有 enforcement 直接使用並引用；若缺失且沒有它就無法安全完成 requested behavior，視為 blocking correctness requirement；若目前修改仍能依既有 contract 安全完成，將 durable hardening 記為 follow-up proposal，不就地擴張 scope。
 
-## Outcome model
+## 結果模型
 
 先從實際 provider、transport 與 runtime 行為建立 outcome taxonomy，不由現有 enum 反推世界只有哪些結果。至少區分：
 
@@ -57,7 +57,7 @@ Lite、Project 與 Review 共用下列判準；本檔是條件式分析與驗證
 
 禁止只有 pending、frozen、retrying 名稱，卻沒有 timeout、owner 與可達 terminal path。
 
-## Durable intent 與 evidence ordering
+## 持久化意圖與證據順序
 
 若 external side effect 與 local commit 無法 atomic：
 
@@ -68,7 +68,7 @@ Lite、Project 與 Review 共用下列判準；本檔是條件式分析與驗證
 
 Snapshot 只在 state restoration 有意義時使用；email、webhook 等 command mutation 應保存 command material，不假裝能回復外部世界。
 
-## Reconciliation
+## 狀態核對與收斂
 
 Recovery 必須從 authoritative current state、durable intent 與 observed outcome 做判斷，不能只把舊 optimistic value 重播回去。
 
@@ -83,7 +83,7 @@ Recovery 必須從 authoritative current state、durable intent 與 observed out
 
 第三值、partial 與 conflict 必須保留為 durable material，直到 explicit resolution；不得在 restart 或 cleanup 時把它們靜默降級成 previous／intended value。
 
-## Cross-layer contract
+## 跨層契約
 
 Canonical outcome contract 必須由 producer、wrapper、classifier、persistence 與 consumer 共用，或透過單一 adapter 明確轉換。避免 status、httpStatus、code 等各層自行猜測 shape。
 

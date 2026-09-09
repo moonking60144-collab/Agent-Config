@@ -1,4 +1,4 @@
-# Interaction Performance Preflight
+# 互動效能前置檢查
 
 只有互動延遲會受高頻事件、高密度／虛擬化 surface、shared queue 或 background sync 競爭影響時讀本檔。
 

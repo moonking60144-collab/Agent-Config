@@ -1,58 +1,58 @@
 ---
 name: agent-core-lite
-description: "Use for ordinary cross-file or 3+ step implementation, config/runtime drift, sync/deploy/commit/push, and evidence-driven verification. Keeps execution ownership while selecting applicable domain contracts. Do not use for pure read-only review or work requiring a durable Project ledger."
+description: "適用於一般跨檔或 3 步以上的實作、設定／runtime 漂移、同步／部署／commit／push，以及依證據驗證的工作。選用適當的領域契約時，仍保有執行責任。不適用於純唯讀 review，或需要持久化 Project ledger 的工作。"
 ---
 
 # Agent Core Lite
 
-Own a bounded implementation through Observe → Scope → Plan → Act → Verify → Report. Simple questions and single-step edits do not need this process.
+負責範圍明確的實作，依序進行觀察（Observe）→ 界定範圍（Scope）→ 規劃（Plan）→ 執行（Act）→ 驗證（Verify）→ 回報（Report）。簡單問答與單步修改不需要此流程。
 
-## Ownership
+## 責任歸屬
 
-- Pure read-only review belongs to Review.
-- Requested orientation with missing implementation context belongs to Onboarding. During authorized implementation, perform bounded reconnaissance in Observe and continue the requested deliverable.
-- Repeated failures route to agent-failure-debugging.
-- Escalate to Project only for independently verifiable subsystems, required durable handoff, irreversible/high-blast-radius work, or audit-first implementation with an unknown worklist. File or layer count alone does not justify escalation.
-- Engine and frontend skills supply technical/domain contracts; they do not replace execution ownership, authorization or verification responsibility.
+- 純唯讀審查由 Review 負責。
+- 使用者要求導覽且缺少實作脈絡時，由 Onboarding 負責。已授權的實作則在 Observe 內進行有限範圍的盤點，接著完成原本交付。
+- 重複失敗轉交 agent-failure-debugging。
+- 只有涉及可獨立驗證的子系統、必要的持久化交接、不可逆／高影響範圍工作，或須先審計才能確定工作清單的實作，才升級至 Project。檔案數或層數本身不足以構成升級理由。
+- Engine 與 frontend skills 提供技術／領域契約；不取代執行、授權或驗證責任。
 
-## Observe and Scope
+## 觀察與界定範圍
 
-Read the governing instructions, actual diff, callers, producers, consumers and existing tests. Identify the real source of truth and distinguish repo, active settings, runtime/cache and external state.
+讀取適用規範、實際 diff、呼叫端（caller）、產生端（producer）、使用端（consumer）及既有測試。確認真正的權威來源，區分 repo、active 設定、runtime／快取與外部狀態。
 
-For shared behavior, use the discovery and coverage method in [verification](references/verification.md). A manually completed consumer list is not completeness evidence. Account for discovered candidates and unresolved dynamic paths; mark concrete intentional divergence.
+共用行為採用 [verification](references/verification.md) 的探索與覆蓋方法。人工填完 consumer 清單不構成完整性證據。交代探索到的候選與尚未解決的動態路徑，明確標記刻意保留的差異。
 
-Name the files, behaviors and success criteria before edits. Preserve unrelated working-tree changes. Keep global assets in the Config repo and user-level Codex directories.
+修改前列明檔案、行為與成功標準。保留工作樹內無關的變更。全域資產留在 Config repo 與使用者層級的 Codex 目錄。
 
-## Plan
+## 規劃
 
-Use update_plan when available for multi-step work; otherwise keep a concise explicit plan in the conversation. Each task delivers independently testable behavior, with setup/config/docs included in the task they support.
+多步工作在 update_plan 可用時使用它；否則在對話中保留簡潔明確的計畫。每個任務交付可獨立測試的行為，所需安裝、設定與文件併入它們支援的任務。
 
-Read only the relevant design reference before Act:
+進入 Act 前，只讀取相關的設計參考：
 
-- [Architecture](references/architecture-preflight.md): shared state/contracts, authority, versions, concurrency and ownership.
-- [Async mutation](references/async-mutation-convergence.md): uncertain outcomes and durable settlement/recovery.
-- [Interaction performance](references/interaction-performance.md): high-frequency/high-density UI or shared scheduling resources.
+- [架構](references/architecture-preflight.md)：共享狀態／契約、權威、版本、並行與責任歸屬。
+- [非同步異動](references/async-mutation-convergence.md)：不確定結果與持久化的結果收斂／恢復。
+- [互動效能](references/interaction-performance.md)：高頻／高密度 UI 或共享排程資源。
 
-Record unresolved design decisions that change the contract; resolve them before implementation. These references supply domain invariants, while verification supplies the evidence method.
+記錄會改變契約的未決設計事項，並在實作前解決。這些參考提供領域不變條件；verification 提供證據方法。
 
-## Act
+## 執行
 
-Follow existing patterns and make scoped edits. Parallelize independent reads; serialize writes, Git and external side effects. Use bounded read-only subagents when they increase coverage, passing raw artifacts rather than expected answers. The main agent integrates findings and owns writes and final verification.
+沿用既有模式並限定修改範圍。獨立讀取可平行執行；寫入、Git 與外部副作用依序執行。有限範圍的唯讀子 agent 能增加覆蓋時可使用，傳遞原始產物而非預期答案。主 agent 整合 findings，並負責寫入與最終驗證。
 
-When a hypothesis or action fails twice, stop blind retries and diagnose with one observable reversible check.
+同一假設或動作失敗兩次後，停止盲試，以一次可觀測、可逆的檢查診斷。
 
-## Verify
+## 驗證
 
-Read [verification](references/verification.md) before defining evidence for a code-changing slice. Use its single discover → oracle/invariant → actual checks → sensitivity/performance → receipt flow.
+為程式修改範圍定義證據前，讀取 [verification](references/verification.md)。使用同一條探索 → 判定依據／不變條件 → 實際檢查 → 敏感度／效能 → 驗證紀錄（receipt）流程。
 
-The deployed entrypoint is `scripts/verify-change.mjs`. Reuse native tests and traces; the runner binds their actual results to the captured source. Select methods by the invariant rather than applying every technique mechanically. A failed probe, unaccounted consumer, stale source, surviving meaningful challenge, or missing required performance measurement prevents a passed receipt.
+部署後的入口是 scripts/verify-change.mjs。重用專案原生測試與追蹤；runner 將實際結果綁定至擷取的原始碼。依不變條件選方法，不機械套用所有技術。Probe 失敗、consumer 未交代、原始碼過期、有意義的故障挑戰未被攔截，或缺少必要效能量測，都不得產生通過的 receipt。
 
-Use the same method for Lite and Project. A Lite receipt does not require a Project ledger. Existing repo enforcement remains the primary protection; global instructions do not prove a business invariant.
+Lite 與 Project 使用同一方法。Lite receipt 不需要 Project ledger。既有 repo enforcement 仍是主要保護；全域指令不能證明業務不變條件。
 
-Commit, push and remote validation are separate states. After an authorized push with applicable remote checks, verify the exact revision before claiming completion. Pending/failed/unknown checks remain explicit unfinished work.
+Commit、push 與遠端驗證是不同狀態。已授權 push 且有適用遠端檢查時，必須驗證精確 revision 才能宣稱完成。Pending／failed／unknown 檢查仍須明列為未完成工作。
 
-## Report
+## 回報
 
-State what changed, the evidence that supports it, remaining boundaries and required runtime reload. Reference the receipt for detailed results. Do not replay logs or present tests as broader proof than they provide.
+說明變更、支持它的證據、剩餘邊界與必要的 runtime 重新載入。詳細結果引用 receipt。不重播 log，也不把測試說成超出它能支持範圍的證明。
 
-Before final delivery: verify the actual diff/status, inspect accepted reviewer findings directly, and confirm every requirement has appropriate evidence or an explicitly unresolved boundary.
+最終交付前：核對實際 diff／status，直接檢查採納的 reviewer findings，確認每項需求都有適當證據，或明確標示尚未解決的邊界。
