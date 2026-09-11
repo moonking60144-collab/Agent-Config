@@ -228,7 +228,7 @@
 **氣質**：清晰、一致、可延伸。不強調個性，強調可信與效率。每個決策都基於系統，而不是單次美感判斷。這是大型 SaaS 或企業產品應有的樣子。
 
 **核心決策**：
-- 完整的 design token 定義（見 SKILL.md Phase 3 的 token 範例）
+- 明確定義 design tokens；沿用既有 tokens，僅補足本次所需，實作原則見 [SKILL.md](../SKILL.md)。
 - 一致的 component API：spacing、variant、state 都可預測
 - 色彩語義化：action / status / surface / text 各有專屬 token
 - 每個互動狀態都設計到：default / hover / active / focus / disabled / loading / error

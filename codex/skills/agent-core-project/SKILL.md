@@ -11,7 +11,7 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 只有需要子系統獨立驗收、compaction／交接、不可逆／高影響範圍操作，或多階段實作清單必須探索後才知道時，才使用 Project。計算可獨立測試的行為，而非檔案、層數或工具數。不需持久化執行時降級至 Lite。
 
-建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及專案規則或先前交接指定的精確 repo-local 路徑，尋找相符的未完成 ledger。目標相符時從 next_instruction 續接；不重新探索 done_verified 工作。只有多份 ledger 確實衝突時才詢問。
+建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及專案規則或先前交接指定的精確 repo-local 路徑，尋找相符的未完成 ledger。目標與本輪 checkout 相符時從 next_instruction 續接；不重新探索仍有效的 done_verified 工作。跨 task／worktree 的 ledger 只提供線索，先核對本輪原始碼與 runtime，不照搬過期完成狀態。只有現有證據無法解決的歸屬衝突才詢問。
 
 純 Review 維持唯讀。使用者要求的盤點由 Onboarding 負責；已授權實作則在此流程內做有限範圍盤點。重複失敗使用 agent-failure-debugging。自訂 runtime 工作採用 Engine 技術契約，Project 仍保有計畫、ledger 與最終驗收責任。
 
@@ -53,7 +53,7 @@ next_instruction: Read <ledger path> first, then continue <task>.
 
 Act 前解決影響契約、ownership 或可觀察行為的設計決策。新證據推翻計畫時，先更新 plan／ledger 再繼續。未修改且已有足夠 enforcement 的程式路徑，不需要另一套框架。
 
-跨邊界架構或異動工作，須由新的 reviewer 檢查一條真實 producer → consumer 失敗時間線。共用 verification contract 定義 reviewer 證據的限制與必要行為檢查。
+跨邊界架構或異動工作，須由新的 reviewer 檢查一條真實 producer → consumer 失敗時間線；交付明確的 checkout、snapshot 與原始任務，避免只審作者摘要。共用 verification contract 定義 reviewer 證據的限制與必要行為檢查。
 
 不可逆工作前確認恢復方式並遵守既有授權。將未解依賴標為 blocked，只繼續獨立任務。
 

@@ -1,126 +1,33 @@
-# 響應式設計檢查清單
+# 響應式與可用性檢查
 
-這份清單是設計完成後的驗證工具，不是設計過程的起點。先完成主要設計與實作，再對照這份清單確認有無遺漏；若任務很小，至少快速掃過與該畫面直接相關的項目。
+只選本次版面、裝置、輸入方式、色彩或文字／控制項辨識會影響的項目；純配色修改也須檢查相關對比與狀態辨識，不必因此檢查無關的版面項目。測量結果不是完整無障礙認證。沿用既有產品策略，不強制每次重寫 mobile-first 或套固定裝置表。
 
----
+## 版面與輸入
 
-## 基礎策略原則
+- 依真實目標 viewport、內容折行與縮放檢查布局；一般閱讀區可限制行寬，寬表則保留有意義的水平捲動，不一律壓進 65ch。
+- 在窄視窗、放大文字、橫向低高度及需要時的螢幕鍵盤下，主要操作與必要資訊仍可達；避免 fixed bar 或 modal 遮住焦點與內容。
+- 檢查真實 pointer／touch／keyboard 操作。Hover 不是觸控替代；需要 hover 才可見的功能應有可點擊或鍵盤入口。
+- 表單確認 label、focus、validation 與長內容；iOS 等瀏覽器的輸入縮放以目標 runtime 觀察，不把單一 font-size 門檻當跨瀏覽器保證。
+- 合適時使用 safe-area inset 與動態 viewport 單位；沿用專案已支援的瀏覽器範圍。
 
-- **Mobile-first**：先寫 375px 的樣式，用 `min-width` media query 往上覆寫
-- **流體優先，斷點為輔**：能用 `clamp()` 解決的，不用 media query
-- **不死記斷點數字**：根據內容折行點決定斷點，而不是預設 576 / 768 / 1024 / 1280
+## 尺寸與對比
 
-常用流體縮放寫法：
-```css
-/* 字型：從 1rem 到 1.25rem，在 320px 到 1200px 之間流體縮放 */
-font-size: clamp(1rem, 0.875rem + 0.625vw, 1.25rem);
+- 觸控密集的主要操作優先以 44×44 CSS px 或更大為設計目標；不能把這個偏好冒稱所有 UI 的 WCAG AA 下限。
+- [WCAG 2.2 的 Target Size Minimum](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html) 為 24×24 CSS px 或符合其 spacing／equivalent／inline 等例外。密集桌機工具列依實際條件檢查，不機械放大所有控制項；44×44 是 [Enhanced](https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced) 要求。
+- [一般文字對比](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) 以 4.5:1、大字以 3:1 檢查；muted／placeholder 不因名稱而自動豁免，inactive controls 等例外依標準判斷。
+- 必要的控制項及圖形辨識依 [Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)；不要混用文字與非文字門檻，狀態不能只靠顏色區分。
 
-/* 展示標題：從 2.5rem 到 5rem */
-font-size: clamp(2.5rem, 5vw + 1rem, 5rem);
+## 捲動、Sticky 與 Overlay
 
-/* Section padding：從 3rem 到 8rem */
-padding-block: clamp(3rem, 8vw, 8rem);
-```
+- [Sticky](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/position) 依最近有捲動機制的祖先定位，並受 containing block 邊界限制；檢查實際 overflow、inset、容器高度與捲動方向，不能宣稱父層一律必須 `overflow: visible`。
+- 不用放寬整張表 overflow 來修局部選單裁切；依既有 portal／定位元件處理，驗證關閉、滾動、切頁與 focus restoration。
+- 全域背景、root、loading 或暫態樣式，須檢查掛載／退出後及 light／dark 主題；不能只看 overlay 出現時。
 
----
+## 素材與效能
 
-## 觸控裝置檢核
+- 圖片保留比例與適當尺寸，避免 layout shift；依位置選 eager／lazy，不讓首屏重要素材被不必要地延遲。
+- 字體 fallback、載入與中文換行須可讀；高 DPI 不代表應把所有 1px 線改細。
+- 動效尊重 reduced-motion，測量對 render／layout／paint 的影響；使用 transform／opacity 不等於已證明 GPU 加速或不卡。
+- 高密度／虛擬化 UI 使用 [interaction performance](../../agent-core-lite/references/interaction-performance.md) 的代表性負載；正常 viewport 的截圖不代替快速捲動與框選證據。
 
-### 觸控目標
-- [ ] 所有可點擊元素（button、link、icon button）最小尺寸 **44x44px**
-- [ ] 相鄰觸控目標之間至少 **8px 間距**，避免誤觸
-- [ ] Icon-only button 必須有足夠 padding 讓觸控面積達標，不只是 icon 本身的尺寸
-
-### 觸控互動
-- [ ] Hover state 在觸控裝置上的行為確認（第一次點擊 = hover，第二次 = click）
-- [ ] 需要 hover 才能顯示的內容（tooltip、下拉選單）在行動裝置上有替代方案
-- [ ] Drag / swipe 操作有 touch event 支援（不只是 mouse event）
-
----
-
-## 排版檢核
-
-### 字型縮放
-- [ ] 標題在 375px 不超出螢幕寬度
-- [ ] 展示字型在行動裝置上是否過大導致折行不好看
-- [ ] `font-size` 不小於 **14px**（部分 iOS 會自動放大 12px 以下的 input）
-- [ ] input 欄位的 `font-size` 至少 **16px**，避免 iOS Safari 自動縮放
-
-### 文字長度
-- [ ] 閱讀區域的行寬：`max-width: 65ch`（最佳閱讀寬度）
-- [ ] 行動裝置上沒有 overflow hidden 的文字被截斷
-- [ ] `white-space: nowrap` 的地方確認行動裝置不溢出
-
----
-
-## 版面檢核
-
-### Flexbox / Grid
-- [ ] 桌機的多欄 Grid 在行動裝置有正確折成單欄或雙欄
-- [ ] `flex-wrap` 在行動裝置上的折行是否美觀
-- [ ] 橫向 scroll 是否是刻意設計的，而不是意外 overflow
-
-### 固定元素
-- [ ] Fixed header 在行動裝置上的高度是否佔用過多垂直空間
-- [ ] Sticky 元素在 iOS Safari 的行為確認（`position: sticky` 需要 overflow: visible 的父層）
-- [ ] Modal / overlay 在行動裝置上是否有正確的 scroll 行為
-
-### 圖片
-- [ ] 所有 `<img>` 有 `width` 和 `height` 屬性（避免 layout shift）
-- [ ] 使用 `srcset` 或 `<picture>` 提供不同解析度的圖片
-- [ ] 裝飾性圖片在行動裝置是否考慮縮小或隱藏
-
----
-
-## 常見 Viewport 確認
-
-| 裝置 | 寬度 | 確認項目 |
-|------|------|----------|
-| iPhone SE | 375px | 最小的主流 iPhone，Hero 字型、CTA button 觸控目標 |
-| iPhone 14 Pro | 393px | 主流 iPhone，整體體驗 |
-| iPad | 768px | 通常是最難設計的中間尺寸，確認兩欄排版 |
-| iPad Pro | 1024px | 確認是否觸發桌機版 layout |
-| 桌機 | 1440px | 主要桌機寬度，確認 max-width 和置中 |
-| 寬螢幕 | 1920px | 確認沒有過度延伸，有 max-width 限制 |
-
----
-
-## 特殊情境
-
-### 橫向模式（Landscape）
-- [ ] 行動裝置橫向模式下，高度很小（568px 或更小），確認 hero / modal 不會被截斷
-- [ ] `min-height: 100vh` 在橫向模式下的效果
-
-### 安全區域（Safe Area）
-- [ ] iPhone notch / Dynamic Island 區域：`padding: env(safe-area-inset-top)`
-- [ ] iPhone home indicator 區域：`padding-bottom: env(safe-area-inset-bottom)`
-- [ ] 適用於 fixed bottom bar、modal、全螢幕元素
-
-### 高解析度螢幕
-- [ ] 1px border 在 Retina 螢幕上是否太細（考慮用 `0.5px` 或 box-shadow 模擬）
-- [ ] SVG icon 確認在高 DPI 下清晰
-
----
-
-## 效能檢核（影響行動裝置體驗）
-
-- [ ] 字體：使用 `font-display: swap`，避免 FOIT
-- [ ] 圖片：使用 `loading="lazy"` 對 below-fold 圖片
-- [ ] 動效：確認使用 `transform` 和 `opacity` 而非 `top/left/width/height`（GPU 加速）
-- [ ] 避免大型 JavaScript bundle 阻塞首屏渲染
-
----
-
-## 快速自測 Snippet
-
-在 browser console 貼入，快速檢查觸控目標尺寸：
-
-```javascript
-document.querySelectorAll('a, button, [role="button"], input, select, textarea').forEach(el => {
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 44 || rect.height < 44) {
-    el.style.outline = '2px solid red';
-    console.warn('觸控目標過小：', el, `${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px`);
-  }
-});
-```
+回報實際檢查的 viewport、theme、輸入方式與狀態；未測目標列為限制，不由桌機模擬推定實體裝置全部正常。

@@ -11,7 +11,7 @@
 
 ## 2. 證據與範圍
 
-- 動手前確認真正目標、操作對象、成功標準、環境與資料歸屬；不要混淆 UI、App、CLI、API、repo、workspace、active config、cache、history 或 runtime。
+- 動手前依本輪要求與仍適用的任務約定確認目標、操作對象、成功標準與資料歸屬。區分 task cwd、實際修改／審查的 checkout 與正在執行的 runtime；不因同名 repo 或乾淨 worktree 就認定對象相同。
 - 追 caller → implementation → downstream；影響範圍要由 diff、references／registration 與適用的 runtime trace 支持，不能只接受 agent 自填清單。共用驗證方法在 agent-core-lite 的 verification reference。
 - 證據衝突時停止延伸舊假設，指出衝突並重新判斷。Race、stale write、duplicate side effect 等主張需有可達 timeline；否則只能列 hypothesis。
 - 外部 API 或黑盒行為先建立 baseline／negative control。版本、旗標、官方行為與近期資訊先查一手來源。
@@ -20,10 +20,10 @@
 
 ## 3. 實作與授權邊界
 
-- 模糊需求若會改變 contract、資料 ownership 或 observable behavior，先列 blocking decision；可依既有模式推斷的實作細節直接處理。
+- 只有無法由現有證據釐清、且會實質改變 contract、資料 ownership 或 observable behavior 的未決事項才列 blocking decision；可依既有模式處理的細節直接完成，已有明確授權不重複詢問。
 - 明確 read-only、review、audit、先分析或不要改時，不寫檔、不 stage、不 commit、不 push、不做外部副作用。
 - 只有使用者明確要求修、改、implement、同步或部署才進 Act。除非明確要求，不自動 commit 或 push。
-- 三步以上、範圍會演進、需 checkpoint 或可能跨 context 時使用 update_plan；簡單問答與單步修改不套儀式。
+- 有相依交付、範圍會演進或需要 checkpoint 時，在 update_plan 可用時使用；否則保留簡短計畫。不以工具呼叫數決定流程重量。
 - 修改後做與風險相稱的驗證。缺檔、依賴、測試或錯誤未解時，不宣稱完成。
 - 以下操作執行前必須取得使用者明確確認：git reset --hard、force push、刪分支／檔案、覆寫未提交變更、修改 CI/CD 或共享外部呼叫策略，以及不可逆或影響他人的動作。
 - Destructive Git 確認前先唯讀盤點 current branch、remote／target、uncommitted diff 與 rollback／recovery；不得先執行破壞性命令。
@@ -39,12 +39,12 @@
 - 自訂 agent runtime、tool loop、compactor、retry engine、transcript/resume implementation 才使用 agent-core-engine。
 - 續接任務前檢查 ~/.codex/projects/ 的 unfinished ledger，以及 project rules／既有 handoff 明確指定的 repo-local ledger path；有匹配 ledger 時先依 next_instruction resume，不重新 discovery或廣掃 repo。
 - Cross-boundary architecture、async mutation convergence 與高頻 UI interaction 的詳細方法由 agent-core-lite conditional references 提供，不放在 always-loaded AGENTS。
-- Process skill 找不到或不可用時，依本節邊界直接處理並回報 fallback，不為了「有 skill」強行使用。
+- Skill 的一般偏好不取代本輪明示要求；授權與副作用邊界仍須遵守。Skill／工具不可用時，採可行的等效方法；若因此阻塞，指出具體限制與未完成工作，不為了符合流程而停工。
 
 ## 5. 子 Agent
 
-- 子 agent 是 coverage／isolation 工具，不是小任務預設。Review、大型 scan、獨立驗證或 project 級工作可自動使用。
-- 子 agent 預設 read-only、isolated draft 或互不相依探索；傳 raw artifact／path，不餵預期答案。
+- Review、掃描或 Project 有可獨立且不重複的子問題時，可使用子 agent 增加 coverage／isolation。指定範圍與回傳契約，主 agent 同時處理其他工作；沒有獨立問題時在本地完成。
+- 子 agent 預設 read-only、isolated draft 或互不相依探索；給 raw artifact／path，不餵預期答案。回傳結論、必要證據摘錄與來源定位，不把整串工具輸出回灌主對話。
 - 子 agent finding 只是 lead。主 agent 必須直接驗證檔案、diff、命令、log、runtime 或 artifact。
 - 寫檔、git、external side effect 與 final verification 由主 agent負責，除非使用者明確授權轉交。
 
@@ -67,9 +67,9 @@
 ## 8. 工具與條件式使用
 
 - 搜尋優先 rg；無依賴讀取／檢查平行執行。單檔人工修改優先 apply_patch。
-- 第三方 library／framework／SDK 的 current API、簽章、migration 或版本行為需要查證，且 Context7 可用時，先 resolve library 再查官方文件。
-- 涉及近期資訊、外部產品、版本、規格、URL、未知錯誤或黑盒行為時使用 Web；先搜尋再開 1 至 3 個一手來源並附連結。
-- 需要驗證 browser 可觀察行為、互動 lifecycle、render／performance、focus、overflow 或 loading／error state 時使用 Playwright；先 snapshot 再操作並保留可重現 evidence。
+- 第三方 API／版本有關鍵不確定時，以相符版本的一手資料查證；Context7 可用且有助定位時先 resolve library。既有直接證據已足夠，不為湊工具重查。
+- 需要外部近期資訊、產品／版本資料或未知行為的一手依據時使用 Web，開啟支持關鍵主張的來源並附連結；不以固定來源數代替查證。
+- Browser 行為、focus、overflow、loading 或效能主張須有對應畫面／互動證據；使用目前可用且適合的 browser 工具或專案 Playwright。先讀取狀態再操作，不假設不同工具具有相同 API。
 - Semantic symbol graph、references 或跨檔 call hierarchy 能實質降低誤判，且 Serena 可成功啟用時才使用；不可用時直接改用 rg／shell，不重複啟動。
 - Planning 依第 3 節與 process skill 升級條件使用；簡單問答、固定範圍單步修改與純說明不套 planning 儀式。
 

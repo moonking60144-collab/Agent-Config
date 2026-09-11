@@ -1,30 +1,16 @@
 # 架構前置檢查
 
-只有 shared-state／shared-contract 或 ownership-boundary 風險成立時讀本檔；單一 consumer、單一 local state、無跨 boundary 的外科式修改不使用。
+當變更涉及共享 state／contract、跨 ownership boundary、資料來源擴張或非同步時序時，使用本檔。單一 consumer 的局部修改若不影響這些契約，不套完整前置檢查；不以入口數、檔案數或出現某個關鍵字機械觸發。
 
-## 觸發
+## 在 Act 前解決相關決策
 
-- Canonical state／shared contract 有 3 個以上操作入口或 production consumers。
-- 修改共享 UI state、資料模型、serializer、parser、API、localStorage、preset、cache 或 invalidation。
-- 行為跨 frontend、backend、storage、background request 或其他 ownership boundary。
-- 涉及 server filtering、pagination、request race、stale response、optimistic 或 draft/committed state。
-- 擴大 entity visibility／ownership，或讓 local／remote entity 共用 controller、tracker、poller、completion flow。
-- 修改 generation、revision、snapshot、lock、publish、retry、supersession 或 restart recovery。
-- 改變 live freshness、point-in-time validation、multi-source composition，或 controller 同時讀 state 並做 completion side effect。
+- **權威與生命週期：** canonical source 是誰；draft、committed、cached、persisted state 的 owner；原始 mutation、observer、completion、retry／rollback 各有何權限。區分 cache validity、live freshness、mutation safety 與 UI observability。
+- **契約與可達入口：** producer → shared contract → production consumers；UI、serializer、API、storage／preset round-trip；需要一致與 intentional divergence。能力擴張時檢查首次建立、尚無資料及既有資料入口，不只已存在物件的成功路徑。產品替換／退場依 [verification](verification.md) 的既有契約。
+- **時序與版本：** 依實際來源定義 initialization、hydration、selection、request／event 的先後關係，涵蓋實際預設模式與關鍵反向順序。說清楚 cancellation、stale response、supersession、cache invalidation，以及 generation／revision／snapshot 的 immutable、publish、pinning、lock 與恢復責任。異步異動需持久化收斂時才讀 [async](async-mutation-convergence.md)。
+- **使用者可見行為：** UI 任務才處理 portal、overflow、loading／error、close／cancel 與 focus restoration；效能風險成立才讀 [interaction performance](interaction-performance.md)。Server filtering／pagination 應明確定義 option 範圍、query 狀態及快取責任。
 
-## 必答
+這些是依風險選用的設計問題，不是每次必答的十欄表。已有明確契約時引用並檢查本次變更，不重新設計；同一決策不在 plan、ledger、review 重複填寫。將本次適用決策轉為 [verification](verification.md) 的不變條件與真正入口檢查。
 
-1. Canonical source of truth。
-2. Draft、committed、cached、persisted state 的 owner 與邊界。
-3. Producer、contract、production consumers，以及 must-align／intentional-divergence。
-4. UI、serializer、API、storage、preset round-trip。
-5. Race、cancellation、supersession、stale response 與 cache invalidation。
-6. UI lifecycle 適用時的 portal、overflow、loading、error、cancel、focus restoration。
-7. Version／revision／snapshot 的 immutable、publish、pinning、supersession。
-8. Originating mutation、observer、completion、retry、rollback authority。
-9. Cache validity、live freshness、mutation safety 與 UI observability 是否由不同機制正確負責。
-10. 將以上 decision 轉為 [shared verification](verification.md) 的 invariant 與 boundary check；本檔定義架構判準，不另維護驗證程序。
+Race、torn read、lost update、duplicate side effect、deadlock、supersession、restart recovery 等主張須有可達 timeline，標明 mutable source、I/O、version／lock、commit 與 observable failure；否則只列 hypothesis。
 
-Race、torn read、lost update、duplicate side effect、deadlock、supersession、restart recovery 等主張必須畫可達 timeline，標明 mutable source、I/O、version／lock、commit 與 observable failure。畫不出來時只能列 hypothesis。
-
-未決事項若會影響 contract、ownership 或 downstream behavior，先列 blocking decision，不進 Act。純實作細節依既有模式處理。
+無法由現有證據解決、且會實質影響 contract、ownership 或 downstream behavior 的決策才阻擋 Act。可沿用既有模式的實作細節直接完成，不因缺少不適用的表格欄位而停工。

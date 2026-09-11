@@ -17,7 +17,7 @@ description: "適用於一般跨檔或 3 步以上的實作、設定／runtime �
 
 ## 觀察與界定範圍
 
-讀取適用規範、實際 diff、呼叫端（caller）、產生端（producer）、使用端（consumer）及既有測試。確認真正的權威來源，區分 repo、active 設定、runtime／快取與外部狀態。
+讀取適用規範、實際 diff、呼叫端（caller）、產生端（producer）、使用端（consumer）及既有測試。先對齊本輪修改目標、實際 checkout 與 runtime；沿用已確認的上下文，不把 task 初始 cwd、舊摘要或另一個 task 的完成宣稱當作目前狀態。
 
 共用行為採用 [verification](references/verification.md) 的探索與覆蓋方法。人工填完 consumer 清單不構成完整性證據。交代探索到的候選與尚未解決的動態路徑，明確標記刻意保留的差異。
 
@@ -45,7 +45,7 @@ description: "適用於一般跨檔或 3 步以上的實作、設定／runtime �
 
 為程式修改範圍定義證據前，讀取 [verification](references/verification.md)。使用同一條探索 → 判定依據／不變條件 → 實際檢查 → 敏感度／效能 → 驗證紀錄（receipt）流程。
 
-部署後的入口是 scripts/verify-change.mjs。重用專案原生測試與追蹤；runner 將實際結果綁定至擷取的原始碼。依不變條件選方法，不機械套用所有技術。Probe 失敗、consumer 未交代、原始碼過期、有意義的故障挑戰未被攔截，或缺少必要效能量測，都不得產生通過的 receipt。
+部署後的入口是 scripts/verify-change.mjs。重用專案原生測試與追蹤；runner 將實際結果綁定至擷取的原始碼。依不變條件選方法，不機械套用所有技術。Probe 失敗、consumer 未交代、原始碼過期、有意義的故障挑戰未被攔截，或缺少必要效能量測，都不得產生通過的 receipt。必要檢查通過後，只有新變更、失敗、證據過期或未解疑慮才擴大／重跑；不把固定回合數當品質證據。
 
 Lite 與 Project 使用同一方法。Lite receipt 不需要 Project ledger。既有 repo enforcement 仍是主要保護；全域指令不能證明業務不變條件。
 
