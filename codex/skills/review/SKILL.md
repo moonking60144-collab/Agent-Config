@@ -10,7 +10,7 @@ description: "適用於唯讀 review、審計、檢查、PR／diff／架構／�
 ## 範圍與方法
 
 1. 確認模式與實際對象：uncommitted、branch/PR、system audit、re-review。沿本輪要求與已知路徑定位 checkout、base／snapshot；task cwd 不是唯一候選。Uncommitted 看實際 status、staged/unstaged diff 和相關新檔；PR 用 merge-base；system audit 依系統邊界。已指定目標可直接唯讀查看，不因目前 worktree 為空就要求使用者搬檔；仍有多個合理目標時才問。
-2. 讀 governing instructions 與現有模式，用 rg／symbol graph／test names 索引後追 caller → implementation → downstream。作者摘要與舊 finding 用來定位，不能代替實際程式與證據；廣義 audit 不得縮成只看 diff。
+2. 讀 governing instructions 與現有模式，用 rg／symbol graph／test names 索引後追 caller → implementation → downstream。事故／根因調查依共用 verification 的因果定位方法反查來源；一般 diff review 不因此擴成全面事故調查。作者摘要與舊 finding 用來定位，不能代替實際程式與證據；廣義 audit 不得縮成只看 diff。
 3. 從 producer／contract 反查 consumers，包含 sibling/history/detail/admin/不同裝置入口；盤點依據與排除理由依 [verification](../agent-core-lite/references/verification.md)。Agent 自填的完整清單不是 discovery proof。
 4. 以需求與獨立 oracle 判斷行為；看實際輸入、輸出、狀態、I/O、副作用及 guards。共享架構／並發問題讀 architecture-preflight；符合 async 適用條件才讀 async-mutation-convergence；互動效能風險才讀 interaction-performance。
 5. 使用 shared verification contract 評估既有 checks、生成反例、故障敏感度與效能證據。可執行已授權的唯讀測試或隔離 fixtures；不因 Review 自動執行 mutation、部署、formatter --write、migration 或外部寫入。
@@ -39,7 +39,7 @@ PR/branch 只列本次引入與既有被放大；system audit 可列既有問題
 特別核對：
 
 - Discovery 是否真能找出 diff 未提及的 consumer，動態入口是否有相應 trace／registration 證據。
-- Oracle 是否獨立於受測判斷，生成序列是否可重播，fault 是否真正到達目標 assertion。
+- Oracle 是否來自需求與權威契約，而非 mock 對實作選擇的重述；核心結果仍錯時是否也會通過。生成序列是否可重播，fault 是否真正到達目標 assertion。
 - Helper／unit 是否被冒稱跨邊界 proof；參考相同 producer/wrapper/consumer 的 composed execution。
 - 效能是否有可比較的負載、環境、原始樣本與 budget；功能綠燈不是效能證據。
 - Receipt 與目前 source/test snapshot 是否一致；實際 command、timeout、失敗及未知狀態是否如實呈現。另一 task 仍在修改時，結論綁定讀到的 snapshot，不宣稱後續版本已通過。

@@ -19,7 +19,7 @@ description: "適用於一般跨檔或 3 步以上的實作、設定／runtime �
 
 讀取適用規範、實際 diff、呼叫端（caller）、產生端（producer）、使用端（consumer）及既有測試。先對齊本輪修改目標、實際 checkout 與 runtime；沿用已確認的上下文，不把 task 初始 cwd、舊摘要或另一個 task 的完成宣稱當作目前狀態。
 
-共用行為採用 [verification](references/verification.md) 的探索與覆蓋方法。人工填完 consumer 清單不構成完整性證據。交代探索到的候選與尚未解決的動態路徑，明確標記刻意保留的差異。
+共用行為與事故調查採用 [verification](references/verification.md) 的探索、因果定位與覆蓋方法。事故先對齊來源與結果，再決定修正或緩解範圍；一般局部修改不因此擴成系統審計。人工填完 consumer 清單不構成完整性證據。交代探索到的候選與尚未解決的動態路徑，明確標記刻意保留的差異。
 
 修改前列明檔案、行為與成功標準。保留工作樹內無關的變更。全域資產留在 Config repo 與使用者層級的 Codex 目錄。
 

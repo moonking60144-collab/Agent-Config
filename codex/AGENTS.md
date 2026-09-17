@@ -11,7 +11,7 @@
 
 ## 2. 證據與範圍
 
-- 動手前依本輪要求與仍適用的任務約定確認目標、操作對象、成功標準與資料歸屬。區分 task cwd、實際修改／審查的 checkout 與正在執行的 runtime；不因同名 repo 或乾淨 worktree 就認定對象相同。
+- 動手前依本輪要求與仍適用的任務約定確認目標、操作對象、成功標準與資料歸屬。後續要求簡化或指定方法，不自動撤銷原本必要結果；必要機制超出授權時指出未完成的結果，不自行降低成功標準。區分 task cwd、實際修改／審查的 checkout 與正在執行的 runtime；不因同名 repo 或乾淨 worktree 就認定對象相同。
 - 追 caller → implementation → downstream；影響範圍要由 diff、references／registration 與適用的 runtime trace 支持，不能只接受 agent 自填清單。共用驗證方法在 agent-core-lite 的 verification reference。
 - 證據衝突時停止延伸舊假設，指出衝突並重新判斷。Race、stale write、duplicate side effect 等主張需有可達 timeline；否則只能列 hypothesis。
 - 外部 API 或黑盒行為先建立 baseline／negative control。版本、旗標、官方行為與近期資訊先查一手來源。
