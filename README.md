@@ -114,9 +114,9 @@ config/
 | Skill | 使用時機 | 重點 |
 |-------|----------|------|
 | `review` | 使用者要求 review、audit、inspect、PR/diff/branch review、architecture/integration/system review | issue-first 審查，先列 bugs、回歸、安全、測試與部署風險 |
-| `agent-core-lite` | 大型 repo、跨檔、3 步以上、config/runtime mismatch、sync/deploy/commit/push | 固定使用 Observe → Scope → Plan → Act → Verify → Report，避免沒有 scope、證據或停止條件就動手 |
+| `agent-core-lite` | 一般範圍明確的跨檔實作、config/runtime mismatch、sync/deploy/commit/push | 依證據調整觀察、規劃與執行路徑，保留 scope、授權、驗證與停止條件 |
 | `agent-core-project` | 跨 3+ 可獨立驗證子系統、長任務、需要 plan/ledger/resume、或高爆炸半徑變更 | 用 Intake Gate、project plan、progress ledger、`done_verified`、`next_instruction` 保證可續接與可驗證 |
-| `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 先記錄 task goal、最後成功步驟、失敗工具/指令、重複模式、環境假設，再分類 root cause，選最小可逆驗證動作 |
+| `agent-failure-debugging` | 同一錯誤或假設失敗出現兩次、tool loop 形成、config 改了但 runtime 沒生效、輸出宣稱和實際狀態不一致 | 沿用有效失敗紀錄與排除範圍，依未解缺口選最小可逆檢查或恢復，避免重複 capture 與固定排錯首步 |
 | `repo-onboarding-audit` | 進陌生 repo、開始 review/architecture audit 前缺上下文、要先盤點 stack、entry point、test surface 或 validation commands | 唯讀偵查 package manifest、framework fingerprint、entry points、top-level tree、tooling、tests、資料流、conventions、git history |
 | `agent-core-engine` | 設計、實作、審查或擴充 custom agent runtime、tool loop、compactor、retry engine | 將 agent core 做成 deterministic lifecycle，並提供可複製的 TypeScript skeleton |
 | `frontend-ui-designer` | 新 UI、視覺改版、prototype、URL/image-to-code、landing page、dashboard、產品畫面 polish | 先鎖定 design brief 與 visual target，沿用既有 design system，補齊互動狀態、asset fidelity、responsive 與 evidence-based design QA |

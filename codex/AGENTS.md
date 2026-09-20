@@ -11,10 +11,10 @@
 
 ## 2. 證據與範圍
 
-- 動手前依本輪要求與仍適用的任務約定確認目標、操作對象、成功標準與資料歸屬。後續要求簡化或指定方法，不自動撤銷原本必要結果；必要機制超出授權時指出未完成的結果，不自行降低成功標準。區分 task cwd、實際修改／審查的 checkout 與正在執行的 runtime；不因同名 repo 或乾淨 worktree 就認定對象相同。
+- 動手前依本輪要求與仍適用的任務約定確認目標、操作對象、成功標準與資料歸屬。追問明確縮小或更換對象時更新焦點；簡化或指定方法不自動撤銷其餘必要結果。必要機制超出授權時指出未完成的結果，不自行降低成功標準。區分 task cwd、實際修改／審查的 checkout 與正在執行的 runtime；不因同名 repo 或乾淨 worktree 就認定對象相同。
 - 追 caller → implementation → downstream；影響範圍要由 diff、references／registration 與適用的 runtime trace 支持，不能只接受 agent 自填清單。共用驗證方法在 agent-core-lite 的 verification reference。
 - 證據衝突時停止延伸舊假設，指出衝突並重新判斷。Race、stale write、duplicate side effect 等主張需有可達 timeline；否則只能列 hypothesis。
-- 外部 API 或黑盒行為先建立 baseline／negative control。版本、旗標、官方行為與近期資訊先查一手來源。
+- 外部 API 或黑盒行為的比較／歸因，使用能區分候選的 baseline／negative control；已有相符且有效的證據可沿用。版本與時效查證依第 8 節。
 - 宣稱 tool、pipeline 或同步流程在目前環境可用，必須同時證明 implementation 存在、entrypoint 可解析、且在該環境實際成功執行。靜態程式碼只證明 latent capability；手動結果不能冒充正式 pipeline。
 - 同一錯誤、假設或工具失敗第 2 次時，停止盲試並切換 agent-failure-debugging；先記錄已驗證事實，再做一次最小、可逆、可觀測的驗證。
 
@@ -67,8 +67,8 @@
 ## 8. 工具與條件式使用
 
 - 搜尋優先 rg；無依賴讀取／檢查平行執行。單檔人工修改優先 apply_patch。
-- 第三方 API／版本有關鍵不確定時，以相符版本的一手資料查證；Context7 可用且有助定位時先 resolve library。既有直接證據已足夠，不為湊工具重查。
-- 需要外部近期資訊、產品／版本資料或未知行為的一手依據時使用 Web，開啟支持關鍵主張的來源並附連結；不以固定來源數代替查證。
+- 涉及具體產品／API 的操作、能力、限制，或技術選型、架構可行性與替代方案時，依決策需要核對目前或擬採用的版本、依賴與 runtime；區分宣告範圍、實際解析及執行版本，再對照相符的一手文件、原始碼或發布紀錄。生態更新可能改變決策時，查目前可用能力與支援現況，區分 stable／preview 及本案可用範圍；不以模型自信或使用者是否說「最新」決定查證，不擅自升級環境。
+- 現有證據不足時，使用可用的官方文件工具或 Web，開啟支持關鍵主張的來源並附連結；Context7 有助定位時先 resolve library。相符且仍有效的證據可重用，穩定概念與純本機已知行為不為形式重搜。未找到只能限定查核範圍，不能由舊知識推成不存在；候選接近但有缺口時沿缺少條件查核，證據足以支持本次決策即停止。
 - Browser 行為、focus、overflow、loading 或效能主張須有對應畫面／互動證據；使用目前可用且適合的 browser 工具或專案 Playwright。先讀取狀態再操作，不假設不同工具具有相同 API。
 - Semantic symbol graph、references 或跨檔 call hierarchy 能實質降低誤判，且 Serena 可成功啟用時才使用；不可用時直接改用 rg／shell，不重複啟動。
 - Planning 依第 3 節與 process skill 升級條件使用；簡單問答、固定範圍單步修改與純說明不套 planning 儀式。
