@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { digest, validatePlan, evaluateReceipt, observationFrom, isBehavioralFailure, PROTOCOL_VERSION, MAX_RECEIPT_BYTES } from "./verification-contract.mjs";
+import { spawnRipgrep } from "./ripgrep.mjs";
 
 function git(repo, args) {
   const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", shell: false, maxBuffer: 16 * 1024 * 1024 });
@@ -86,7 +87,7 @@ export async function discover(repo, extraSymbols = []) {
     const args = ["-l", "-F", "--hidden", "--glob", "!.git/**"];
     for (const symbol of symbols) args.push("-e", symbol);
     args.push(".");
-    const result = spawnSync("rg", args, { cwd: repo, encoding: "utf8", shell: false, maxBuffer: 8 * 1024 * 1024 });
+    const result = spawnRipgrep( args, { cwd: repo, encoding: "utf8", shell: false, maxBuffer: 8 * 1024 * 1024 });
     if (result.error || ![0, 1].includes(result.status)) throw new Error(result.stderr || result.error?.message || "reference discovery failed");
     references = result.stdout.split(/\r?\n/).filter(Boolean).map((name) => path.relative(repo, path.resolve(repo, name)).split(path.sep).join("/"));
   }
@@ -130,11 +131,12 @@ async function execute(argv, cwd, timeoutMs, env = {}, trace = true) {
       clearTimeout(timer);
       const observed = new Set();
       try {
+        const root = traceDirectory ? await fs.realpath(cwd) : cwd;
         for (const name of traceDirectory ? await fs.readdir(traceDirectory) : []) {
           const trace = JSON.parse(await fs.readFile(path.join(traceDirectory, name), "utf8"));
           for (const script of trace.result || []) {
             if (!script.url.startsWith("file:") || !script.functions?.some((fn) => fn.ranges.some((range) => range.count > 0))) continue;
-            const relative = path.relative(cwd, fileURLToPath(script.url));
+            const relative = path.relative(root, fileURLToPath(script.url));
             if (relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) observed.add(relative.split(path.sep).join("/"));
           }
         }

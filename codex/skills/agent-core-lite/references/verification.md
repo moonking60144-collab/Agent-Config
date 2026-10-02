@@ -30,6 +30,8 @@
 
 部署後的 scripts 位於 ~/.codex/skills/agent-core-lite/scripts/：
 
+執行依賴為 Node.js、Git 與 ripgrep 的可執行檔，不接受 shell alias／function 代替。Consumer discovery 預設從 PATH 尋找 `rg`，macOS 另接受 `/opt/homebrew/bin/rg` 與 `/usr/local/bin/rg`；其他位置以 `VERIFICATION_RG` 指定絕對路徑，指定後不自動換用其他版本。缺少依賴會明確失敗，不跳過 discovery 或改用未證明等價的搜尋。macOS 可用 `brew install ripgrep` 安裝；套件安装成功不代表各啟動環境與完整 receipt 流程已驗收。
+
 ```text
 node verify-change.mjs discover --repo <scope-root> --output <external-control-dir>/discovery.json
 node verify-change.mjs run --repo <scope-root> --plan <external-control-dir>/plan.json --output <external-control-dir>/receipt.json

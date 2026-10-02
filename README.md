@@ -35,6 +35,8 @@ flowchart LR
 
 ## 核心工程判斷
 
+驗證 runner 需要 Node.js、Git 與 ripgrep 可執行檔；macOS 使用 `brew install ripgrep`，非標準安裝位置可用 `VERIFICATION_RG` 指定絕對路徑。App 內附工具或 shell function 不代表其他啟動環境也能使用。
+
 - 交代關鍵依據與必要推導，深度依問題調整，不強制固定模板。
 - **降低複雜度**：增加共享狀態或抽象前，考慮更簡單的方案。
 - **依契約隔離失敗**：無關資料不阻擋有效操作，但未知資料不能直接略過，也不能破壞原子性。

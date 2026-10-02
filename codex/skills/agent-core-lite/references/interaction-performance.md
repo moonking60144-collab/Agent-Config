@@ -10,13 +10,13 @@
 - Geometry 同時依賴 width、height、zoom、scroll、sticky、virtualizer spacer 或 overscan。
 - User-visible mutation、sync、retry 或 queue 與 background scan／worker 共用 lock、token bucket、upstream capacity 或其他排程資源。
 
-## 必答
+## 依任務回答
 
 1. 定義 representative maximum load 與使用者可接受的 budget；受控對照、樣本與 receipt 使用 [shared verification](verification.md)，不另定量測程序。
-2. Bounded event update strategy，例如 rAF、coalescing、throttle、ref 或 imperative overlay；高頻事件不得無界驅動 React commit。
-3. 每次 event／render 與整段互動的時間、空間複雜度；不得在 hot path 引入未量測的 O(rows × columns)。
-4. Transient interaction state 與 committed application state 的 owner。
-5. Width、height、zoom、scroll、sticky、virtualizer 的 canonical geometry contract 與 intentional divergence。
+2. UI 連續事件任務：定義 bounded event update strategy，例如 rAF、coalescing、throttle、ref 或 imperative overlay；高頻事件不得無界驅動 React commit。
+3. 定義本次操作單次與整段流程的時間、空間複雜度；高密度 UI 不得在 hot path 引入未量測的 O(rows × columns)，後端任務則依實際資料量、併發與排程成本判斷。
+4. UI 互動任務：定義 transient interaction state 與 committed application state 的 owner。
+5. 涉及版面或捲動的 UI 任務：定義 width、height、zoom、scroll、sticky、virtualizer 的 canonical geometry contract 與 intentional divergence。
 6. Runtime evidence：UI 任務驗最大資料量、快速互動／捲動、zoom／字級、virtualization 邊界、blank frame、render／layout／paint；mutation／sync 任務分離 queue wait、upstream、local processing、write、verify 與 settlement。
 7. 若 contention 本身是目標，明確設計 overlap／no-overlap 對照，辨識 CPU、I/O、DB、browser main thread、lock 或 upstream queue 的競爭來源。
 
