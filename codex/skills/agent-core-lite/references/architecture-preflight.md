@@ -4,8 +4,10 @@
 
 ## 在 Act 前解決相關決策
 
+- **方案與複雜度：** 尚未定案且選擇會增加共享狀態、同步／恢復責任或抽象層時，對照能滿足相同硬性條件的簡單替代方案；比較呼叫端規則、ownership、失敗與維護成本，不只程式碼量。已定案且沒有新反證時不重開選型，不要求固定方案或 agent 數。
 - **權威與生命週期：** canonical source 是誰；draft、committed、cached、persisted state 的 owner；原始 mutation、observer、completion、retry／rollback 各有何權限。區分 cache validity、live freshness、mutation safety 與 UI observability。
 - **契約與可達入口：** producer → shared contract → production consumers；UI、serializer、API、storage／preset round-trip；需要一致與 intentional divergence。能力擴張時檢查首次建立、尚無資料及既有資料入口，不只已存在物件的成功路徑。產品替換／退場依 [verification](verification.md) 的既有契約。
+- **參與範圍與失敗邊界：** 在既有權限與安全檢查內，依業務契約判定資料是否參與本次操作，再決定業務驗證與阻擋範圍。已證實無關的資料不應阻擋有效項目；影響參與、去重或一致性的關鍵資料未知時，不能當成無關而略過。契約允許獨立成功的項目可隔離失敗並明示部分結果；有原子性或跨項目一致性要求時，不能用繼續處理弱化契約。
 - **時序與版本：** 依實際來源定義 initialization、hydration、selection、request／event 的先後關係，涵蓋實際預設模式與關鍵反向順序。說清楚 cancellation、stale response、supersession、cache invalidation，以及 generation／revision／snapshot 的 immutable、publish、pinning、lock 與恢復責任。異步異動需持久化收斂時才讀 [async](async-mutation-convergence.md)。
 - **使用者可見行為：** UI 任務才處理 portal、overflow、loading／error、close／cancel 與 focus restoration；效能風險成立才讀 [interaction performance](interaction-performance.md)。Server filtering／pagination 應明確定義 option 範圍、query 狀態及快取責任。
 

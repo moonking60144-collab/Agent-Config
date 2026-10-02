@@ -50,18 +50,23 @@ function Normalize-ClaudeSettingsTemplate {
   $normalized = $Text.Replace(($homeDir -replace '\\','/'), '__USERPROFILE__').Replace($homeDir, '__USERPROFILE__')
   try {
     $obj = $normalized | ConvertFrom-Json
+    $obj.PSObject.Properties.Remove('model')
+    $obj.PSObject.Properties.Remove('skipWorkflowUsageWarning')
     foreach($stop in @($obj.hooks.Stop)){
       foreach($hook in @($stop.hooks)){
         $hookArgs = (@($hook.args) -join ' ')
         if((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-traditional\.mjs')){
           $hook.args = @('__CLAUDE_STOP_HOOK_PATH__')
           $hook.statusMessage = '檢查繁體中文'
+        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-evidence\.mjs')){
+          $hook.args = @('__CLAUDE_EVIDENCE_HOOK_PATH__')
+          $hook.statusMessage = '檢查結論依據'
         }
       }
     }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
-    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__')
+    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__')
   }
 }
 
@@ -123,12 +128,16 @@ if(Test-Path $cs){
   Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'
 } else { Skip "$cs 不存在" }
 
-# Claude canonical Stop hook
-$hk = Join-Parts $U '.claude' 'hooks' 'check-traditional.mjs'
-if(Test-Path $hk){
-  Copy-Item $hk (Join-Parts $src 'claude' 'hooks' 'check-traditional.mjs') -Force
-  Ok 'check-traditional.mjs <- ~/.claude/hooks/check-traditional.mjs'
-} else { Skip "$hk 不存在" }
+# Claude managed Stop hooks and their shared helper
+foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'check-evidence.mjs')){
+  $hk = Join-Parts $U '.claude' 'hooks' $relative
+  $target = Join-Parts $src 'claude' 'hooks' $relative
+  if(Test-Path $hk){
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+    Copy-Item $hk $target -Force
+    Ok "$relative <- ~/.claude/hooks/$relative"
+  } else { Skip "$hk 不存在" }
+}
 
 # Codex AGENTS.md（可攜全域指令）
 $ca = Join-Parts $U '.codex' 'AGENTS.md'

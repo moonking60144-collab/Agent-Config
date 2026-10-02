@@ -1,0 +1,161 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = fileURLToPath(new URL("../", import.meta.url));
+const sourceFiles = [
+  "scripts/deploy-claude.mjs", "claude/settings.json", "claude/CLAUDE.md",
+  "claude/hooks/check-traditional.mjs", "claude/hooks/check-evidence.mjs", "claude/hooks/lib/prose.mjs",
+];
+
+function run(script, args = [], input) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    input, encoding: "utf8", timeout: 20000, shell: false,
+  });
+  assert.ifError(result.error);
+  return result;
+}
+
+async function fixture(t) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "claude-workflow-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const repo = path.join(root, "repo");
+  const home = path.join(root, "home with spaces");
+  const active = path.join(home, ".claude");
+  for (const relative of sourceFiles) {
+    await fs.mkdir(path.dirname(path.join(repo, relative)), { recursive: true });
+    await fs.copyFile(path.join(repoRoot, relative), path.join(repo, relative));
+  }
+  await fs.mkdir(active, { recursive: true });
+  await fs.writeFile(path.join(active, "settings.json"), JSON.stringify({
+    model: "local-model-sentinel", permissions: { defaultMode: "auto", allow: ["Read"] },
+    env: { WORKFLOW_TEST_SENTINEL: "preserve" },
+  }));
+  await fs.writeFile(path.join(active, "CLAUDE.md"), "existing instructions\n");
+  return {
+    repo, active,
+    deploy: () => run(path.join(repo, "scripts/deploy-claude.mjs"), ["--home", home, "--backup-retention", "0"]),
+  };
+}
+
+function hookDecision(script, message, extra = {}) {
+  const result = run(script, [], JSON.stringify({ last_assistant_message: message, ...extra }));
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim() ? JSON.parse(result.stdout) : {};
+}
+
+const hookPaths = ["check-traditional.mjs", "check-evidence.mjs"];
+
+test("Claude deployment preserves local settings, dependencies and repeatability", async (t) => {
+  const { active, deploy } = await fixture(t);
+  const result = deploy();
+  assert.equal(result.status, 0, result.stderr);
+  const settingsPath = path.join(active, "settings.json");
+  const first = await fs.readFile(settingsPath, "utf8");
+  const settings = JSON.parse(first);
+  assert.equal(settings.model, "local-model-sentinel");
+  assert.equal(settings.permissions.defaultMode, "auto");
+  assert.deepEqual(settings.permissions.allow, ["Read"]);
+  assert.equal(settings.env.WORKFLOW_TEST_SENTINEL, "preserve");
+  assert.equal(settings.hooks.Stop[0].hooks.length, 2);
+  for (const [index, name] of hookPaths.entries()) {
+    const script = path.join(active, "hooks", name);
+    assert.deepEqual(settings.hooks.Stop[0].hooks[index].args, [script]);
+    assert.equal(hookDecision(script, "這是正體中文。", {}).decision, undefined);
+  }
+  for (const relative of ["CLAUDE.md", ...hookPaths.map(name => `hooks/${name}`), "hooks/lib/prose.mjs"]) {
+    assert.deepEqual(await fs.readFile(path.join(active, relative)), await fs.readFile(path.join(repoRoot, "claude", relative)));
+  }
+  const backups = await fs.readdir(path.join(active, "backups/deploy-claude"));
+  assert.ok(backups.some(name => name.startsWith("settings.json.") && name.endsWith(".bak")));
+  assert.ok(backups.some(name => name.startsWith("CLAUDE.md.") && name.endsWith(".bak")));
+  const repeat = deploy();
+  assert.equal(repeat.status, 0, repeat.stderr);
+  assert.equal(await fs.readFile(settingsPath, "utf8"), first);
+});
+
+test("Claude deployment preserves legal handlers without args", async (t) => {
+  const { repo, active, deploy } = await fixture(t);
+  const templatePath = path.join(repo, "claude/settings.json");
+  const template = JSON.parse(await fs.readFile(templatePath, "utf8"));
+  const extra = [
+    { type: "command", command: "printf hook-complete" },
+    { type: "prompt", prompt: "Check whether the requested work is complete." },
+  ];
+  template.hooks.Stop[0].hooks.push(...extra);
+  await fs.writeFile(templatePath, JSON.stringify(template));
+  const result = deploy();
+  assert.equal(result.status, 0, result.stderr);
+  const settings = JSON.parse(await fs.readFile(path.join(active, "settings.json"), "utf8"));
+  assert.deepEqual(settings.hooks.Stop[0].hooks.slice(-extra.length), extra);
+});
+
+test("A missing Claude helper fails before publishing active settings", async (t) => {
+  const { repo, active, deploy } = await fixture(t);
+  const before = await fs.readFile(path.join(active, "settings.json"), "utf8");
+  await fs.rm(path.join(repo, "claude/hooks/lib/prose.mjs"));
+  const result = deploy();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ENOENT/);
+  assert.equal(await fs.readFile(path.join(active, "settings.json"), "utf8"), before);
+  assert.equal(await fs.readFile(path.join(active, "CLAUDE.md"), "utf8"), "existing instructions\n");
+});
+
+test("Malformed Claude settings do not replace existing instructions", async (t) => {
+  const { active, deploy } = await fixture(t);
+  await fs.writeFile(path.join(active, "settings.json"), "{");
+  const result = deploy();
+  assert.notEqual(result.status, 0);
+  assert.equal(await fs.readFile(path.join(active, "CLAUDE.md"), "utf8"), "existing instructions\n");
+});
+
+const tick = String.fromCharCode(96);
+const t3 = tick.repeat(3);
+const t4 = tick.repeat(4);
+const flagged = "简体，建議改成 12 支。";
+const fences = [
+  ["tilde outside backticks", ["~~~markdown", t3 + "text", flagged, t3, "~~~"], false],
+  ["backticks outside tildes", [t3 + "markdown", "~~~text", flagged, "~~~", t3], false],
+  ["shorter backticks are not a closing fence", [t4 + "markdown", t3, flagged, t3, t4], false],
+  ["shorter tildes are not a closing fence", ["~~~~markdown", "~~~", flagged, "~~~", "~~~~"], false],
+  ["closing fence cannot have an info string", [t3 + "text", t3 + "not-a-close", flagged, t3], false],
+  ["outside prose remains checked", [t3, "code", t3, flagged], true],
+  ["longer closing fence is accepted", [t3, "code", t4, flagged], true],
+  ["closing whitespace is accepted", ["~~~text", "code", "  ~~~~ \t", flagged], true],
+  ["four-space indentation cannot close backticks", [t3 + "text", "    " + t3, flagged, t3], false],
+  ["four-space indentation cannot close tildes", ["~~~text", "    ~~~", flagged, "~~~"], false],
+  ["tab indentation cannot close a fence", [t3 + "text", "\t" + t3, flagged, t3], false],
+  ["three-space indentation can close a fence", [t3, "code", "   " + t3, flagged], true],
+  ["unclosed fence retains existing fail-open behavior", [t3 + "text", flagged], false],
+];
+for (const hook of hookPaths) {
+  for (const [name, lines, blocked] of fences) {
+    test(`${hook}: ${name}`, () => {
+      const result = hookDecision(path.join(repoRoot, "claude/hooks", hook), lines.join("\n"));
+      assert.equal(result.decision === "block", blocked);
+    });
+  }
+  test(`${hook}: stop continuation cannot loop`, () => {
+    const result = hookDecision(path.join(repoRoot, "claude/hooks", hook), flagged, { stop_hook_active: true });
+    assert.equal(result.decision, undefined);
+  });
+}
+
+test("Traditional hook accepts legitimate Traditional characters", () => {
+  const result = hookDecision(path.join(repoRoot, "claude/hooks/check-traditional.mjs"), "這個方案划算，但資金拮据。");
+  assert.equal(result.decision, undefined);
+});
+
+test("Evidence heuristic requires attribution in the action paragraph", () => {
+  const script = path.join(repoRoot, "claude/hooks/check-evidence.mjs");
+  for (const message of ["建議改成 12 支。", "這是公式欄位，建議改成 12 支。", "建議改成 12 支。\n\n已確認事實：其他欄位正常。"]) {
+    assert.equal(hookDecision(script, message).decision, "block");
+  }
+  for (const message of ["依欄位定義，建議改成 12 支。", "這是推論，建議改成 12 支。", "目前共有 12 支。"]) {
+    assert.equal(hookDecision(script, message).decision, undefined);
+  }
+});

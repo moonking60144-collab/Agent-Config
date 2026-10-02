@@ -5,7 +5,7 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 # Agent Core Project
 
-負責 Lite 之上的持久化執行。流程為受理（Intake）→ 盤點與拆解（Map & Decompose）→ 計畫／ledger → 逐任務執行 → 驗證 → 交接。領域 skill 不取代這項責任。
+在 Lite 的執行與驗證契約上，增加跨 context 的計畫、狀態與交接；只保留續接需要的資訊，不另建固定階段或領域流程。
 
 ## 受理與續接
 
@@ -13,7 +13,6 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及專案規則或先前交接指定的精確 repo-local 路徑，尋找相符的未完成 ledger。目標與本輪 checkout 相符時從 next_instruction 續接；不重新探索仍有效的 done_verified 工作。跨 task／worktree 的 ledger 只提供線索，先核對本輪原始碼與 runtime，不照搬過期完成狀態。只有現有證據無法解決的歸屬衝突才詢問。
 
-純 Review 維持唯讀。使用者要求的盤點由 Onboarding 負責；已授權實作則在此流程內做有限範圍盤點。重複失敗使用 agent-failure-debugging。自訂 runtime 工作採用 Engine 技術契約，Project 仍保有計畫、ledger 與最終驗收責任。
 
 ## 產物歸屬
 
@@ -21,15 +20,7 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 ## 盤點、計畫與 Ledger
 
-每項可獨立測試的交付都記錄：
-
-- 目標、檔案、依賴、輸入／輸出契約與驗收標準。
-- 權威來源、受影響 consumer 與具體的刻意差異。
-- 適用的架構／非同步／效能設計決策；只在相關時使用 Lite references。
-- 共用 [verification contract](../agent-core-lite/references/verification.md) 的驗證 plan／receipt 路徑、oracle 來源及探索範圍限制。
-- 前置條件、回復／恢復方式與阻塞決策。
-
-驗證計畫是檢查定義與 consumer 覆蓋的唯一權威；ledger 引用它，不複製清單。領域決策放在 plan。Config 規則修改還須依 Config repo 治理提供事故／負向案例／誤觸邊界／退役證據。
+每項交付記錄足以續接的目標、檔案、依賴與驗收標準；ownership、consumer、恢復與阻塞決策只記本案適用者。領域決策放在 plan，證據方法依共用 [verification contract](../agent-core-lite/references/verification.md)。Ledger 引用驗證 plan／receipt，不複製 consumer 清單或檢查定義。特定 repo 的治理留在該 repo，不由 Project 另列要求。
 
 Ledger 以以下欄位開始：
 
@@ -49,11 +40,11 @@ next_instruction: Read <ledger path> first, then continue <task>.
 
 ## 執行
 
-一次處理一個任務，立即更新狀態。有幫助時使用獨立 reviewer 或有限範圍探索 agent，提供原始任務／diff／產物。主 agent 仍須自行驗證。
+依依賴與寫入衝突安排工作；互不相依的探索可並行，checkpoint 記錄實際進度，不把一次一項當作固定限制。子 agent 協作依 AGENTS.md。
 
 Act 前解決影響契約、ownership 或可觀察行為的設計決策。新證據推翻計畫時，先更新 plan／ledger 再繼續。未修改且已有足夠 enforcement 的程式路徑，不需要另一套框架。
 
-跨邊界架構或異動工作，須由新的 reviewer 檢查一條真實 producer → consumer 失敗時間線；交付明確的 checkout、snapshot 與原始任務，避免只審作者摘要。共用 verification contract 定義 reviewer 證據的限制與必要行為檢查。
+獨立 review 的觸發與證據標準依共用 verification contract；不因使用 Project 再增加一輪同內容 review。
 
 不可逆工作前確認恢復方式並遵守既有授權。將未解依賴標為 blocked，只繼續獨立任務。
 

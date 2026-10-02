@@ -18,6 +18,8 @@ const backupRetention = Number.parseInt(backupRetentionRaw, 10);
 const sourceDir = path.join(repoRoot, "claude");
 const targetDir = path.join(home, ".claude");
 const hookTarget = path.join(targetDir, "hooks", "check-traditional.mjs");
+const evidenceHookTarget = path.join(targetDir, "hooks", "check-evidence.mjs");
+const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "check-evidence.mjs"];
 const backupDir = path.join(targetDir, "backups", "deploy-claude");
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -67,14 +69,27 @@ await fs.mkdir(path.dirname(hookTarget), { recursive: true });
 
 const settingsTarget = path.join(targetDir, "settings.json");
 const instructionsTarget = path.join(targetDir, "CLAUDE.md");
-const [existing, template, instructions, hook] = await Promise.all([
+const [existing, template, instructions] = await Promise.all([
   readJson(settingsTarget, { optional: true }),
   readJson(path.join(sourceDir, "settings.json")),
   fs.readFile(path.join(sourceDir, "CLAUDE.md"), "utf8"),
-  fs.readFile(path.join(sourceDir, "hooks", "check-traditional.mjs"), "utf8"),
 ]);
 
-template.hooks.Stop[0].hooks[0].args = [hookTarget];
+const hooks = await Promise.all(managedHookPaths.map(async (relativePath) => ({
+  target: path.join(targetDir, "hooks", relativePath),
+  content: await fs.readFile(path.join(sourceDir, "hooks", relativePath), "utf8"),
+})));
+const hookTokens = new Map([
+  ["__CLAUDE_STOP_HOOK_PATH__", hookTarget],
+  ["__CLAUDE_EVIDENCE_HOOK_PATH__", evidenceHookTarget],
+]);
+for (const group of template.hooks.Stop) {
+  for (const hook of group.hooks) {
+    if (Array.isArray(hook.args)) {
+      hook.args = hook.args.map((argument) => hookTokens.get(argument) ?? argument);
+    }
+  }
+}
 const merged = {
   $schema: template.$schema,
   ...existing,
@@ -85,20 +100,19 @@ const merged = {
 };
 delete merged.skipWorkflowUsageWarning;
 
-await Promise.all([backup(settingsTarget), backup(instructionsTarget), backup(hookTarget)]);
-await atomicWrite(settingsTarget, `${JSON.stringify(merged, null, 2)}\n`);
+const targets = [settingsTarget, instructionsTarget, ...hooks.map((hook) => hook.target)];
+await Promise.all(targets.map(backup));
+// Publish dependencies before enabling their hook registrations.
+for (const hook of hooks) await atomicWrite(hook.target, hook.content);
 await atomicWrite(instructionsTarget, instructions);
-await atomicWrite(hookTarget, hook);
-await Promise.all([
-  pruneBackups(path.basename(settingsTarget)),
-  pruneBackups(path.basename(instructionsTarget)),
-  pruneBackups(path.basename(hookTarget)),
-]);
+await atomicWrite(settingsTarget, `${JSON.stringify(merged, null, 2)}\n`);
+await Promise.all(targets.map((target) => pruneBackups(path.basename(target))));
 
 process.stdout.write([
   `Claude settings deployed to ${settingsTarget}`,
   `Claude instructions deployed to ${instructionsTarget}`,
-  `Claude Stop hook deployed to ${hookTarget}`,
+  `Claude Stop hooks deployed to ${hookTarget} and ${evidenceHookTarget}`,
+  `Claude hook helper deployed to ${path.join(targetDir, "hooks", "lib", "prose.mjs")}`,
   `Claude backup retention: ${backupRetention === 0 ? "unlimited" : backupRetention}`,
   "Existing local-only settings such as model are preserved unless the portable template overrides them.",
 ].join("\n"));
