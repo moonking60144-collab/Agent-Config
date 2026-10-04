@@ -16,6 +16,10 @@ description: "適用於新 UI、視覺改版、原型、圖片／URL 轉程式�
 
 References 按需載入：新視覺方向可看 [visual directions](references/visual-directions.md)；檢討制式設計時看 [anti-generic patterns](references/anti-generic-patterns.md)；版面、裝置、輸入方式、色彩或文字／控制項辨識受影響時看 [responsive checklist](references/responsive-checklist.md)。不要求每次依序讀完所有 references。
 
+## UI UX Pro Max 設計查詢
+
+已內附 UI UX Pro Max 的離線資料與查詢工具。需要新系統的整體視覺規範、配色／字體／圖表候選，或具體 UX／技術棧指引時，依 [設計查詢](references/ui-ux-pro-max.md) 執行最小相關查詢。已有足夠設計依據的局部修改直接沿用，不為每次 UI 任務生成整套 design system。輸出是待核對的建議；使用者要求、既有設計與本 skill 的工程契約優先。
+
 ## 設計判斷
 
 先讓核心資訊與主要操作清楚，再決定 typography、色彩、密度、surface 與動效。Landing page 面向訪客的需求、信任與行動；內部工具優先資料可讀性、狀態可辨識及操作效率。不要把行銷頁的 hero、展示字體或大量留白強套到高密度表格。
