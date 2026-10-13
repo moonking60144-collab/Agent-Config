@@ -36,9 +36,7 @@ sandbox_mode = "danger-full-access"
 ################################################################################
 # 模型壓縮與工具輸出
 ################################################################################
-# 明確指定模型 context window。
-model_context_window = 372000
-# model_auto_compact_token_limit disabled: use Codex built-in auto compact default
+# Context window 與自動壓縮門檻沿用 Codex／模型預設，不固定 token 數。
 tool_output_token_limit = 8000
 
 ################################################################################
