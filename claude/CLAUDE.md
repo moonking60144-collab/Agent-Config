@@ -21,6 +21,13 @@
 
 ## 3. 任務判斷與 routing
 
+- 工程 skills 由 Config repo 的 `codex/skills/` 共用來源產生 Claude 版本，部署於 `~/.claude/skills/`；以各 skill 的 description 判斷適用範圍，不另外維護 dispatch table。需要時可用 `/<skill-name>` 明確呼叫。
+- 先依任務選擇 process skill，再使用適用的 domain skill；唯讀 review 不進實作流程。不因 Codex 名稱相近而假設 Claude 具有相同工具 API，工具不可用時採適當等效方法。
+- Project 狀態放 `~/.claude/workflow/projects/`，與 Claude 原生對話及 Codex ledger 分離；跨 agent 交接須明確指定產物並核對目前 checkout，不自動接管另一邊的未完成任務。
+- SessionStart 記錄可觀察的設定來源並提示既有 ledger；Stop 依共用完成契約檢查本 session 的 Project 結案。檔案 digest 不證明 skill 已啟用，CLI 版本也不代表 Desktop runtime 版本。
+- `explorer` 與 `reviewer` 子 agent 僅有 Read／Glob／Grep；命令或 runtime 證據由主 agent 提供，不假裝執行過。
+
+
 - 簡單問答、翻譯、單一設定：直接回答，不套流程。
 - Review、audit、inspect、double check：預設唯讀，findings first，先列 bug、回歸、資料風險與缺少的驗證。
 - 陌生 repo 或子系統的入口與契約尚不清楚時，先做足以界定本次範圍的盤點；已有適用脈絡時直接續接，不重新廣掃。

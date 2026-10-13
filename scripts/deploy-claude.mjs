@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareClaudeWorkflow, mergeClaudeHooks } from "./claude-workflow.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDir);
@@ -32,6 +33,10 @@ async function readJson(filePath, { optional = false } = {}) {
   }
 }
 
+function backupKey(filePath) {
+  return encodeURIComponent(path.relative(targetDir, filePath));
+}
+
 async function backup(filePath) {
   try {
     await fs.access(filePath);
@@ -39,7 +44,7 @@ async function backup(filePath) {
     return;
   }
   await fs.mkdir(backupDir, { recursive: true });
-  await fs.copyFile(filePath, path.join(backupDir, `${path.basename(filePath)}.${timestamp}.bak`));
+  await fs.copyFile(filePath, path.join(backupDir, `${backupKey(filePath)}.${timestamp}.bak`));
 }
 
 async function atomicWrite(filePath, content) {
@@ -79,11 +84,15 @@ const hooks = await Promise.all(managedHookPaths.map(async (relativePath) => ({
   target: path.join(targetDir, "hooks", relativePath),
   content: await fs.readFile(path.join(sourceDir, "hooks", relativePath), "utf8"),
 })));
+const workflow = await prepareClaudeWorkflow(repoRoot, targetDir);
 const hookTokens = new Map([
+  ["__CLAUDE_PROVENANCE_HOOK_PATH__", path.join(targetDir, "hooks", "record-session-provenance.mjs")],
+  ["__CLAUDE_RESUME_HOOK_PATH__", path.join(targetDir, "hooks", "resume-project-ledger.mjs")],
+  ["__CLAUDE_COMPLETION_HOOK_PATH__", path.join(targetDir, "hooks", "guard-project-completion.mjs")],
   ["__CLAUDE_STOP_HOOK_PATH__", hookTarget],
   ["__CLAUDE_EVIDENCE_HOOK_PATH__", evidenceHookTarget],
 ]);
-for (const group of template.hooks.Stop) {
+for (const group of Object.values(template.hooks).flat()) {
   for (const hook of group.hooks) {
     if (Array.isArray(hook.args)) {
       hook.args = hook.args.map((argument) => hookTokens.get(argument) ?? argument);
@@ -96,23 +105,26 @@ const merged = {
   ...template,
   permissions: { ...(existing.permissions ?? {}), ...(template.permissions ?? {}) },
   attribution: { ...(existing.attribution ?? {}), ...(template.attribution ?? {}) },
-  hooks: template.hooks,
+  hooks: mergeClaudeHooks(existing.hooks, template.hooks, targetDir),
 };
 delete merged.skipWorkflowUsageWarning;
 
-const targets = [settingsTarget, instructionsTarget, ...hooks.map((hook) => hook.target)];
+const managedFiles = [...hooks, ...workflow.files];
+const targets = [settingsTarget, instructionsTarget, ...managedFiles.map((file) => file.target)];
 await Promise.all(targets.map(backup));
 // Publish dependencies before enabling their hook registrations.
-for (const hook of hooks) await atomicWrite(hook.target, hook.content);
+for (const file of managedFiles) await atomicWrite(file.target, file.content);
 await atomicWrite(instructionsTarget, instructions);
 await atomicWrite(settingsTarget, `${JSON.stringify(merged, null, 2)}\n`);
-await Promise.all(targets.map((target) => pruneBackups(path.basename(target))));
+await Promise.all(targets.map((target) => pruneBackups(backupKey(target))));
 
 process.stdout.write([
   `Claude settings deployed to ${settingsTarget}`,
   `Claude instructions deployed to ${instructionsTarget}`,
   `Claude Stop hooks deployed to ${hookTarget} and ${evidenceHookTarget}`,
   `Claude hook helper deployed to ${path.join(targetDir, "hooks", "lib", "prose.mjs")}`,
+  `Shared workflow deployed: ${workflow.skillNames.length} skills, 2 read-only agents, and Project lifecycle hooks`,
+  `Claude workflow state: ${path.join(targetDir, "workflow", "projects")}`,
   `Claude backup retention: ${backupRetention === 0 ? "unlimited" : backupRetention}`,
   "Existing local-only settings such as model are preserved unless the portable template overrides them.",
 ].join("\n"));

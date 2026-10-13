@@ -52,7 +52,7 @@ function Normalize-ClaudeSettingsTemplate {
     $obj = $normalized | ConvertFrom-Json
     $obj.PSObject.Properties.Remove('model')
     $obj.PSObject.Properties.Remove('skipWorkflowUsageWarning')
-    foreach($stop in @($obj.hooks.Stop)){
+    foreach($stop in @($obj.hooks.PSObject.Properties | ForEach-Object { $_.Value })){
       foreach($hook in @($stop.hooks)){
         $hookArgs = (@($hook.args) -join ' ')
         if((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-traditional\.mjs')){
@@ -61,12 +61,18 @@ function Normalize-ClaudeSettingsTemplate {
         } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-evidence\.mjs')){
           $hook.args = @('__CLAUDE_EVIDENCE_HOOK_PATH__')
           $hook.statusMessage = '檢查結論依據'
+        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'record-session-provenance\.mjs')){
+          $hook.args = @('__CLAUDE_PROVENANCE_HOOK_PATH__')
+        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'resume-project-ledger\.mjs')){
+          $hook.args = @('__CLAUDE_RESUME_HOOK_PATH__')
+        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'guard-project-completion\.mjs')){
+          $hook.args = @('__CLAUDE_COMPLETION_HOOK_PATH__')
         }
       }
     }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
-    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__')
+    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/record-session-provenance.mjs', '__CLAUDE_PROVENANCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-project-ledger.mjs', '__CLAUDE_RESUME_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/guard-project-completion.mjs', '__CLAUDE_COMPLETION_HOOK_PATH__')
   }
 }
 

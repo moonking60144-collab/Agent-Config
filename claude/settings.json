@@ -33,6 +33,45 @@
             ],
             "timeout": 20,
             "statusMessage": "檢查結論依據"
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "__CLAUDE_COMPLETION_HOOK_PATH__"
+            ],
+            "timeout": 20,
+            "statusMessage": "檢查專案完成證據"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "__CLAUDE_PROVENANCE_HOOK_PATH__"
+            ],
+            "timeout": 20,
+            "statusMessage": "記錄工作流來源"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "__CLAUDE_RESUME_HOOK_PATH__"
+            ],
+            "timeout": 20,
+            "statusMessage": "續接專案 ledger"
           }
         ]
       }

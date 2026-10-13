@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const sourceFiles = [
-  "scripts/deploy-claude.mjs", "claude/settings.json", "claude/CLAUDE.md",
+  "scripts/deploy-claude.mjs", "scripts/claude-workflow.mjs", "claude/settings.json", "claude/CLAUDE.md",
   "claude/hooks/check-traditional.mjs", "claude/hooks/check-evidence.mjs", "claude/hooks/lib/prose.mjs",
 ];
 
@@ -29,6 +29,9 @@ async function fixture(t) {
   for (const relative of sourceFiles) {
     await fs.mkdir(path.dirname(path.join(repo, relative)), { recursive: true });
     await fs.copyFile(path.join(repoRoot, relative), path.join(repo, relative));
+  }
+  for (const name of ["skills", "hooks", "agents"]) {
+    await fs.cp(path.join(repoRoot, "codex", name), path.join(repo, "codex", name), { recursive: true });
   }
   await fs.mkdir(active, { recursive: true });
   await fs.writeFile(path.join(active, "settings.json"), JSON.stringify({
@@ -61,7 +64,7 @@ test("Claude deployment preserves local settings, dependencies and repeatability
   assert.equal(settings.permissions.defaultMode, "auto");
   assert.deepEqual(settings.permissions.allow, ["Read"]);
   assert.equal(settings.env.WORKFLOW_TEST_SENTINEL, "preserve");
-  assert.equal(settings.hooks.Stop[0].hooks.length, 2);
+  assert.equal(settings.hooks.Stop[0].hooks.length, 3);
   for (const [index, name] of hookPaths.entries()) {
     const script = path.join(active, "hooks", name);
     assert.deepEqual(settings.hooks.Stop[0].hooks[index].args, [script]);
@@ -90,8 +93,51 @@ test("Claude deployment preserves legal handlers without args", async (t) => {
   await fs.writeFile(templatePath, JSON.stringify(template));
   const result = deploy();
   assert.equal(result.status, 0, result.stderr);
-  const settings = JSON.parse(await fs.readFile(path.join(active, "settings.json"), "utf8"));
+  const settingsPath = path.join(active, "settings.json");
+  const first = await fs.readFile(settingsPath, "utf8");
+  const settings = JSON.parse(first);
   assert.deepEqual(settings.hooks.Stop[0].hooks.slice(-extra.length), extra);
+  const repeat = deploy();
+  assert.equal(repeat.status, 0, repeat.stderr);
+  assert.equal(await fs.readFile(settingsPath, "utf8"), first);
+});
+
+async function instructionFiles(directory) {
+  const files = [];
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory() && entry.name !== "vendor") files.push(...await instructionFiles(target));
+    else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "claude-code-mirror-audit.md") files.push(target);
+  }
+  return files;
+}
+
+test("Claude deployment publishes the shared workflow and keeps foreign hooks", async (t) => {
+  const { active, deploy } = await fixture(t);
+  const settingsPath = path.join(active, "settings.json");
+  const seeded = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+  const foreign = { type: "command", command: "node", args: ["/opt/custom/foreign-hook.mjs"] };
+  seeded.hooks = { PreToolUse: [{ matcher: "Bash", hooks: [foreign] }], Stop: [{ hooks: [foreign] }] };
+  await fs.writeFile(settingsPath, JSON.stringify(seeded));
+  const result = deploy();
+  assert.equal(result.status, 0, result.stderr);
+  const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+  assert.deepEqual(settings.hooks.PreToolUse, [{ matcher: "Bash", hooks: [foreign] }]);
+  assert.deepEqual(settings.hooks.Stop[0], { hooks: [foreign] });
+  const registered = Object.values(settings.hooks).flat().flatMap((group) => group.hooks).flatMap((hook) => hook.args ?? []);
+  for (const name of ["record-session-provenance.mjs", "resume-project-ledger.mjs", "guard-project-completion.mjs"]) {
+    const script = path.join(active, "hooks", name);
+    assert.ok(registered.includes(script), name);
+    await fs.access(script);
+  }
+  const skills = ["agent-core-engine", "agent-core-lite", "agent-core-project", "agent-failure-debugging", "repo-onboarding-audit", "review", "frontend-ui-designer"];
+  for (const name of skills) await fs.access(path.join(active, "skills", name, "SKILL.md"));
+  for (const file of await instructionFiles(path.join(active, "skills"))) {
+    assert.doesNotMatch(await fs.readFile(file, "utf8"), /~\/\.codex\//, file);
+  }
+  for (const name of ["explorer", "reviewer"]) {
+    assert.match(await fs.readFile(path.join(active, "agents", `${name}.md`), "utf8"), /^tools: Read, Glob, Grep$/m);
+  }
 });
 
 test("A missing Claude helper fails before publishing active settings", async (t) => {

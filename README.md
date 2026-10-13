@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TB
     R["Config Repo<br/>規則與可攜設定"] --> C["Codex<br/>AGENTS.md + Skills"]
-    R --> A["Claude Code<br/>CLAUDE.md + Hooks"]
+    R --> A["Claude Code<br/>CLAUDE.md + Skills + Hooks"]
     R --> V["VS Code<br/>編輯器設定"]
     C --> S["依任務選擇<br/>Lite / Project / Review"]
     S --> E["共用驗證契約"]
@@ -17,7 +17,7 @@ flowchart TB
 
 - **Lite**：範圍明確的修改；**Project**：需要持久進度與交接；**Review**：唯讀、問題優先。
 - 架構、非同步收斂、互動效能等細節依風險載入，不讓每個任務承擔整份檢查表。
-- Codex 與 Claude 共用工程原則，但保留各自的工具、載入與 hook 機制。
+- Codex 與 Claude 的 7 個工程／設計 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。
 
 ## 順序
 
