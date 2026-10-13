@@ -10,5 +10,6 @@
 *.yml text eol=lf
 
 *.ps1 text eol=crlf
+.githooks/* text eol=lf
 
 codex/skills/frontend-ui-designer/vendor/ui-ux-pro-max/** text eol=lf

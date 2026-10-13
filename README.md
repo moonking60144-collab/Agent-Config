@@ -52,7 +52,7 @@ flowchart LR
 | 架構取捨與驗證方法 | [Architecture](codex/skills/agent-core-lite/references/architecture-preflight.md) · [Verification](codex/skills/agent-core-lite/references/verification.md) |
 | 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) |
 | UI 設計查詢與跨頁規範 | [Frontend + UI UX Pro Max](codex/skills/frontend-ui-designer/references/ui-ux-pro-max.md) |
-| 規則如何演進 | [Config governance](AGENTS.md) |
+| 規則如何演進 | [Config governance](AGENTS.md) · [介入紀錄](INTERVENTIONS.md) |
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
-檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。
+檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
