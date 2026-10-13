@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { validateCompletionContract } from "../codex/hooks/validate-project-ledger.mjs";
 import { attachVerification } from "./fixtures/verification-receipt.mjs";
-import { runPlan } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
+import { runPlan, gitEnvForRepo } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const guardPath = path.join(repoRoot, "codex", "hooks", "guard-project-completion.mjs");
@@ -1625,7 +1625,7 @@ for (const version of [2, 3]) {
     const cli = spawnSync(process.execPath, [validatorPath, "--ledger", ledgerPath, "--require-evidence-policy", "--require-verification"], { encoding: "utf8" });
     assert.equal(cli.status, 0, cli.stderr || cli.stdout);
     const before = await fs.readFile(ledgerPath, "utf8");
-    const tracked = spawnSync("git", ["-C", repo, "add", "-f", "--", ledgerPath], { encoding: "utf8" });
+    const tracked = spawnSync("git", ["-C", repo, "add", "-f", "--", ledgerPath], { encoding: "utf8", env: gitEnvForRepo() });
     assert.equal(tracked.status, 0, tracked.stderr);
     assert.match(runHook(guardPath, repo, home, input).reason, /untracked and Git-ignored/);
     const runner = path.join(repoRoot, "codex", "skills", "agent-core-lite", "scripts", "verify-change.mjs");

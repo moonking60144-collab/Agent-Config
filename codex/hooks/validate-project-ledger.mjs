@@ -4,7 +4,7 @@ import { constants as fsConstants, promises as fs, readFileSync } from "node:fs"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluateReceipt, validateEvidenceLinks, digest, MAX_RECEIPT_BYTES } from "../skills/agent-core-lite/scripts/verification-contract.mjs";
-import { snapshot, validateControlArtifact } from "../skills/agent-core-lite/scripts/verify-change.mjs";
+import { snapshot, validateControlArtifact, gitEnvForRepo } from "../skills/agent-core-lite/scripts/verify-change.mjs";
 import {
   canonicalPath,
   expandHome,
@@ -88,6 +88,7 @@ function inspectGitContext(scopeRoot) {
     encoding: "utf8",
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
+    env: gitEnvForRepo(),
   });
   if (head.error || head.status !== 0) return { hasRemote: false, currentRevision: null, error: null };
 
@@ -95,6 +96,7 @@ function inspectGitContext(scopeRoot) {
     encoding: "utf8",
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
+    env: gitEnvForRepo(),
   });
   if (remotes.error || remotes.status !== 0) {
     return {

@@ -7,8 +7,22 @@ import { fileURLToPath } from "node:url";
 import { digest, validatePlan, evaluateReceipt, observationFrom, isBehavioralFailure, PROTOCOL_VERSION, MAX_RECEIPT_BYTES } from "./verification-contract.mjs";
 import { spawnRipgrep } from "./ripgrep.mjs";
 
+let repositoryVariables;
+// Hooks export the caller's repository; Git commands aimed at an explicit -C target must not inherit it.
+export function gitEnvForRepo(base = process.env) {
+  if (!repositoryVariables) {
+    const listed = spawnSync("git", ["rev-parse", "--local-env-vars"], { encoding: "utf8", shell: false });
+    if (listed.error?.code === "ENOENT") repositoryVariables = [];
+    else if (listed.error || listed.status !== 0) throw new Error(listed.stderr || listed.error?.message || "cannot list Git repository variables");
+    else repositoryVariables = listed.stdout.split(/\r?\n/).filter(Boolean);
+  }
+  const env = { ...base };
+  for (const name of repositoryVariables) delete env[name];
+  return env;
+}
+
 function git(repo, args) {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", shell: false, maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", shell: false, maxBuffer: 16 * 1024 * 1024, env: gitEnvForRepo() });
   if (result.error || result.status !== 0) throw new Error(result.stderr || result.error?.message || "git failed");
   return result.stdout;
 }
@@ -19,10 +33,10 @@ function inside(repo, relative) {
   return target;
 }
 async function inventory(repo) {
-  const root = spawnSync("git", ["-C", repo, "rev-parse", "--show-toplevel"], { encoding: "utf8", shell: false });
+  const root = spawnSync("git", ["-C", repo, "rev-parse", "--show-toplevel"], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
   if (root.status === 0) {
     if (await fs.realpath(root.stdout.trim()) !== await fs.realpath(repo)) throw new Error("verification scope must be the Git root");
-    const revision = spawnSync("git", ["-C", repo, "rev-parse", "--verify", "HEAD"], { encoding: "utf8", shell: false });
+    const revision = spawnSync("git", ["-C", repo, "rev-parse", "--verify", "HEAD"], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
     if (revision.error) throw revision.error;
     return { head: revision.status === 0 ? revision.stdout.trim() : null, names: [...new Set(git(repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(Boolean))].sort() };
   }
@@ -62,8 +76,8 @@ export async function validateControlArtifact(repo, target) {
   }
   const relative = path.relative(repo, path.join(existing, ...suffix));
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return;
-  const tracked = spawnSync("git", ["-C", repo, "ls-files", "--error-unmatch", "--", relative], { encoding: "utf8", shell: false });
-  const ignored = spawnSync("git", ["-C", repo, "check-ignore", "--quiet", "--", relative], { encoding: "utf8", shell: false });
+  const tracked = spawnSync("git", ["-C", repo, "ls-files", "--error-unmatch", "--", relative], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
+  const ignored = spawnSync("git", ["-C", repo, "check-ignore", "--quiet", "--", relative], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
   if (!relative || tracked.status !== 1 || ignored.status !== 0) throw new Error("repo-local control artifacts must be untracked and Git-ignored before discovery; use external artifacts otherwise");
 }
 export async function discover(repo, extraSymbols = []) {

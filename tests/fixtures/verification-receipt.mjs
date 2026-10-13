@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { discover, runPlan } from "../../codex/skills/agent-core-lite/scripts/verify-change.mjs";
+import { discover, runPlan, gitEnvForRepo } from "../../codex/skills/agent-core-lite/scripts/verify-change.mjs";
 import { digest } from "../../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
 
 export async function attachVerification(repo, contractPath, { gitMode = "commit", useCli = false } = {}) {
@@ -13,7 +13,7 @@ export async function attachVerification(repo, contractPath, { gitMode = "commit
   const gitSteps = gitMode === "none" ? [] : [["init", "-q"]];
   if (gitMode === "commit") gitSteps.push(["add", "."], ["-c", "user.name=fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]);
   for (const args of gitSteps) {
-    const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+    const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", env: gitEnvForRepo() });
     assert.equal(result.status, 0, result.stderr);
   }
   const cli = fileURLToPath(new URL("../../codex/skills/agent-core-lite/scripts/verify-change.mjs", import.meta.url));

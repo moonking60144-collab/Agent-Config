@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { discover, runPlan } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
+import { discover, runPlan, gitEnvForRepo } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
 import { evaluateReceipt, validatePlan } from "../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
 import { validateEvidenceLinks } from "../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
 
@@ -31,7 +31,7 @@ async function fixture(t) {
     'console.log(JSON.stringify({kind:"property",seed,cases}));',
   ].join("\n"));
   const git = (args) => {
-    const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+    const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", env: gitEnvForRepo() });
     assert.equal(result.status, 0, result.stderr);
   };
   git(["init", "-q"]); git(["add", "."]);
