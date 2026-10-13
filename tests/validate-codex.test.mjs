@@ -42,10 +42,10 @@ test("Canonical validator distinguishes portable drift from runtime selections",
   assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
 
   const missingCommand = path.join(root, "missing-serena").split(path.sep).join("/");
-  const corrupted = config.replace(/^model_context_window = \d+/m, "model_context_window = 1234")
+  const corrupted = config.replace(/^tool_output_token_limit = \d+/m, "tool_output_token_limit = 1234")
     .replace(/(\[mcp_servers\.serena\]\s*\r?\ncommand\s*=\s*)'[^']*'/, `$1'${missingCommand}'`);
   const invalid = await run(corrupted);
   assert.equal(invalid.status, 1, invalid.stdout);
-  assert.match(invalid.stderr, /model_context_window/);
+  assert.match(invalid.stderr, /tool_output_token_limit/);
   assert.match(invalid.stderr, /mcp_servers\.serena\.command/);
 });

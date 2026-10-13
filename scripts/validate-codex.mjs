@@ -341,10 +341,6 @@ function validateTomlPolicy(text, label, options = {}) {
     }
   }
 
-  if (!/^model_context_window\s*=\s*\d+\s*(?:#.*)?$/m.test(text)) {
-    fail(label + " 缺少 model_context_window");
-  }
-
   const tokens = [
     "__NPX_COMMAND__",
     "__SERENA_COMMAND__",
