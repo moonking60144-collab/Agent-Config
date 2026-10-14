@@ -15,3 +15,4 @@
 | 2026-10-13 | Claude Code／b06c4ffc | 唯讀 review 任務符合 review skill 卻未呼叫；輸出未標嚴重度、findings 未置頂、未讀未提交的 diff | 規則未遵守 | 該 session transcript 沒有任何 Skill 呼叫；對照 review skill 內文 |
 | 2026-10-13 | Claude Code／b06c4ffc | 寫 pre-push hook 前沒讀 git 對 hook 執行環境的官方說明；hook 讓測試繼承 GIT_DIR，改寫了正式 repo 的設定 | 規則未遵守 | githooks 官方文件；git-isolation 測試 |
 | 2026-10-13 | Claude Code／b06c4ffc | 沒有入口盤點就宣稱「目前沒有路徑會觸發」 | 規則未遵守 | 另一個 agent 的 review 指出；事後以入口盤點補證 |
+| 2026-10-14 | Claude Code／b06c4ffc | 只讀 40 個 plugin 的一行說明，就宣稱官方 marketplace「沒有其他值得裝的」，漏掉 typescript-lsp | 規則未遵守 | 使用者追問後重新檢查：LSP 工具支援 findReferences 與 incomingCalls，ragic-report 有 1,034 個 TypeScript 檔 |
