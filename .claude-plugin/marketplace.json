@@ -1,0 +1,12 @@
+{
+  "name": "funda-config",
+  "owner": { "name": "FD0287" },
+  "description": "Config repo 管理的 Claude Code mods。",
+  "plugins": [
+    {
+      "name": "claim-check",
+      "source": "./claude/plugins/claim-check",
+      "description": "回合結束時用次一級模型檢查結論是否超出證據，不阻擋回合。"
+    }
+  ]
+}

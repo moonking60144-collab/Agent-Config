@@ -1,0 +1,15 @@
+{
+  "name": "claim-check",
+  "version": "0.1.0",
+  "author": { "name": "FD0287" },
+  "description": "回合結束時用次一級模型檢查最終回覆的結論是否超出工具證據，結果顯示在回覆下方，不阻擋回合。",
+  "userConfig": {
+    "checker": {
+      "type": "string",
+      "title": "檢查模型",
+      "description": "auto 依回覆模型自動選次一級：fable 用 opus、opus 用 sonnet、sonnet 與 haiku 用 haiku；也可固定為 haiku、sonnet 或 opus。",
+      "default": "auto",
+      "options": ["auto", "haiku", "sonnet", "opus"]
+    }
+  }
+}

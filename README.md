@@ -53,6 +53,16 @@ flowchart LR
 | 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) |
 | UI 設計查詢與跨頁規範 | [Frontend + UI UX Pro Max](codex/skills/frontend-ui-designer/references/ui-ux-pro-max.md) |
 | 規則如何演進 | [Config governance](AGENTS.md) · [介入紀錄](INTERVENTIONS.md) |
+| 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回合結束時用次一級模型檢查結論是否超出工具證據，不阻擋回合 |
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
+
+Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行；以資料夾加入時直接讀取 repo，修改後 `/reload-plugins` 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
+
+```text
+claude plugin marketplace add <本 repo 路徑>
+claude plugin install claim-check@funda-config
+```
+
+其他機器也可用 `/plugin install claim-check --marketplace moonking60144-collab/Config` 從 GitHub 安裝。

@@ -7,3 +7,17 @@ unset $(git rev-parse --local-env-vars)
 node --test tests/*.test.mjs
 node scripts/validate-codex.mjs --skip-active
 if command -v python3 >/dev/null 2>&1; then python3 tests/ui-ux-pro-max.test.py; else python tests/ui-ux-pro-max.test.py; fi
+# Mod APIs move between Claude Code releases; an installed build that lists `plugin test` runs the mod tests.
+# Builds without the subcommand still exit 0 on `--help`, so the listing is what tells them apart.
+runner=""
+for candidate in claude "$HOME"/Library/Application\ Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude; do
+  if "$candidate" plugin --help 2>/dev/null | grep -Eq '^[[:space:]]+test[[:space:]]'; then runner=$candidate; fi
+done
+for plugin in claude/plugins/*/; do
+  [ -d "${plugin}tests" ] || continue
+  if [ -n "$runner" ]; then
+    "$runner" plugin test "$plugin"
+  else
+    echo "pre-push: skipped ${plugin} mod tests: no installed Claude Code build lists 'plugin test'" >&2
+  fi
+done
