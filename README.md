@@ -58,11 +58,12 @@ flowchart LR
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
 
-Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行；以資料夾加入時直接讀取 repo，修改後 `/reload-plugins` 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
+Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行。安裝時會把 plugin 複製到 `~/.claude/plugins/cache/`，依 `plugin.json` 的 version 存放；修改後遞增 version，再執行 update 並重開 session 才會生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
 
 ```text
 claude plugin marketplace add <本 repo 路徑>
 claude plugin install claim-check@funda-config
+claude plugin update claim-check@funda-config
 ```
 
 其他機器也可用 `/plugin install claim-check --marketplace moonking60144-collab/Agent-Config` 從 GitHub 安裝。
