@@ -6,7 +6,7 @@
     {
       "name": "claim-check",
       "source": "./claude/plugins/claim-check",
-      "description": "回合結束時用次一級模型檢查結論是否超出證據，不阻擋回合。"
+      "description": "回合結束時用次一級模型檢查結論是否超出證據；超出證據與矛盾會在下一輪交給主模型查證，不阻擋回合。"
     }
   ]
 }
