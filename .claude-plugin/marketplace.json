@@ -1,7 +1,7 @@
 {
-  "name": "funda-config",
-  "owner": { "name": "FD0287" },
-  "description": "Config repo 管理的 Claude Code mods。",
+  "name": "agent-config",
+  "owner": { "name": "moonking60144-collab" },
+  "description": "個人 agent 工作流的 Claude Code mods。",
   "plugins": [
     {
       "name": "claim-check",

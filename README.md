@@ -62,7 +62,7 @@ Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行。以資�
 
 ```text
 claude plugin marketplace add <本 repo 路徑>
-claude plugin install claim-check@funda-config
+claude plugin install claim-check@agent-config
 ```
 
 其他機器也可用 `/plugin install claim-check --marketplace moonking60144-collab/Agent-Config` 從 GitHub 安裝。
