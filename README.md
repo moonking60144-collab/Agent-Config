@@ -53,7 +53,7 @@ flowchart LR
 | 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) |
 | UI 設計查詢與跨頁規範 | [Frontend + UI UX Pro Max](codex/skills/frontend-ui-designer/references/ui-ux-pro-max.md) |
 | 規則如何演進 | [Config governance](AGENTS.md) · [介入紀錄](INTERVENTIONS.md) |
-| 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回合結束時用次一級模型檢查結論是否超出工具證據，不阻擋回合；超出證據與矛盾在下一輪交給 Claude 查證並更正，不顯示給使用者，檢查沒完成時才通知 |
+| 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回答送出後用次一級模型檢查結論是否超出工具證據；超出證據與矛盾在下一輪交給 Claude 查證並明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知 |
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
