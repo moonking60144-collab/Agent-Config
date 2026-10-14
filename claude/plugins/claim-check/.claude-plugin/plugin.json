@@ -1,6 +1,6 @@
 {
   "name": "claim-check",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": { "name": "FD0287" },
   "description": "回合結束時用次一級模型檢查最終回覆的結論是否超出工具證據；結果以單行通知顯示，超出證據與矛盾會在下一輪交給主模型查證，不阻擋回合。",
   "userConfig": {
