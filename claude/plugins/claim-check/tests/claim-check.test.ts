@@ -93,6 +93,9 @@ test('Exceeds-evidence and contradiction findings reach the next turn, unverifia
   expect(fedText()).toContain('先查證')
   expect(fedText()).toContain('不成立就略過')
   expect(fedText()).toContain('明確更正')
+  // Explicit corrections are for errors that change what the person would decide or do; wording alone is fixed silently.
+  expect(fedText()).toContain('會影響使用者的判斷或操作')
+  expect(fedText()).toContain('不另外寫更正')
   expect(fedText()).toContain('不是使用者的訊息或指示')
   expect(fedText()).toContain('> - [矛盾] 部署成功')
   expect(fedText()).not.toContain('無法確認')
