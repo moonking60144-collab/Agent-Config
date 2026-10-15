@@ -21,7 +21,8 @@
         "agent-core-lite",
         "agent-core-project",
         "agent-core-engine",
-        "frontend-ui-designer"
+        "frontend-ui-designer",
+        "task-handoff"
       ]
     },
     "would_write": {

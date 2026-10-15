@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Handoff"
+  short_description: "交接到同名、同模型的新 task，確認接手後才封存目前 task"
+  default_prompt: "使用 $task-handoff 交接到同名、同模型的新 task，完成後封存目前 task。"

@@ -17,7 +17,7 @@ flowchart TB
 
 - **Lite**：範圍明確的修改；**Project**：需要持久進度與交接；**Review**：唯讀、問題優先。
 - 架構、非同步收斂、互動效能等細節依風險載入，不讓每個任務承擔整份檢查表。
-- Codex 與 Claude 的 7 個工程／設計 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。
+- Codex 與 Claude 的 8 個 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。task-handoff 本身寫了兩邊的做法，部署時不改寫。
 
 ## 順序
 
@@ -50,7 +50,7 @@ flowchart LR
 |---|---|
 | 常駐協作規則 | [Codex](codex/AGENTS.md) · [Claude](claude/CLAUDE.md) |
 | 架構取捨與驗證方法 | [Architecture](codex/skills/agent-core-lite/references/architecture-preflight.md) · [Verification](codex/skills/agent-core-lite/references/verification.md) |
-| 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) |
+| 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) · [Task handoff](codex/skills/task-handoff/SKILL.md)：開同名、同模型的新 task 接手，確認後封存目前 task |
 | UI 設計查詢與跨頁規範 | [Frontend + UI UX Pro Max](codex/skills/frontend-ui-designer/references/ui-ux-pro-max.md) |
 | 規則如何演進 | [Config governance](AGENTS.md) · [介入紀錄](INTERVENTIONS.md) |
 | 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回答送出後用次一級模型檢查結論是否超出工具證據；超出證據與矛盾在下一輪交給 Claude 查證，會影響判斷的錯誤才明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知 |

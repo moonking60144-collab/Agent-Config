@@ -11,7 +11,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDir);
 const casesPath = path.join(repoRoot, "codex", "evals", "workflow-routing.cases.jsonl");
 const schemaPath = path.join(repoRoot, "codex", "evals", "workflow-routing.output.schema.json");
-const processValues = new Set(["none", "review", "repo-onboarding-audit", "agent-failure-debugging", "agent-core-lite", "agent-core-project", "agent-core-engine", "frontend-ui-designer"]);
+const processValues = new Set(["none", "review", "repo-onboarding-audit", "agent-failure-debugging", "agent-core-lite", "agent-core-project", "agent-core-engine", "frontend-ui-designer", "task-handoff"]);
 
 function parseArgs(argv) {
   const options = { mode: "validate", caseIds: [], all: false, repeat: null, minPass: null, model: null, reasoning: null, timeoutMs: 180000, output: null };

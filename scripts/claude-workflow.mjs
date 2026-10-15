@@ -4,7 +4,11 @@ import path from "node:path";
 const skillNames = [
   "agent-core-engine", "agent-core-lite", "agent-core-project",
   "agent-failure-debugging", "repo-onboarding-audit", "review", "frontend-ui-designer",
+  "task-handoff",
 ];
+// These skills describe Codex and Claude Code side by side, so product names and paths are published verbatim.
+const crossAgentSkills = new Set(["task-handoff"]);
+const generatedNote = "\n<!-- Generated from Config/codex/skills; edit the shared source, then deploy. -->\n";
 const projectHooks = [
   "project-ledger-lib.mjs", "record-session-provenance.mjs",
   "resume-project-ledger.mjs", "guard-project-completion.mjs",
@@ -17,6 +21,9 @@ function replaceRequired(text, from, to) {
 }
 
 function adaptInstructions(text, relativePath) {
+  if (crossAgentSkills.has(relativePath.split("/")[0])) {
+    return relativePath.endsWith("/SKILL.md") ? text + generatedNote : text;
+  }
   if (relativePath === "repo-onboarding-audit/SKILL.md") {
     text = replaceRequired(text,
       "- 先讀 AGENTS.md、README 與鄰近專案規則。只有使用者明確要求比較或匯入其他 agent 慣例時才讀 CLAUDE.md；不能把它當成 Codex 的適用規範。",
@@ -31,7 +38,7 @@ function adaptInstructions(text, relativePath) {
   }
   if (relativePath.endsWith("/SKILL.md")) {
     text = text.replaceAll("Codex", "Claude Code");
-    text += "\n<!-- Generated from Config/codex/skills; edit the shared source, then deploy. -->\n";
+    text += generatedNote;
   }
   return text;
 }

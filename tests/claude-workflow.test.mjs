@@ -130,8 +130,11 @@ test("Claude deployment publishes the shared workflow and keeps foreign hooks", 
     assert.ok(registered.includes(script), name);
     await fs.access(script);
   }
-  const skills = ["agent-core-engine", "agent-core-lite", "agent-core-project", "agent-failure-debugging", "repo-onboarding-audit", "review", "frontend-ui-designer"];
+  const skills = ["agent-core-engine", "agent-core-lite", "agent-core-project", "agent-failure-debugging", "repo-onboarding-audit", "review", "frontend-ui-designer", "task-handoff"];
   for (const name of skills) await fs.access(path.join(active, "skills", name, "SKILL.md"));
+  const handoff = await fs.readFile(path.join(active, "skills", "task-handoff", "SKILL.md"), "utf8");
+  const handoffSource = await fs.readFile(path.join(repoRoot, "codex", "skills", "task-handoff", "SKILL.md"), "utf8");
+  assert.ok(handoff.startsWith(handoffSource), "cross-agent skill must keep both Codex and Claude Code wording");
   for (const file of await instructionFiles(path.join(active, "skills"))) {
     assert.doesNotMatch(await fs.readFile(file, "utf8"), /~\/\.codex\//, file);
   }
