@@ -5,11 +5,11 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 
 # Task Handoff
 
-把目前工作交接到乾淨的新 task，確認新 task 接手後才封存來源。Codex 與 Claude Code 共用這份流程：task 在 Codex 是 thread，在 Claude Code 是 session；工具對照在最後兩節。
+把目前工作交接到乾淨的新 task，確認新 task 接手後才封存來源。Codex 與 Claude Code 共用這份流程：task 在 Codex 是 thread，在 Claude Code 是 session；工具對照在最後三節。
 
 ## 先分清需求
 
-- 新 task 只帶交接內容、不帶歷史：用本 skill。叫用本 skill 就代表要封存來源，即使只有 skill 名稱、沒有其他文字；使用者明說保留來源時才不封存。
+- 新 task 只帶交接內容、不帶歷史：用本 skill。使用者本人要求交接到新 task 就代表同意接手後封存來源，即使只輸入 skill 名稱、沒有其他文字；使用者明說保留來源時才不封存。使用者沒提出交接、只是模型判斷可能需要時，先問使用者，不建立也不封存。
 - Fork 並保留完整歷史：改用該 surface 的 fork，不用本 skill。
 - 只要交接摘要：直接寫摘要，不建立也不封存。
 
@@ -27,8 +27,9 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 | Surface | 做法 |
 | --- | --- |
 | Claude Code，有 claude-code-remote 工具（雲端 session） | 用 `get_session`、`create_session`、`archive_session`，細節見下節。 |
+| Claude Code 桌面版（Code 分頁），有 `start_session` | 用 `get_session`、`start_session`、`list_events`、`detach_session`、`archive_session`，細節見「Claude Code 桌面版」一節。 |
 | Codex app | 用目前 session 提供的 thread 工具建立、讀回與封存；工具名稱以實際工具清單為準。 |
-| 沒有建立或封存工具的 surface | 完成流程 1–3，把交接內容交給使用者自己開新 task；明說沒有建立、也沒有封存。 |
+| 沒有建立 task 工具的 surface（即使有封存工具） | 完成流程 1–3，把交接內容交給使用者自己開新 task；明說沒有建立、也沒有封存。 |
 
 ## Claude Code（claude-code-remote）
 
@@ -38,3 +39,12 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 - `create_session` 不能指定 effort；讀回後與來源不同就寫進回報。
 - 讀回：`get_session` 帶新 session 的 ID。`status_bucket` 是 working、blocked、review_ready 或 completed（原始值形如 `SESSION_STATUS_BUCKET_WORKING`）算已開始；failed 或仍在建立都不封存。連結是 `https://claude.ai/code/<session ID>`。
 - 封存：`archive_session` 帶來源 session 的 ID。封存後新 session 才失敗時，可用 `unarchive_session` 還原來源。
+
+## Claude Code 桌面版
+
+- 讀來源：`get_session` 帶 `"self"`。名稱、模型、effort、`permissionMode` 與 worktree／branch 以回傳值為準。
+- 建立：用 `start_session`，名稱與模型照流程 4，交接內容作為第一則訊息；參數以實際工具說明為準。工具說明表示會帶入目前對話歷史的建立方式不符合本 skill。
+- 新 session 會掛在來源底下成為 side session。封存來源時，閒置（沒有自己的 PR）或與來源共用 worktree 的 side session 會一起被封存，所以新 session 回第一輪後就可能跟著消失。
+- 讀回：`get_session` 帶新 session 的 ID，核對名稱、模型與 worktree；用 `list_events` 確認它已收到交接內容並開始處理。
+- 封存前先 `detach_session` 帶新 session 的 ID，讓它不再跟著來源封存。被拒絕時（例如它與來源共用 worktree）不封存來源：回報原因，讓使用者決定保留來源，或先替新 session 準備獨立的 checkout；流程 4 不擅自建立 worktree 的規則不變。
+- 封存：`archive_session` 帶 `"self"`，工具回傳後對話就結束。封存後新 session 才出問題時，可從 Archived 清單還原來源。
