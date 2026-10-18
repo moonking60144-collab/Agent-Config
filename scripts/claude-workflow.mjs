@@ -29,6 +29,11 @@ function adaptInstructions(text, relativePath) {
       "- 先讀 AGENTS.md、README 與鄰近專案規則。只有使用者明確要求比較或匯入其他 agent 慣例時才讀 CLAUDE.md；不能把它當成 Codex 的適用規範。",
       "- 先讀 CLAUDE.md、README 與本次實際載入的專案規則。AGENTS.md 只有載入鏈確實包含，或使用者明確要求比較其他 agent 慣例時才參考；未載入的文件不自動視為適用規範。");
   }
+  if (relativePath === "agent-core-engine/SKILL.md") {
+    text = replaceRequired(text, "更新全域 AGENTS／skills／templates", "更新全域 CLAUDE.md／skills／templates");
+    text = replaceRequired(text, "3. config.toml 只更新簡短的 skill 路由指令。",
+      "3. settings.json 不放 skill 路由；路由只靠 skill description 與 CLAUDE.md 的簡短規則。");
+  }
   text = text.replaceAll("~/.codex/projects/", "~/.claude/workflow/projects/")
     .replaceAll("~/.codex/skills/", "~/.claude/skills/")
     .replaceAll("~/.codex/hooks/", "~/.claude/hooks/")
@@ -36,10 +41,8 @@ function adaptInstructions(text, relativePath) {
   if (relativePath !== "repo-onboarding-audit/SKILL.md") {
     text = text.replaceAll("AGENTS.md", "CLAUDE.md");
   }
-  if (relativePath.endsWith("/SKILL.md")) {
-    text = text.replaceAll("Codex", "Claude Code");
-    text += generatedNote;
-  }
+  text = text.replaceAll("Codex", "Claude Code");
+  if (relativePath.endsWith("/SKILL.md")) text += generatedNote;
   return text;
 }
 

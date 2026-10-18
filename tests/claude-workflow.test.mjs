@@ -136,7 +136,9 @@ test("Claude deployment publishes the shared workflow and keeps foreign hooks", 
   const handoffSource = await fs.readFile(path.join(repoRoot, "codex", "skills", "task-handoff", "SKILL.md"), "utf8");
   assert.ok(handoff.startsWith(handoffSource), "cross-agent skill must keep both Codex and Claude Code wording");
   for (const file of await instructionFiles(path.join(active, "skills"))) {
-    assert.doesNotMatch(await fs.readFile(file, "utf8"), /~\/\.codex\//, file);
+    const content = await fs.readFile(file, "utf8");
+    assert.doesNotMatch(content, /~\/\.codex\//, file);
+    if (!file.includes(`${path.sep}task-handoff${path.sep}`)) assert.doesNotMatch(content, /Codex|config\.toml|AGENTS(?!\.md)/, file);
   }
   for (const name of ["explorer", "reviewer"]) {
     assert.match(await fs.readFile(path.join(active, "agents", `${name}.md`), "utf8"), /^tools: Read, Glob, Grep$/m);
