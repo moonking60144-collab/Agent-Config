@@ -18,7 +18,9 @@ export function spawnRipgrep(args, options = {}) {
 
   const install = process.platform === "darwin"
     ? "Install ripgrep with brew install ripgrep."
-    : "Install ripgrep using your system package manager.";
+    : process.platform === "win32"
+      ? "Install ripgrep with winget install --id BurntSushi.ripgrep.MSVC -e, then restart the launching app so it inherits the new PATH."
+      : "Install ripgrep using your system package manager.";
   throw new Error(
     `Ripgrep executable not found. ${install} ` +
     "Set VERIFICATION_RG to its absolute executable path if it is installed elsewhere. " +

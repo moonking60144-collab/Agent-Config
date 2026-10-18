@@ -30,13 +30,15 @@
 
 部署後的 scripts 位於 ~/.codex/skills/agent-core-lite/scripts/：
 
-執行依賴為 Node.js、Git 與 ripgrep 的可執行檔，不接受 shell alias／function 代替。Consumer discovery 預設從 PATH 尋找 `rg`，macOS 另接受 `/opt/homebrew/bin/rg` 與 `/usr/local/bin/rg`；其他位置以 `VERIFICATION_RG` 指定絕對路徑，指定後不自動換用其他版本。缺少依賴會明確失敗，不跳過 discovery 或改用未證明等價的搜尋。macOS 可用 `brew install ripgrep` 安裝；套件安装成功不代表各啟動環境與完整 receipt 流程已驗收。
+執行依賴為 Node.js、Git 與 ripgrep 的可執行檔，不接受 shell alias／function 代替。Consumer discovery 預設從 PATH 尋找 `rg`，macOS 另接受 `/opt/homebrew/bin/rg` 與 `/usr/local/bin/rg`；其他位置以 `VERIFICATION_RG` 指定絕對路徑，指定後不自動換用其他版本。缺少依賴會明確失敗，不跳過 discovery 或改用未證明等價的搜尋。macOS 可用 `brew install ripgrep` 安裝；Windows 可用 `winget install --id BurntSushi.ripgrep.MSVC -e` 安裝，裝完重開啟動 agent 的 app，讓它繼承新的 PATH。Claude Code 在 Git Bash 注入的 `rg` 是 shell function，`command -v rg` 成功不代表 Node 找得到；改用 `node -e` 執行 `spawnSync("rg", ["--version"])` 確認。套件安裝成功不代表各啟動環境與完整 receipt 流程已驗收。
 
 ```text
-node verify-change.mjs discover --repo <scope-root> --output <external-control-dir>/discovery.json
+node verify-change.mjs discover --repo <scope-root> [--symbols <name1,name2>] --output <external-control-dir>/discovery.json
 node verify-change.mjs run --repo <scope-root> --plan <external-control-dir>/plan.json --output <external-control-dir>/receipt.json
 node verify-change.mjs validate --repo <scope-root> --result <external-control-dir>/receipt.json
 ```
+
+Symbol 只從 JS／TS／Python 檔擷取。其他變更檔會列進 discovery 的 limitations，它們的 caller 只能透過 `--symbols` 提供的名稱找到；改到這類檔案的公開名稱時，把名稱傳給 `--symbols`，或改用 compiler references。`run` 沿用 discovery 記錄的 symbols，不必重傳。
 
 唯一權威的可執行契約是 scripts/verification-contract.mjs；runner 與 completion evaluator 匯入同一實作。不在其他 skill、schema adapter 或版本專屬 validator 複製驗證規則。
 

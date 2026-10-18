@@ -80,6 +80,7 @@ export async function validateControlArtifact(repo, target) {
   const ignored = spawnSync("git", ["-C", repo, "check-ignore", "--quiet", "--", relative], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
   if (!relative || tracked.status !== 1 || ignored.status !== 0) throw new Error("repo-local control artifacts must be untracked and Git-ignored before discovery; use external artifacts otherwise");
 }
+const symbolSource = /\.(?:[cm]?[jt]sx?|py)$/;
 export async function discover(repo, extraSymbols = []) {
   const captured = await snapshot(repo);
   const changed = captured.head ? [...new Set([...git(repo, ["diff", "--name-only", "-z", "HEAD"]).split("\0"), ...git(repo, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0")].filter(Boolean))].sort() : captured.files.map((file) => file.path);
@@ -90,7 +91,7 @@ export async function discover(repo, extraSymbols = []) {
     const current = await fs.readFile(inside(repo, name), "utf8").catch(() => "");
     const previous = previousFiles.has(name) ? git(repo, ["show", `${captured.head}:${name}`]) : "";
     const content = previous + "\n" + current;
-    if (/\.(?:[cm]?[jt]sx?|py)$/.test(name)) {
+    if (symbolSource.test(name)) {
       for (const match of content.matchAll(/(?:export\s+(?:async\s+)?(?:function|class|const|type|interface)|(?:async\s+)?def|class)\s+([A-Za-z_$][\w$]*)/g)) symbols.add(match[1]);
       if (/pointermove|mousemove|scroll|wheel|requestAnimationFrame|virtualiz|overscan/.test(content)) riskHints.push({ kind: "performance", path: name });
       if (/retry|rollback|resume|transaction|idempotenc/.test(content)) riskHints.push({ kind: "stateful", path: name });
@@ -106,7 +107,9 @@ export async function discover(repo, extraSymbols = []) {
     references = result.stdout.split(/\r?\n/).filter(Boolean).map((name) => path.relative(repo, path.resolve(repo, name)).split(path.sep).join("/"));
   }
   const candidates = [...new Set([...changed, ...references])].sort();
-  return { version: PROTOCOL_VERSION, repo, snapshot: captured, changed, symbols: [...symbols].sort(), candidates, riskHints, method: captured.head ? "git-files+text-references" : "current-files+text-references", limitations: ["Textual candidates and risk hints are not semantic proof. Inspect registrations, reflection and dynamic consumers with compiler references or runtime traces when material.", ...(!captured.head ? ["No Git HEAD: all current scope files are candidates; there is no historical caller discovery."] : [])] };
+  // Without HEAD every file is already a candidate; only Git discovery can silently miss callers of these files.
+  const unextracted = captured.head ? changed.filter((name) => !symbolSource.test(name)) : [];
+  return { version: PROTOCOL_VERSION, repo, snapshot: captured, changed, symbols: [...symbols].sort(), candidates, riskHints, method: captured.head ? "git-files+text-references" : "current-files+text-references", limitations: ["Textual candidates and risk hints are not semantic proof. Inspect registrations, reflection and dynamic consumers with compiler references or runtime traces when material.", ...(!captured.head ? ["No Git HEAD: all current scope files are candidates; there is no historical caller discovery."] : []), ...(unextracted.length ? [`No symbol extraction for ${unextracted.join(", ")}: their callers are discovered only through --symbols names. Pass the changed identifiers with --symbols or use compiler references.`] : [])] };
 }
 async function copySnapshot(repo, captured, target) {
   for (const file of captured.files) {

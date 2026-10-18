@@ -65,6 +65,25 @@ test("deleted exports and deleted files retain their caller discovery", async (t
   assert.ok(removedFile.candidates.includes("routes/admin.mjs"));
 });
 
+test("files without symbol extraction are reported and --symbols recovers their callers", async (t) => {
+  const { repo } = await fixture(t);
+  const git = (args) => {
+    const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", env: gitEnvForRepo() });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  await fs.writeFile(path.join(repo, "math.go"), "package main\nfunc ComputeTotal(a int) int { return a }\n");
+  await fs.writeFile(path.join(repo, "main.go"), "package main\nfunc main() { ComputeTotal(1) }\n");
+  git(["add", "math.go", "main.go"]);
+  git(["-c", "user.name=fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "go"]);
+  await fs.appendFile(path.join(repo, "math.go"), "\n");
+  const implicit = await discover(repo);
+  assert.ok(!implicit.candidates.includes("main.go"));
+  assert.ok(implicit.limitations.some((item) => item.includes("math.go") && item.includes("--symbols")));
+  assert.ok(!implicit.limitations.some((item) => item.includes("owner.mjs")));
+  const explicit = await discover(repo, ["ComputeTotal"]);
+  assert.ok(explicit.candidates.includes("main.go"));
+});
+
 test("oracle path aliases cannot be mutation targets", async (t) => {
   const { repo, plan } = await fixture(t);
   assert.deepEqual(validatePlan(plan), []);
