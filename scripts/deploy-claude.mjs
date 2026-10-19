@@ -20,7 +20,7 @@ const sourceDir = path.join(repoRoot, "claude");
 const targetDir = path.join(home, ".claude");
 const hookTarget = path.join(targetDir, "hooks", "check-traditional.mjs");
 const evidenceHookTarget = path.join(targetDir, "hooks", "check-evidence.mjs");
-const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "check-evidence.mjs"];
+const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "check-evidence.mjs", "resume-handoff.mjs"];
 const backupDir = path.join(targetDir, "backups", "deploy-claude");
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -91,6 +91,7 @@ const hookTokens = new Map([
   ["__CLAUDE_COMPLETION_HOOK_PATH__", path.join(targetDir, "hooks", "guard-project-completion.mjs")],
   ["__CLAUDE_STOP_HOOK_PATH__", hookTarget],
   ["__CLAUDE_EVIDENCE_HOOK_PATH__", evidenceHookTarget],
+  ["__CLAUDE_HANDOFF_HOOK_PATH__", path.join(targetDir, "hooks", "resume-handoff.mjs")],
 ]);
 for (const group of Object.values(template.hooks).flat()) {
   for (const hook of group.hooks) {

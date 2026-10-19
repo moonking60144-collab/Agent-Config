@@ -110,7 +110,7 @@ export async function prepareClaudeWorkflow(repoRoot, targetDir) {
 export function mergeClaudeHooks(existing, managed, targetDir) {
   const owned = new Set([
     "check-traditional.mjs", "check-evidence.mjs", "record-session-provenance.mjs",
-    "resume-project-ledger.mjs", "guard-project-completion.mjs",
+    "resume-project-ledger.mjs", "guard-project-completion.mjs", "resume-handoff.mjs",
   ].map((name) => path.join(targetDir, "hooks", name)));
   // Hooks identical to a template entry were published by an earlier deploy, even without args.
   const templateHooks = new Set(Object.values(managed).flat().flatMap((group) => group.hooks).map((hook) => JSON.stringify(hook)));

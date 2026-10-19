@@ -74,6 +74,20 @@
             "statusMessage": "續接專案 ledger"
           }
         ]
+      },
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "__CLAUDE_HANDOFF_HOOK_PATH__"
+            ],
+            "timeout": 20,
+            "statusMessage": "續接交接內容"
+          }
+        ]
       }
     ]
   }

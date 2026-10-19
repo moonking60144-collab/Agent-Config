@@ -67,12 +67,14 @@ function Normalize-ClaudeSettingsTemplate {
           $hook.args = @('__CLAUDE_RESUME_HOOK_PATH__')
         } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'guard-project-completion\.mjs')){
           $hook.args = @('__CLAUDE_COMPLETION_HOOK_PATH__')
+        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'resume-handoff\.mjs')){
+          $hook.args = @('__CLAUDE_HANDOFF_HOOK_PATH__')
         }
       }
     }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
-    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/record-session-provenance.mjs', '__CLAUDE_PROVENANCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-project-ledger.mjs', '__CLAUDE_RESUME_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/guard-project-completion.mjs', '__CLAUDE_COMPLETION_HOOK_PATH__')
+    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/record-session-provenance.mjs', '__CLAUDE_PROVENANCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-project-ledger.mjs', '__CLAUDE_RESUME_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/guard-project-completion.mjs', '__CLAUDE_COMPLETION_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-handoff.mjs', '__CLAUDE_HANDOFF_HOOK_PATH__')
   }
 }
 
@@ -134,8 +136,8 @@ if(Test-Path $cs){
   Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'
 } else { Skip "$cs 不存在" }
 
-# Claude managed Stop hooks and their shared helper
-foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'check-evidence.mjs')){
+# Claude managed hooks and their shared helper
+foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'check-evidence.mjs', 'resume-handoff.mjs')){
   $hk = Join-Parts $U '.claude' 'hooks' $relative
   $target = Join-Parts $src 'claude' 'hooks' $relative
   if(Test-Path $hk){
