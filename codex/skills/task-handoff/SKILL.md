@@ -5,11 +5,11 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 
 # Task Handoff
 
-把目前工作交接到乾淨的新 task，確認新 task 接手後才封存來源；Claude Code 桌面版改成在原 session 清除對話後續接。Codex 與 Claude Code 共用這份流程：task 在 Codex 是 thread，在 Claude Code 是 session；工具對照在最後三節。
+把目前工作交接到乾淨的新 task，確認新 task 接手後才封存來源；Claude Code 桌面版無法開新 session 時，改成在原 session 清除對話後續接。Codex 與 Claude Code 共用這份流程：task 在 Codex 是 thread，在 Claude Code 是 session；工具對照在最後三節。
 
 ## 先分清需求
 
-- 新 task 只帶交接內容、不帶歷史：用本 skill。使用者本人要求交接到新 task 就代表同意接手後封存來源（Claude Code 桌面版是清除原 session 的對話），即使只輸入 skill 名稱、沒有其他文字；使用者明說保留來源時才不封存或清除。使用者沒提出交接、只是模型判斷可能需要時，先問使用者，不建立、不封存也不清除。
+- 新 task 只帶交接內容、不帶歷史：用本 skill。使用者本人要求交接到新 task 就代表同意接手後封存來源（Claude Code 桌面版改走原地清除時是清除原 session 的對話），即使只輸入 skill 名稱、沒有其他文字；使用者明說保留來源時才不封存或清除。使用者沒提出交接、只是模型判斷可能需要時，先問使用者，不建立、不封存也不清除。
 - Fork 並保留完整歷史：改用該 surface 的 fork，不用本 skill。
 - 只要交接摘要：直接寫摘要，不建立也不封存。
 
@@ -27,7 +27,7 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 | Surface | 做法 |
 | --- | --- |
 | Claude Code，有 claude-code-remote 工具（雲端 session） | 用 `get_session`、`create_session`、`archive_session`，細節見下節。 |
-| Claude Code 桌面版（Code 分頁），有 `clear_session` | 在原 session 寫交接檔再清除對話，不建立也不封存；細節見「Claude Code 桌面版」一節。 |
+| Claude Code 桌面版（Code 分頁） | 有 `start_session` 時用 `get_session`、`start_session`、`list_events`、`detach_session`、`archive_session` 開新 session 接手；沒有或不能用時在原 session 寫交接檔再用 `clear_session` 清除對話。細節見「Claude Code 桌面版」一節。 |
 | Codex app | 用目前 session 提供的 thread 工具建立、讀回與封存；工具名稱以實際工具清單為準。 |
 | 沒有建立 task 工具的 surface（即使有封存工具） | 完成流程 1–3，把交接內容交給使用者自己開新 task；明說沒有建立、也沒有封存。 |
 
@@ -42,7 +42,16 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 
 ## Claude Code 桌面版
 
-本節取代流程 4–6：不建立新 session，也不封存；`clear_session` 清除後 session 的名稱、資料夾、模型、權限與設定都留著，舊對話可從「Resume previous session」找回。
+- 讀來源：`get_session` 帶 `"self"`。名稱、模型、effort、權限模式在 `title`、`model`、`effort`、`permissionMode`；另看 `pinned` 與 worktree／branch 資訊。
+- 選做法：沒有 `start_session`、來源在 worktree 裡，或 `start_session` 被拒（例如這一輪不是使用者本人的訊息觸發）時，改走下面的「原地清除」。來源在 worktree 裡不開新 session：與來源共用 worktree 的 side session 不能 detach，之後封存來源時還會連同 worktree 一起被清掉；另開 worktree 又違反流程 4。
+- 建立：`start_session` 帶 `initiation: "user_asked"`、`context: "fresh"`、`use_worktree: false`，`title` 用來源的名稱；`prompt` 放交接內容，`background` 寫至少 80 字的目標與限制摘要。`model`、`effort`、`permission_mode` 不填就沿用來源；`model` 只接受同級或更便宜的模型。`"fork"` 會帶入整段對話，不符合本 skill。參數以實際工具說明為準。
+- 讀回：`get_session` 帶新 session 的 ID，核對名稱、模型、effort 與權限模式；用 `list_events` 確認它已收到交接內容並開始處理。
+- 封存前先 `detach_session` 帶新 session 的 ID：新 session 掛在來源底下成為 side session，閒置後會跟著來源被封存。被拒絕就不封存來源，回報原因。
+- 封存：`archive_session` 帶 `"self"`，工具回傳後對話就結束。來源已釘選（`pinned` 為 true）時 app 不會封存，不呼叫，回報請使用者取消釘選後自己封存；封存被拒（例如來源開在畫面上、使用者沒在 app 卡片上允許）也只回報。建立新 session 後就不再改走原地清除。封存後新 session 才出問題時，可從 Archived 清單還原來源。
+
+### 原地清除
+
+取代流程 4–6：不建立新 session，也不封存；`clear_session` 清除後 session 的名稱、資料夾、模型、權限與設定都留著，舊對話可從「Resume previous session」找回。
 
 - 寫交接檔：用 Write 工具把流程 3 的交接內容存成一般文字檔（例如 scratchpad 裡的 `handoff.md`），再執行 `node ~/.claude/hooks/resume-handoff.mjs --write <文字檔路徑>`（PowerShell 寫成 `node "$HOME\.claude\hooks\resume-handoff.mjs"`）。它以這個 session 的 `CLAUDE_CODE_HOST_SESSION_ID` 命名交接檔並印出路徑；exit code 不是 0 就不清除，回報錯誤。不要自己手寫交接檔的 JSON。
 - 先回報：交接重點、即將清除、舊對話怎麼找回，以及清除後要送一則訊息（例如「繼續」）新對話才會開始，隔多久再送都可以。
