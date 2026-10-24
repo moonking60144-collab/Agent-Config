@@ -16,3 +16,9 @@
 Race、torn read、lost update、duplicate side effect、deadlock、supersession、restart recovery 等主張須有可達 timeline，標明 mutable source、I/O、version／lock、commit 與 observable failure；否則只列 hypothesis。
 
 無法由現有證據解決、且會實質影響 contract、ownership 或 downstream behavior 的決策才阻擋 Act。可沿用既有模式的實作細節直接完成，不因缺少不適用的表格欄位而停工。
+
+## 受控實驗
+
+為釐清上述決策，可在既有授權內，以隔離副本或暫存目錄執行可丟棄的原型或量測；先界定要區分的假設、觀察結果與副作用範圍，不必先定案才能取得證據。明確 read-only 或禁止寫檔的要求仍須遵守。
+
+隔離目錄不等於副作用隔離：確認實驗不會使用正式資料或憑證產生未授權的外部寫入、費用或共享狀態變更；超出授權的步驟仍須確認。實驗不覆寫既有未提交變更，不自動納入正式程式碼。依結果更新設計；原型要正式採用時，仍須完成適用的規劃、變更審查與驗證，不能把原型成功當成正式整合已完成。

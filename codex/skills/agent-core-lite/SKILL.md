@@ -27,7 +27,7 @@ Process 選擇與授權依 AGENTS.md。已授權實作中的有限盤點由 Lite
 - [非同步異動](references/async-mutation-convergence.md)：不確定結果與持久化的結果收斂／恢復。
 - [互動效能](references/interaction-performance.md)：高頻／高密度 UI 或共享排程資源。
 
-記錄會改變契約的未決設計事項，並在實作前解決。這些參考提供領域不變條件；verification 提供證據方法。
+記錄會改變契約的未決設計事項，並在納入正式實作前解決；需要取得證據時，可依 [受控實驗](references/architecture-preflight.md#受控實驗) 在既有授權內驗證。這些參考提供領域不變條件；verification 提供證據方法。
 
 ## 執行
 
@@ -35,12 +35,12 @@ Process 選擇與授權依 AGENTS.md。已授權實作中的有限盤點由 Lite
 
 ## 驗證
 
-依 [verification](references/verification.md) 選擇與主張相稱的 oracle、真正入口及必要敏感度／效能檢查；重用有效證據，不為固定流程增加測試。程式變更的共用 runner 為 scripts/verify-change.mjs，嚴格 receipt 條件以該契約為準，不在此重複。Lite receipt 不需要 Project ledger；規則文字也不能代替 repo enforcement。
+依 [verification 的適用層級](references/verification.md#適用層級) 選擇原生檢查或嚴格 runner，並使用與主張相稱的 oracle、真正入口及必要敏感度／效能檢查；重用有效證據，不為固定流程增加測試。需要嚴格 receipt 時使用 scripts/verify-change.mjs，不另建 Project ledger；規則文字不能代替 repo enforcement。
 
 Commit、push 與遠端驗證是不同狀態。已授權 push 且有適用遠端檢查時，必須驗證精確 revision 才能宣稱完成。Pending／failed／unknown 檢查仍須明列為未完成工作。
 
 ## 回報
 
-說明變更、支持它的證據、剩餘邊界與必要的 runtime 重新載入。詳細結果引用 receipt。不重播 log，也不把測試說成超出它能支持範圍的證明。
+說明變更、支持它的證據、剩餘邊界與必要的 runtime 重新載入。原生檢查回報命令、結果與受測版本；使用嚴格 runner 時引用 receipt。不重播 log，也不把測試說成超出它能支持範圍的證明。
 
 最終交付前：核對實際 diff／status，直接檢查採納的 reviewer findings，確認每項需求都有適當證據，或明確標示尚未解決的邊界。

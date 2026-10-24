@@ -2,14 +2,23 @@
 
 程式修改範圍及其證據審查使用此方法。Lite 負責執行；Project 持久保存相同 plan／receipt；Review 維持唯讀。領域 references 定義應守住哪些不變條件，本檔定義如何驗證。單純文字或格式修改直接檢查即可，不需要生成測試／mutation 測試活動。
 
+## 適用層級
+
+- **一般 Lite 修改：** 不符合下列嚴格條件時，使用與風險相稱的原生測試、實際入口或靜態檢查，不要求 plan.json、trace adapter 或 receipt。仍須遵守下列證據流程，不以工具選擇降低必要驗證。
+- **嚴格驗證：** Project 完成、使用者／專案明確要求嚴格 receipt，或程式修改會改變共享狀態的一致性、跨 ownership 的寫入／責任契約、非同步異動的時序／恢復行為時，使用共用 runner 與 receipt。依可達行為判斷，不因碰到共用檔案、跨檔呼叫或出現 async 關鍵字就升級。已適用的嚴格要求不得因 runner 失敗而改列一般 Lite。
+
+一般 Lite 在最後一次相關編輯後執行必要檢查，回報命令、結果、工作目錄與受測版本。Git 範圍包含 HEAD、staged／unstaged diff 及相關 untracked 檔案；非 Git 範圍保留受測檔案版本或摘要。完成前確認受測內容未變；有相關變更就重跑受影響檢查，不能只用相同 HEAD 宣稱證據仍有效。
+
+下方 runner、adapter、snapshot 與 receipt 格式只約束嚴格驗證。工具不支援某檔案或環境時，分開回報「嚴格 receipt 未通過」與其他已取得的有效證據及其範圍；不把工具限制當成程式失敗，也不以原生檢查冒充已滿足必要的嚴格完成契約。
+
 ## 單一證據流程
 
 1. 從已核准需求、實際 diff、靜態引用／註冊與 runtime 觀察探索。不能只靠 agent 自填的 consumer 清單起頭與結案。實作改變共享元素、狀態、資源或生命週期責任時，重新判定受影響 consumer 與驗證範圍；任務名稱和修改位置不能限定影響。暫態行為須驗證退出、取消或交還控制權後，既有 consumer 契約仍成立。實際影響仍屬局部時，驗證維持局部。
 2. 以使用者必要結果及權威契約定義判定依據（oracle），可用簡單參考模型、差異行為或變形關係；另一個 agent 本身不是 oracle。預期結果不能由受測實作或 mock 自設條件決定。對結果主張，問「即使核心結果仍錯，這個 assertion 是否也會通過？」；只檢查方法被呼叫、flag 或成功訊息，不足以證明資料／行為已正確，須有能區分正誤結果的檢查。
 3. 選擇跨越主張邊界的檢查。跨層主張須由真正入口走過 producer 與 consumers，包含適用的預設設定、首次使用／恢復入口及多來源負載；不能只手動建立已就緒 state 或改掉預設 flag。狀態／並行風險用可重播序列涵蓋關鍵事件的相反到達順序與晚到結果；大量輸入組合再用生成資料，保留 seed 與最小反例。彼此獨立的 unit fixtures 不代替 composed path。
-4. 高風險不變條件或本次主張測試敏感度時，挑戰檢查本身：正常基準須通過；刻意注入的行為 mutation／fault 須到達目標 assertion 並失敗。未被攔截或未套用的修改、語法錯誤、缺依賴及無關 timeout 都不能證明敏感度。等價 mutation 換成有意義的挑戰。不要為可逆、低影響修改製造只重述實作的測試；已採用 receipt check 的必要條件仍須滿足，不得繞過 runner。
+4. 高風險不變條件或本次主張測試敏感度時，挑戰檢查本身：正常基準須通過；刻意注入的行為 mutation／fault 須到達目標 assertion 並失敗。未被攔截或未套用的修改、語法錯誤、缺依賴及無關 timeout 都不能證明敏感度。等價 mutation 換成有意義的挑戰。不要為可逆、低影響修改製造只重述實作的測試；適用嚴格驗證時，receipt check 的必要條件仍須滿足。
 5. 效能主張須在相同負載、指標、單位與環境下，依序執行受控 baseline／candidate probes。保留重複量測原始樣本，以及事先宣告的絕對／相對預算。一般測試耗時、截圖、runtime 標籤與只取多次最佳結果都不足。
-6. 依目前原始碼快照驗證 receipt，再回報已證明範圍與限制。原始碼／測試變更會使先前 receipt 失效。
+6. 核對證據與目前受測內容一致，再回報已證明範圍與限制。嚴格驗證須依目前原始碼快照驗證 receipt；其原始碼／測試變更會使先前 receipt 失效。
 
 純重構先識別原有輸入、輸出、驗證與副作用契約，透過仍適用的外部入口檢查行為保持；不要用函式數量、內部呼叫形狀或同步改寫的 mock 證明等價。移除 helper／guard 時，確認原本拒絕的輸入及錯誤處理仍有等價去處，必要時查其歷史理由。需求明確要求的行為變更另列刻意差異，不把舊 bug 固定成正確答案。
 
@@ -26,7 +35,7 @@
 - 替換資料來源或入口前，比對原有篩選、權限、更新方式及副作用；修改行數少不代表行為等價。必要產生步驟不能因「簡化」被停用；涉及額外副作用時先處理授權邊界，而非把無法達成結果的版本當成修復。
 - 有證據支持的觸發操作／事件已能解釋錯誤，且關鍵替代解釋已處理時停止，不無限向上追查。可取得的關鍵證據仍未查時，不能只因已有合理說法而結案；證據或權限不可得時，交代已證實鏈節、具體缺口及可區分假設的下一項觀察。已授權的緊急緩解可先做，但須區分「症狀緩解」與「來源根治」，不強迫先找完根因才止損。
 
-## Lite 與 Project 共用入口
+## 嚴格驗證的共用入口
 
 部署後的 scripts 位於 ~/.codex/skills/agent-core-lite/scripts/：
 
@@ -67,7 +76,7 @@ Git repo 的 scope-root 必須是 repo 根目錄；探索記錄 tracked／untrac
 
 Ledger、sidecar、plan 與 receipt 預設放在 source scope 外。Repo-local 控制產物只有在 discovery 前已是 untracked 且 Git-ignored 才受支援；CLI 允許輸出到該處，完成驗證採相同放置檢查。Tracked 控制產物須移到 scope 外，不能靜默排除於原始碼 hashes。非 Git 資料夾使用外部控制產物。如此更新完成狀態才不會使自己的快照失效。
 
-每個探索出的候選都須對應檢查或具體排除理由。文字式 performance／stateful 提示須有 riskDecisions:[{kind,checks,reason}]，指定適用檢查或具體不適用理由。文字提示不是完整語意探索：重要時使用 compiler／LSP references、registrations 與 runtime traces。Snapshot 目前拒絕 symlinks、非一般檔案及超過 32 MiB 的檔案。原生測試可補充證據，但不能繞過這些限制或嚴格完成檢查；沒有合適、受支援的 adapter 前，該 scope 保持未驗證。不為取得通過而靜默縮小任務範圍。
+每個探索出的候選都須對應檢查或具體排除理由。文字式 performance／stateful 提示須有 riskDecisions:[{kind,checks,reason}]，指定適用檢查或具體不適用理由。文字提示不是完整語意探索：重要時使用 compiler／LSP references、registrations 與 runtime traces。Snapshot 目前拒絕 symlinks、非一般檔案及超過 32 MiB 的檔案。原生測試可補充證據，但不能繞過嚴格完成檢查；沒有合適、受支援的 adapter 前，該 scope 的嚴格 receipt 保持未通過，其他有效證據依適用層級分開回報。不為取得通過而靜默縮小任務範圍。
 
 預設 trace adapter 從實際 subprocess tree 收集 Node V8 executed-file coverage。列入覆蓋但未被觀察到的 consumer 會阻擋 receipt。檔案執行覆蓋只能證明模組跑過，不代表每個分支或必要副作用都發生。其他語言可使用 trace:"probe"，由原生 coverage／trace adapter 輸出 observedConsumers；這是 probe 回報的證據，須對照實際 producer 審查。手填陣列不構成 trace 證據。
 
@@ -85,8 +94,8 @@ Project completion 在既有共用完成契約中，以 verification:{artifactBa
 node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-verification
 ```
 
-Stop hook 使用相同檢查。舊完成紀錄仍可透過非嚴格 CLI／resume 讀取；新完成範圍須產生目前證據。Lite 使用相同 runner，不為保存 receipt 而建立 Project ledger。純 Review 可執行唯讀檢查與檢視 receipts，但沒有實作授權時，絕不啟動 mutation／部署命令。
+Stop hook 對符合檢查條件的 Project ledger 使用相同嚴格檢查；一般 Lite 不需建立 ledger。舊完成紀錄仍可透過非嚴格 CLI／resume 讀取；新 Project 完成範圍須產生目前證據。適用嚴格驗證的 Lite 使用相同 runner，不為保存 receipt 而建立 Project ledger。純 Review 可執行唯讀檢查與檢視 receipts，但沒有實作授權時，絕不啟動 mutation／部署命令。
 
 當同一 agent 設計並實作 async reference 涵蓋的狀態機時，完成前須由新的 reviewer 重建至少一條 producer → consumer 失敗時間線；Lite 與 Project 都適用。獨立 review 評估遺漏 consumers、oracle 獨立性、mutation 關聯性、trace 邊界與代表性負載，作為真實量測與 composed tests 的補充。Receipts 是可重現證據，不是模型誠實度的密碼學證明，也不能證明任意程式語意；模型仍可能選錯不變條件或 probe。保留此限制，不新增聲稱全面完整的布林值。
 
-依主張選足夠的證據：局部判斷可用聚焦案例；狀態／恢復看必要操作序列，UI 成本看代表性 runtime。生成、mutation 與額外 reviewer 只在適用風險或證據缺口成立時使用，已採用的嚴格 receipt 條件不因此豁免。相同快照與前置條件的有效證據可重用；只有新變更、失敗、證據過期或具體未解疑慮才擴大／重跑，不把測試數量或反覆全綠當新證明。
+依主張選足夠的證據：局部判斷可用聚焦案例；狀態／恢復看必要操作序列，UI 成本看代表性 runtime。生成、mutation 與額外 reviewer 只在適用風險或證據缺口成立時使用，適用層級要求的嚴格 receipt 條件不因此豁免。相同快照與前置條件的有效證據可重用；只有新變更、失敗、證據過期或具體未解疑慮才擴大／重跑，不把測試數量或反覆全綠當新證明。

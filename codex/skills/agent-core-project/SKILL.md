@@ -42,7 +42,7 @@ next_instruction: Read <ledger path> first, then continue <task>.
 
 依依賴與寫入衝突安排工作；互不相依的探索可並行，checkpoint 記錄實際進度，不把一次一項當作固定限制。子 agent 協作依 AGENTS.md。
 
-Act 前解決影響契約、ownership 或可觀察行為的設計決策。新證據推翻計畫時，先更新 plan／ledger 再繼續。未修改且已有足夠 enforcement 的程式路徑，不需要另一套框架。
+納入正式實作前解決影響契約、ownership 或可觀察行為的設計決策；取證可依 [受控實驗](../agent-core-lite/references/architecture-preflight.md#受控實驗) 在既有授權內進行。新證據推翻計畫時，先更新 plan／ledger 再繼續。未修改且已有足夠 enforcement 的程式路徑，不需要另一套框架。
 
 獨立 review 的觸發與證據標準依共用 verification contract；不因使用 Project 再增加一輪同內容 review。
 
