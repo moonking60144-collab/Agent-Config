@@ -387,7 +387,6 @@ async function main() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error("routing classifier eval failed：" + error.message);
+    process.exitCode = 1;
+  });
 }
-
-  process.exitCode = 1;
-});
