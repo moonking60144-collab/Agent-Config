@@ -61,7 +61,7 @@ entry point -> validation / parser -> business logic -> persistence or external 
 
 ## 輸出格式
 
-保持簡短、可執行：
+依適用全域規範直接交付已確認的 repo 結構、慣例與建議方向。以下為可選欄位，依本次需求取用；Risks / Unknowns 只列會影響使用或下一步的具體缺口，沒有就省略，不因其他部分未知而弱化已確認的地圖：
 
 ```markdown
 **Repo Map**

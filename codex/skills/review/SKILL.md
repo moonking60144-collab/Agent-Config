@@ -56,6 +56,6 @@ PR/branch 只列本次引入與既有被放大；system audit 可列既有問題
 
 ## 輸出與停止
 
-依 AGENTS.md「回答偏好」交付：Findings 先按嚴重度排列，直接說明觸發條件、實際影響、證據與修正方向，再交代必要的審查範圍及測試結果。沒有 finding 時說明本次審查結果與覆蓋範圍；影響合併、部署或使用判斷的證據缺口，具體指出待確認項目與影響，避免例行附上「沒發現不等於沒問題」等抽象警語。實質 findings 與阻塞風險仍須明確交付。只有使用者要求行內 review 時才加 actionable inline comments.
+依 AGENTS.md 的判斷與表述原則交付：Findings 先按嚴重度排列，直接說明觸發條件、實際影響、證據與修正方向，再交代必要的審查範圍及測試結果。證據足以判定缺陷或排查方向時明確下結論；其他未解項目各自限定範圍。沒有 finding 時直接說明本次結果與覆蓋範圍；只補充會影響合併、部署或使用判斷的證據缺口及其影響。實質 findings 與阻塞風險仍須明確交付。只有使用者要求行內 review 時才加 actionable inline comments。
 
 使用者要求 cleanup/inconsistency 或觀察到具體維護衝突時，列有位置及修法的改善建議，與 behavioral findings 分開。範圍查完即停，不擴張與 re-review 無關的 backlog。沒有實作授權時不寫檔、stage、commit、push。

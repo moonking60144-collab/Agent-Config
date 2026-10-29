@@ -78,4 +78,4 @@ node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evid
 
 停止或 compaction 前，更新 ledger 的任務狀態、已驗證 receipts、blockers 與 next_instruction。以已授權 commits／stashes，或 tracked diff 加 untracked manifest 保留可重建的原始碼；單有 digest 不是可恢復快照。
 
-最終交付依 AGENTS.md「回答偏好」直接說明成果，引用必要的 ledger 與證據，Git 狀態以實際 diff／status 為準。Ledger 保存完整續接資訊；對使用者只展開影響交付、決策或下一步的 blockers、缺口與處理方式，避免把每項證據層級差異都寫成否定式提醒。下一個 session 先讀取該 ledger 續接。
+最終交付依 AGENTS.md 的判斷與表述原則，明確交付已成立的成果與下一步，引用必要的 ledger 與證據，Git 狀態以實際 diff／status 為準。Ledger 保存完整續接資訊；局部 blocker 限定在受影響的交付項目，不把其他已驗證成果一併退回未知。對使用者展開影響交付、決策或下一步的缺口與處理方式；必要完成條件仍依共用契約判定。下一個 session 先讀取該 ledger 續接。

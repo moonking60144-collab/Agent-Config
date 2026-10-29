@@ -54,4 +54,4 @@ References 按需載入：新視覺方向可看 [visual directions](references/v
 
 行為與跨 consumer 證據依 Lite 的 [verification](../agent-core-lite/references/verification.md)；高頻／高密度 UI 或共享資源競爭才讀 [interaction performance](../agent-core-lite/references/interaction-performance.md)。視覺通過不代替效能、資料流或正式寫入證據。
 
-交付實際可開啟的位置、完成的行為、必要設計取捨與驗證邊界。小改不固定輸出九欄設計報告；重大改版才解釋關鍵 typography／色彩／版面決策。設計分析留在交付說明，不塞進產品畫面。
+依 AGENTS.md 直接交付可開啟的位置、完成的行為與有依據的設計選擇；只補充影響使用或驗收的具體缺口及取捨。小改不固定輸出九欄設計報告；重大改版才解釋關鍵 typography／色彩／版面決策。設計分析留在交付說明，不塞進產品畫面。
