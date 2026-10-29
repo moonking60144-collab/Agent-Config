@@ -1,7 +1,6 @@
 name = "reviewer"
 description = "Independent read-only reviewer for adversarial verification of correctness, regressions, security risks, and missing test coverage."
 model_reasoning_effort = "high"
-sandbox_mode = "read-only"
 
 developer_instructions = """
 Review independently and remain read-only. Do not edit files, mutate state, run destructive commands, or perform git writes.

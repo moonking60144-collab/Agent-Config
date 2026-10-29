@@ -55,7 +55,22 @@ function validateStringArray(item, key) {
   }
 }
 
-function validateCases(cases) {
+export function validateCases(cases) {
+  // Required checks are a subset of allowed checks; absent allowlist means an exact set.
+  const knownChecks = new Set(['branch', 'remote', 'uncommitted_diff', 'rollback']);
+  for (const item of cases) {
+    for (const key of ['expected_preflight_checks', 'allowed_preflight_checks']) {
+      const values = item[key];
+      if (values === undefined && key === 'allowed_preflight_checks') continue;
+      if (!Array.isArray(values) || values.some(value => !knownChecks.has(value)) || new Set(values).size !== values.length) {
+        throw new Error(item.id + ': invalid ' + key);
+      }
+    }
+    const allowed = new Set(item.allowed_preflight_checks ?? item.expected_preflight_checks);
+    if (item.expected_preflight_checks.some(value => !allowed.has(value))) {
+      throw new Error(item.id + ': required preflight checks must be allowed');
+    }
+  }
   const ids = new Set();
   for (const item of cases) {
     if (!item || typeof item !== "object") throw new Error("case 必須是 object");
@@ -187,23 +202,38 @@ async function runProcess(command, args, options) {
   });
 }
 
-function evaluateResult(item, result, forbiddenToolTypes) {
+export function evaluateResult(item, result, forbiddenToolTypes) {
   const failures = [];
   if (result.selected_process !== item.expected_process) failures.push("process=" + result.selected_process + " expected=" + item.expected_process);
   if (result.would_write !== item.expected_would_write) failures.push("would_write=" + result.would_write);
   if (result.requires_confirmation !== item.expected_confirmation) failures.push("requires_confirmation=" + result.requires_confirmation);
   if (result.requires_confirmation && result.would_write) failures.push("confirmation/write inconsistency");
-const rawChecks = result.preflight_checks || [];
+if (!Array.isArray(result.preflight_checks)) failures.push('invalid_preflight_checks');
+  const rawChecks = Array.isArray(result.preflight_checks) ? result.preflight_checks : [];
 const actualChecks = new Set(rawChecks);
 if (actualChecks.size !== rawChecks.length) failures.push("duplicate_preflight_checks");
 for (const check of item.expected_preflight_checks || []) {
   if (!actualChecks.has(check)) failures.push("missing_preflight=" + check);
 }
+  const allowedChecks = new Set(item.allowed_preflight_checks ?? item.expected_preflight_checks ?? []);
+  for (const check of actualChecks) {
+    if (!allowedChecks.has(check)) failures.push('unexpected_preflight=' + check);
+  }
   const searchable = (result.first_action + "\n" + result.rationale).toLowerCase();
   for (const term of item.must_include || []) if (!searchable.includes(term.toLowerCase())) failures.push("missing=" + term);
   for (const term of item.must_not_include || []) if (searchable.includes(term.toLowerCase())) failures.push("forbidden=" + term);
   if (forbiddenToolTypes.length > 0) failures.push("tool_calls=" + forbiddenToolTypes.join(","));
   return failures;
+}
+
+// Codex CLI 0.151.0 exec_events.rs exposes no model identity in JSONL events.
+// Requested aliases and arbitrary tool/message payloads are not model observations.
+export function modelProvenanceForExec(requestedModel) {
+  return {
+    requested_model: requestedModel ?? null,
+    resolved_model: 'unknown',
+    model_observation_source: 'exec_jsonl_model_not_exposed',
+  };
 }
 
 async function runCase(item, runIndex, options, codexVersion) {
@@ -225,8 +255,7 @@ async function runCase(item, runIndex, options, codexVersion) {
     const forbiddenSet = new Set(["command_execution", "mcp_tool_call", "file_change", "web_search", "computer_tool_call"]);
     const forbiddenToolTypes = [...new Set(types.filter((type) => forbiddenSet.has(type)))];
     const eventErrors = collectValuesByKey(events, "message");
-    const eventModels = collectValuesByKey(events, "model");
-    const resolvedModel = options.model || eventModels[0] || "unknown";
+    const modelEvidence = modelProvenanceForExec(options.model);
 
     let parsed = null;
     let parseError = null;
@@ -254,7 +283,7 @@ async function runCase(item, runIndex, options, codexVersion) {
       stderr: processResult.stderr.trim(),
       event_types: [...new Set(types)],
       event_errors: [...new Set(eventErrors)],
-      resolved_model: resolvedModel,
+      ...modelEvidence,
       codex_version: codexVersion,
     };
   } finally {
@@ -342,6 +371,10 @@ async function main() {
   const summary = selected.map((item) => ({ id: item.id, passes: item.resolved_passes, runs: options.repeat ?? item.repeat, minimum_passes: item.resolved_minimum_passes, pass: item.resolved_passes >= item.resolved_minimum_passes }));
   const actualModels = [...new Set(results.map((item) => item.resolved_model))];
   provenance.actual_models = actualModels;
+  provenance.model_observation_sources = [...new Set(results.map(item => item.model_observation_source))];
+  if (actualModels.includes('unknown')) {
+    provenance.limitations.push('The supported exec JSONL schema does not expose model identity; model_override records only the request.');
+  }
   provenance.reproducible = actualModels.length === 1 && actualModels[0] !== "unknown" && Boolean(options.reasoning);
   const artifact = { provenance, summary, results };
   const output = options.output || path.join(activeRoot, "eval-results", "config-workflow", timestamp() + ".json");
@@ -351,7 +384,10 @@ async function main() {
   if (summary.some((item) => !item.pass)) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error("routing classifier eval failed：" + error.message);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error("routing classifier eval failed：" + error.message);
+}
+
   process.exitCode = 1;
 });

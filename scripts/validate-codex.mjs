@@ -514,7 +514,67 @@ async function compareManagedFiles(expectedDirectory, actualDirectory, label) {
   }
 }
 
+
+// Managed custom-agent fields from the Codex subagents configuration contract.
+// Session-level sandbox/approval/provider settings belong to the parent session.
+export function validateAgentDefinition(value) {
+  const issues = [];
+  const isTable = item => item !== null && typeof item === 'object' && !Array.isArray(item);
+  if (!isTable(value)) return ['agent definition must be a TOML table'];
+  const textFields = ['name', 'description', 'developer_instructions', 'model', 'model_reasoning_effort', 'model_reasoning_summary', 'model_verbosity'];
+  const allowed = new Set([...textFields, 'features', 'skills']);
+  for (const key of Object.keys(value)) if (!allowed.has(key)) issues.push('unsupported custom-agent field: ' + key);
+  for (const key of textFields) {
+    const required = ['name', 'description', 'developer_instructions'].includes(key);
+    if ((required || Object.hasOwn(value, key)) && (typeof value[key] !== 'string' || !value[key].trim())) issues.push(key + ' must be a nonempty string');
+  }
+  if (Object.hasOwn(value, 'features')) {
+    const featureNames = new Set(['shell_tool', 'apps', 'plugins', 'memories', 'request_permissions_tool']);
+    if (!isTable(value.features)) issues.push('features must be a table');
+    else for (const [key, enabled] of Object.entries(value.features)) if (!featureNames.has(key) || enabled !== false) issues.push('unsupported feature override: ' + key);
+  }
+  if (Object.hasOwn(value, 'skills')) {
+    if (!isTable(value.skills)) issues.push('skills must be a table');
+    else for (const [key, setting] of Object.entries(value.skills)) {
+      if (key === 'config') {
+        if (!Array.isArray(setting) || setting.some(item => !isTable(item) || typeof item.path !== 'string' || !item.path.trim() || typeof item.enabled !== 'boolean' || Object.keys(item).some(field => !['path', 'enabled'].includes(field)))) issues.push('skills.config must contain path/enabled entries');
+      } else if (key === 'include_instructions') {
+        if (setting !== false) issues.push('skills.include_instructions may only be disabled');
+      } else if (key === 'bundled') {
+        if (!isTable(setting) || setting.enabled !== false || Object.keys(setting).some(field => field !== 'enabled')) issues.push('skills.bundled may only set enabled=false');
+      } else issues.push('unsupported skills override: ' + key);
+    }
+  }
+  return issues;
+}
+
+async function validateAgentDirectory(directory, python) {
+  let entries;
+  try { entries = await readdir(directory, { withFileTypes: true }); }
+  catch (error) { failures.push('Cannot read managed agent directory: ' + error.message); return; }
+  const names = new Set();
+  for (const entry of entries) {
+    if (!entry.name.endsWith('.toml')) continue;
+    const target = path.join(directory, entry.name);
+    if (!entry.isFile()) { failures.push(target + ': expected a regular TOML file'); continue; }
+    const parsed = spawnSync(python.command, [...python.prefix, '-c', 'import json, pathlib, sys, tomllib; print(json.dumps(tomllib.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8-sig"))))', target], { encoding: 'utf8' });
+    if (parsed.error || parsed.status !== 0) {
+      failures.push(target + ': invalid agent TOML: ' + (parsed.error?.message || parsed.stderr.trim()));
+      continue;
+    }
+    let definition;
+    try { definition = JSON.parse(parsed.stdout); }
+    catch (error) { failures.push(target + ': cannot parse agent definition: ' + error.message); continue; }
+    for (const issue of validateAgentDefinition(definition)) failures.push(target + ': ' + issue);
+    if (typeof definition.name === 'string') {
+      if (names.has(definition.name)) failures.push(target + ': duplicate agent name: ' + definition.name);
+      names.add(definition.name);
+    }
+  }
+}
+
 async function validateRepo(python) {
+  await validateAgentDirectory(path.join(sourceRoot, "agents"), python);
   console.log("[1/2] Repo Codex 設定");
 
   const agentsPath = path.join(sourceRoot, "AGENTS.md");
@@ -689,7 +749,9 @@ async function main() {
   await validateRepo(python);
   const hookTests = spawnSync(
     process.execPath,
-    ["--test", "--test-concurrency=1", path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs"), path.join(repoRoot, "tests", "verification-pipeline.test.mjs"), path.join(repoRoot, "tests", "deploy-codex.test.mjs")],
+    ["--test", "--test-concurrency=1",
+    path.join(repoRoot, "tests/routing-evals.test.mjs"),
+    path.join(repoRoot, "tests/agent-definitions.test.mjs"), path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs"), path.join(repoRoot, "tests", "verification-pipeline.test.mjs"), path.join(repoRoot, "tests", "deploy-codex.test.mjs")],
     { cwd: repoRoot, encoding: "utf8", shell: false }
   );
   if (hookTests.error || hookTests.status !== 0) {
@@ -726,7 +788,10 @@ if (evalValidation.error || evalValidation.status !== 0) {
   console.log("Codex 驗證完成：全部通過");
 }
 
-main().catch((error) => {
-  console.error("Codex 驗證失敗：" + error.message);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error("Codex 驗證失敗：" + error.message);
+}
+
   process.exitCode = 1;
 });
