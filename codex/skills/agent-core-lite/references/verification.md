@@ -1,13 +1,13 @@
 # 驗證契約
 
-程式修改範圍及其證據審查使用此方法。Lite 負責執行；Project 持久保存相同 plan／receipt；Review 維持唯讀。領域 references 定義應守住哪些不變條件，本檔定義如何驗證。單純文字或格式修改直接檢查即可，不需要生成測試／mutation 測試活動。
+程式修改範圍及其證據審查使用此方法。Lite 負責執行；Project 持久保存進度與適用證據；Review 維持唯讀。領域 references 定義應守住哪些不變條件，本檔定義如何驗證。單純文字或格式修改直接檢查即可，不需要生成測試／mutation 測試活動。
 
 ## 適用層級
 
-- **一般 Lite 修改：** 不符合下列嚴格條件時，使用與風險相稱的原生測試、實際入口或靜態檢查，不要求 plan.json、trace adapter 或 receipt。仍須遵守下列證據流程，不以工具選擇降低必要驗證。
-- **嚴格驗證：** Project 完成、使用者／專案明確要求嚴格 receipt，或程式修改會改變共享狀態的一致性、跨 ownership 的寫入／責任契約、非同步異動的時序／恢復行為時，使用共用 runner 與 receipt。依可達行為判斷，不因碰到共用檔案、跨檔呼叫或出現 async 關鍵字就升級。已適用的嚴格要求不得因 runner 失敗而改列一般 Lite。
+- **一般驗證（native）：** Lite 或 Project 未符合下列嚴格條件時，使用與風險相稱的原生測試、實際入口或靜態檢查，不要求 runner plan、trace adapter 或嚴格 receipt。Project 只增加續接與結案所需的證據記錄。
+- **嚴格驗證（strict）：** 使用者／專案明確要求嚴格 receipt，或程式修改會改變共享狀態的一致性、跨 ownership 的寫入／責任契約、非同步異動的時序／恢復行為時，使用共用 runner 與 receipt。依可達行為判斷，不因使用 Project、需要交接、碰到共用檔案或出現 async 關鍵字就升級。已適用的嚴格要求不得因 runner 失敗而改列 native。
 
-一般 Lite 在最後一次相關編輯後執行必要檢查，回報命令、結果、工作目錄與受測版本。Git 範圍包含 HEAD、staged／unstaged diff 及相關 untracked 檔案；非 Git 範圍保留受測檔案版本或摘要。完成前確認受測內容未變；有相關變更就重跑受影響檢查，不能只用相同 HEAD 宣稱證據仍有效。
+一般驗證在最後一次相關編輯後執行必要檢查，回報命令、結果、工作目錄與受測版本。Git 範圍包含 HEAD、staged／unstaged diff 及相關 untracked 檔案；非 Git 範圍保留受測檔案版本或摘要。完成前確認受測內容未變；有相關變更就重跑受影響檢查，不能只用相同 HEAD 宣稱證據仍有效。
 
 下方 runner、adapter、snapshot 與 receipt 格式只約束嚴格驗證。工具不支援某檔案或環境時，分開回報「嚴格 receipt 未通過」與其他已取得的有效證據及其範圍；不把工具限制當成程式失敗，也不以原生檢查冒充已滿足必要的嚴格完成契約。
 
@@ -86,15 +86,28 @@ Property／stateful probes 讀取 VERIFICATION_SEED 與 VERIFICATION_ITERATIONS�
 
 效能檢查使用 kind:"performance" 與 performance:{baselineCommand,metric,unit,workload,repeats,maxValue,maxRatio}。至少三組依序執行的 baseline／candidate 配對都須輸出 JSON {metric,unit,workload,environment,samples}。樣本是指定單位的量測值；除非明確以程序啟動時間為目標，否則不能用程序啟動時間代替。Runner 重新計算 p95 與預算結果，拒絕缺漏或不一致的 payload。在 probe 環境證據中記錄硬體、瀏覽器／程序版本、worker／queue 狀態與競爭控制。環境字串相同不能證明沒有無關負載；須獨立控制並檢查。
 
+## Project 的原生驗證
+
+新 Project sidecar 使用 schemaVersion 4。`verificationPolicy` 記錄 `mode:"native"` 或 `"strict"`、選擇理由 `reason` 及 `strictTriggers`（`explicit-contract`、`shared-state`、`ownership`、`async-mutation`）。Native 的 triggers 必須為空；只有需要保存進度不是 strict trigger。跨層讀取或測試本身不自動等於修改跨 ownership 契約。
+
+Native 不建立共用 runner plan／receipt，而在 sidecar 的 `nativeVerification` 保留：
+
+- `sourceInputs:[{path,state,sha256}]`：本次相關 source、tests 與設定的 repo-relative 路徑；`state:"present"` 附實際 SHA-256，`state:"absent"` 不附 digest。包含刪除與需保持不存在的輸入，不盤點無關的大型資產。
+- `checks:[{evidenceId,command,cwd,exitCode,checkedAt}]`：真正執行的命令陣列、repo-relative cwd、exit code 與時間；每筆非 review 的 present requiredEvidence 都須對應檢查，其輸出 artifact 與 digest 仍由 requiredEvidence 保存。純靜態檢查使用 `claimScope:"static", evidenceClass:"static"`，不冒充 runtime。
+
+最後一次相關編輯後執行檢查、保存輸出並擷取受測輸入；結案重新核對輸入與產物。Manifest 只證明列出的輸入未變，不宣稱完整 consumer discovery；發現新的相關輸入或依賴時更新範圍並重跑受影響檢查。Validator 不會替模型辨識未宣告的語意風險，也不會重新執行自填命令。
+
+`verification_mode: strict` ledger header、明示 `--require-verification` 或 session 已觀察到的 strict 要求不能被 native 覆寫。既有 v1–v3 結案維持 strict；新契約不能靠重新貼標籤規避既有要求。
+
 ## 完成與審查
 
-Project completion 在既有共用完成契約中，以 verification:{artifactBase,artifact,artifactSha256} 引用通過的 receipt。每項 behavioral requiredEvidence 透過 verificationChecks 連結實際 check IDs；純 static checks 不能滿足行為證據，跨邊界證據需要 integration／stateful／performance checks。使用相對於 repo 或 contract 的路徑。嚴格完成驗證檢查內容、連結、彙總及目前 source，不只檢查外層 hash。CLI：
+Strict Project completion 以 verification:{artifactBase,artifact,artifactSha256} 引用通過的 receipt。每項 behavioral requiredEvidence 透過 verificationChecks 連結實際 check IDs；純 static checks 不能滿足行為證據，跨邊界證據需要 integration／stateful／performance checks。Native 使用上一節的原生證據。兩者共用產物完整性、blockers 與適用的遠端檢查。CLI 按契約層級驗證：
 
 ```text
-node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-verification
+node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-completion-policy
 ```
 
-Stop hook 對符合檢查條件的 Project ledger 使用相同嚴格檢查；一般 Lite 不需建立 ledger。舊完成紀錄仍可透過非嚴格 CLI／resume 讀取；新 Project 完成範圍須產生目前證據。適用嚴格驗證的 Lite 使用相同 runner，不為保存 receipt 而建立 Project ledger。純 Review 可執行唯讀檢查與檢視 receipts，但沒有實作授權時，絕不啟動 mutation／部署命令。
+Stop hook 對符合檢查條件的 Project ledger 使用同一個層級解析與 evaluator；一般 Lite 不需建立 ledger。`--require-verification` 仍可明示強制 shared receipt。舊完成紀錄仍可透過非嚴格 CLI／resume 讀取。適用嚴格驗證的 Lite 使用相同 runner，不為保存 receipt 而建立 Project ledger。純 Review 可執行唯讀檢查與檢視 receipts，但沒有實作授權時，絕不啟動 mutation／部署命令。
 
 當同一 agent 設計並實作 async reference 涵蓋的狀態機時，完成前須由新的 reviewer 重建至少一條 producer → consumer 失敗時間線；Lite 與 Project 都適用。獨立 review 評估遺漏 consumers、oracle 獨立性、mutation 關聯性、trace 邊界與代表性負載，作為真實量測與 composed tests 的補充。Receipts 是可重現證據，不是模型誠實度的密碼學證明，也不能證明任意程式語意；模型仍可能選錯不變條件或 probe。保留此限制，不新增聲稱全面完整的布林值。
 

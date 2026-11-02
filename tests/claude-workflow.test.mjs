@@ -21,7 +21,7 @@ function run(script, args = [], input) {
   return result;
 }
 
-async function fixture(t) {
+async function fixture(t, { sourceEntrypoint = false } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "claude-workflow-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const repo = path.join(root, "repo");
@@ -42,7 +42,7 @@ async function fixture(t) {
   await fs.writeFile(path.join(active, "CLAUDE.md"), "existing instructions\n");
   return {
     repo, active,
-    deploy: () => run(path.join(repo, "scripts/deploy-claude.mjs"), ["--home", home, "--backup-retention", "0"]),
+    deploy: () => run(path.join(sourceEntrypoint ? repoRoot : repo, "scripts/deploy-claude.mjs"), ["--home", home, "--backup-retention", "0"]),
   };
 }
 
@@ -65,10 +65,11 @@ test("Claude deployment preserves local settings, dependencies and repeatability
   assert.equal(settings.permissions.defaultMode, "auto");
   assert.deepEqual(settings.permissions.allow, ["Read"]);
   assert.equal(settings.env.WORKFLOW_TEST_SENTINEL, "preserve");
-  assert.equal(settings.hooks.Stop[0].hooks.length, 3);
+  assert.equal(settings.hooks.Stop[0].hooks.length, 2);
   for (const [index, name] of hookPaths.entries()) {
     const script = path.join(active, "hooks", name);
-    assert.deepEqual(settings.hooks.Stop[0].hooks[index].args, [script]);
+    if (index === 0) assert.deepEqual(settings.hooks.Stop[0].hooks[index].args, [script]);
+    else assert.ok(!settings.hooks.Stop[0].hooks.some((hook) => hook.args?.includes(script)));
     assert.equal(hookDecision(script, "這是正體中文。", {}).decision, undefined);
   }
   for (const relative of ["CLAUDE.md", ...hookPaths.map(name => `hooks/${name}`), "hooks/lib/prose.mjs"]) {
@@ -245,7 +246,8 @@ for (const hook of hookPaths) {
   for (const [name, lines, blocked] of fences) {
     test(`${hook}: ${name}`, () => {
       const result = hookDecision(path.join(repoRoot, "claude/hooks", hook), lines.join("\n"));
-      assert.equal(result.decision === "block", blocked);
+      assert.equal(hook === "check-evidence.mjs" ? Boolean(result.systemMessage) : result.decision === "block", blocked);
+      if (hook === "check-evidence.mjs") assert.equal(result.decision, undefined);
     });
   }
   test(`${hook}: stop continuation cannot loop`, () => {
@@ -259,12 +261,30 @@ test("Traditional hook accepts legitimate Traditional characters", () => {
   assert.equal(result.decision, undefined);
 });
 
-test("Evidence heuristic requires attribution in the action paragraph", () => {
+test("Optional evidence heuristic only advises; labels are not a completion gate", () => {
   const script = path.join(repoRoot, "claude/hooks/check-evidence.mjs");
   for (const message of ["建議改成 12 支。", "這是公式欄位，建議改成 12 支。", "建議改成 12 支。\n\n已確認事實：其他欄位正常。"]) {
-    assert.equal(hookDecision(script, message).decision, "block");
+    const result = hookDecision(script, message);
+    assert.equal(result.decision, undefined);
+    assert.ok(result.systemMessage);
   }
   for (const message of ["依欄位定義，建議改成 12 支。", "這是推論，建議改成 12 支。", "目前共有 12 支。"]) {
     assert.equal(hookDecision(script, message).decision, undefined);
   }
+  for (const message of ["已依你的要求，將每頁顯示數量改成 20 筆，測試通過。", "100 × 0.8 = 80，所以正確答案是 80 元。", "公式推導：建議改成 12 支。"])
+    assert.equal(hookDecision(script, message).decision, undefined);
+});
+
+test("Claude sync retires the previous global evidence gate and preserves foreign hooks", async (t) => {
+  const { active, deploy } = await fixture(t, { sourceEntrypoint: true });
+  const settingsPath = path.join(active, "settings.json");
+  const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+  const oldHook = { type: "command", command: "node", args: [path.join(active, "hooks/check-evidence.mjs")] };
+  const foreign = { type: "command", command: "custom-review" };
+  settings.hooks = { Stop: [{ hooks: [oldHook, foreign] }] };
+  await fs.writeFile(settingsPath, JSON.stringify(settings));
+  assert.equal(deploy().status, 0);
+  const hooks = JSON.parse(await fs.readFile(settingsPath, "utf8")).hooks.Stop.flatMap((group) => group.hooks);
+  assert.ok(hooks.some((hook) => hook.command === foreign.command));
+  assert.ok(!hooks.some((hook) => hook.args?.includes(oldHook.args[0])));
 });

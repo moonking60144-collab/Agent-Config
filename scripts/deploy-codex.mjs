@@ -311,65 +311,23 @@ function run(command, args) {
   return result.stdout.trim();
 }
 
-async function findFile(directory, fileName) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  for (const entry of entries) {
-    const candidate = path.join(directory, entry.name);
-    if (entry.isFile() && entry.name === fileName) {
-      return candidate;
-    }
-    if (entry.isDirectory()) {
-      const nested = await findFile(candidate, fileName);
-      if (nested) {
-        return nested;
-      }
+async function resolveSerenaCommand() {
+  const installed = findExecutable("serena");
+  if (installed) return installed;
+  const uv = findExecutable("uv");
+  if (uv) {
+    try {
+      const binaryDirectory = run(uv, ["tool", "dir", "--bin"]);
+      const serena = path.join(binaryDirectory, process.platform === "win32" ? "serena.exe" : "serena");
+      if (await exists(serena)) return serena;
+    } catch {
+      // Optional tool discovery must not install, upgrade, or migrate other projects.
     }
   }
   return null;
 }
 
-async function resolveSerenaCommand(home) {
-  const uv = findExecutable("uv");
-  if (!uv) {
-    throw new Error("找不到 uv，無法安裝或升級 Serena");
-  }
-
-  const installed = run(uv, ["tool", "list"]);
-  if (/^serena-agent\s/m.test(installed)) {
-    run(uv, ["tool", "upgrade", "serena-agent"]);
-  } else {
-    run(uv, ["tool", "install", "-p", "3.13", "serena-agent"]);
-  }
-
-  const binaryDirectory = run(uv, ["tool", "dir", "--bin"]).trim();
-  const binaryName = process.platform === "win32" ? "serena.exe" : "serena";
-  const serena = path.join(binaryDirectory, binaryName);
-  if (!(await exists(serena))) {
-    throw new Error("找不到 Serena binary：" + serena);
-  }
-
-  const toolDirectory = run(uv, ["tool", "dir"]).trim();
-  const serenaToolRoot = path.join(toolDirectory, "serena-agent");
-  const template = await findFile(serenaToolRoot, "project.template.yml");
-  if (!template) {
-    throw new Error("找不到 Serena project.template.yml");
-  }
-
-  const registry = path.join(home, ".serena", "serena_config.yml");
-  if (await exists(registry)) {
-    run(process.execPath, [
-      path.join(scriptDir, "repair-serena-project-configs.mjs"),
-      "--template",
-      template,
-      "--registry",
-      registry,
-    ]);
-  }
-
-  return serena;
-}
-
-async function renderConfigTemplate(home) {
+async function renderConfigTemplate() {
   const templatePath = path.join(sourceRoot, "config.toml");
   let text = await readFile(templatePath, "utf8");
   const npx = findExecutable("npx");
@@ -377,7 +335,14 @@ async function renderConfigTemplate(home) {
     throw new Error("找不到 npx，無法展開 Codex MCP command");
   }
 
-  const serena = await resolveSerenaCommand(home);
+  const serena = await resolveSerenaCommand();
+  if (!serena) {
+    const start = text.indexOf("[mcp_servers.serena]");
+    if (start < 0) throw new Error("找不到 Serena template 區段");
+    const end = text.indexOf("\n[", start + 1);
+    text = text.slice(0, start) + (end < 0 ? "" : text.slice(end + 1));
+    console.log("  [略過] Serena 尚未安裝；本輪不加入 Serena MCP，安裝／升級及專案遷移須另行執行。");
+  }
   const terminalShell =
     process.platform === "win32"
       ? "powershell"
@@ -386,7 +351,7 @@ async function renderConfigTemplate(home) {
         : "bash";
 
   text = text
-    .replaceAll("__SERENA_COMMAND__", serena.split(path.sep).join("/"))
+    .replaceAll("__SERENA_COMMAND__", serena ? serena.split(path.sep).join("/") : "")
     .replaceAll("__NPX_COMMAND__", npx.split(path.sep).join("/"))
     .replaceAll("__CODEX_TERMINAL_SHELL__", terminalShell);
 
@@ -412,7 +377,7 @@ async function main() {
   await mkdir(codexHome, { recursive: true });
   const activeConfig = path.join(codexHome, "config.toml");
   const shouldDeployConfig = !(await exists(activeConfig)) || options.forceConfig;
-  const renderedConfig = shouldDeployConfig ? await renderConfigTemplate(options.home) : null;
+  const renderedConfig = shouldDeployConfig ? await renderConfigTemplate() : null;
 
   console.log("Codex 部署來源：" + sourceRoot);
   console.log("Codex 部署目標：" + codexHome);

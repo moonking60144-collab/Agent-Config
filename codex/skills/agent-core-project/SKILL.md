@@ -7,11 +7,15 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 在 Lite 的執行與驗證契約上，增加跨 context 的計畫、狀態與交接；只保留續接需要的資訊，不另建固定階段或領域流程。
 
+是否保存進度與驗證強度分開決定。Project 不自動要求嚴格 runner；依實際修改風險選 native 或 strict，不能因任務較久、需要 compaction 或交接而升級驗證。
+
 ## 受理與續接
 
 只有需要子系統獨立驗收、compaction／交接、不可逆／高影響範圍操作，或多階段實作清單必須探索後才知道時，才使用 Project。計算可獨立測試的行為，而非檔案、層數或工具數。不需持久化執行時降級至 Lite。
 
 建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及專案規則或先前交接指定的精確 repo-local 路徑，尋找相符的未完成 ledger。目標與本輪 checkout 相符時從 next_instruction 續接；不重新探索仍有效的 done_verified 工作。跨 task／worktree 的 ledger 只提供線索，先核對本輪原始碼與 runtime，不照搬過期完成狀態。只有現有證據無法解決的歸屬衝突才詢問。
+
+同 repo 可以有多項工作，不以修改時間選擇目前任務。確認目前 session 與 ledger 後，可將 JSON `{cwd, session_id, ledger_path}` 傳入 `node ~/.codex/hooks/record-session-provenance.mjs` 的 stdin 建立明確綁定；`ledger_path` 必須屬於該 checkout。Session ID 從目前原生 session 資訊取得，不猜其他 session 的 ID。資訊不可得時保留未綁定狀態並依任務脈絡工作；恢復 hook 只提示候選，不替新 session 接手工作。
 
 
 ## 產物歸屬
@@ -20,7 +24,7 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 ## 盤點、計畫與 Ledger
 
-每項交付記錄足以續接的目標、檔案、依賴與驗收標準；ownership、consumer、恢復與阻塞決策只記本案適用者。領域決策放在 plan，證據方法依共用 [verification contract](../agent-core-lite/references/verification.md)。Ledger 引用驗證 plan／receipt，不複製 consumer 清單或檢查定義。特定 repo 的治理留在該 repo，不由 Project 另列要求。
+每項交付記錄足以續接的目標、檔案、依賴與驗收標準；ownership、consumer、恢復與阻塞決策只記本案適用者。領域決策放在 plan，證據方法依共用 [verification contract](../agent-core-lite/references/verification.md)。Ledger 引用適用的完成證據；strict 引用 runner plan／receipt，不複製 consumer 清單或檢查定義。特定 repo 的治理留在該 repo，不由 Project 另列要求。
 
 Ledger 以以下欄位開始：
 
@@ -50,32 +54,32 @@ next_instruction: Read <ledger path> first, then continue <task>.
 
 ## 共用完成契約
 
-使用單一 project-ledger-completion.schema.json 與 validate-project-ledger.mjs；v2／v3 共用證據驗證，遠端要求依版本區分。目前 Project 完成採用 schemaVersion 3、evidencePolicyVersion 1，並以 verification 引用通過的共用 receipt：
+使用單一 project-ledger-completion.schema.json 與 validate-project-ledger.mjs。新契約採 schemaVersion 4、evidencePolicyVersion 1，透過 `verificationPolicy:{mode,reason,strictTriggers}` 記錄與風險相稱的層級。Native 記錄實際檢查與相關受測輸入；strict 使用共用 runner，並以 verification 引用 receipt：
 
 ```json
 {"artifactBase":"contract","artifact":"evidence/receipt.json","artifactSha256":"<actual SHA-256>"}
 ```
 
-Receipt 記錄檢查、原始碼與覆蓋範圍。既有 requiredEvidence 項目標示 receipt 未取代的必要業務、runtime 或 review 產物。不在 sidecar 重複 receipt 的完整 plan。Findings 與 preflights 保留穩定 id；例外須有 owner、reason 與 evidence。產物大小、路徑包含關係、完整性與狀態語意由共用 validator 強制檢查。
+兩種層級都保留 requiredEvidence 的產物與雜湊，Findings 與 preflights 使用穩定 id；例外須有 owner、reason 與 evidence。Native 的欄位與來源新鮮度要求見 [verification](../agent-core-lite/references/verification.md#project-的原生驗證)。Strict 不在 sidecar 重複 receipt 的完整 plan。
 
-舊契約仍可供續接與非嚴格 CLI 檢視。新完成的工作必須滿足目前的嚴格驗證。Stop hook 檢查綁定 session 及新完成／有變更的 ledgers，可要求一次續行；這是有限度的強制檢查，並非不可繞過的保證。
+舊 v1–v3 契約仍可供續接與非嚴格 CLI 檢視；Stop 結案維持原有嚴格要求，不因升級工作流自動降級。已明示或被 session 觀察到的 strict 要求不能藉改寫成 native 規避。Stop 檢查綁定 session 及新完成／有變更的 ledgers，可要求一次續行；它不代替風險判斷。
 
 遠端檢查與本機證據分開。已授權 push 後，記錄適用政策、精確完整 revision、必要檢查、狀態與證據 URL。Pending／failed／unknown 或過期 revision 會阻擋完成。只有附上實際政策／理由時才使用 not_applicable。Validator 檢查提供的證據，不自行查詢服務提供者。
 
 ## 驗證與結案
 
-依 [verification](../agent-core-lite/references/verification.md) 執行。每項行為主張都須有跨越所聲稱邊界的證據。原始碼／測試變更會使 receipt 失效；完成前須重新產生並執行受影響驗證。
+依 [verification](../agent-core-lite/references/verification.md) 執行。每項主張需有相應證據；native 核對列出的受測輸入，strict 核對完整 source snapshot。相關原始碼／測試變更後，重新執行受影響驗證。
 
 更新 sidecar 並執行：
 
 ```text
-node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-verification
+node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evidence-policy --require-completion-policy
 ```
 
 只有 errors／blockers 都為零，且原始碼、證據與適用遠端檢查均為目前狀態，才允許 complete。Runtime provenance 記錄觀察到的檔案，不代表原生 skill 已啟用或語意上遵循。SessionStart 後建立的 ledger 仍須明確驗證。
 
 ## 交接
 
-停止或 compaction 前，更新 ledger 的任務狀態、已驗證 receipts、blockers 與 next_instruction。以已授權 commits／stashes，或 tracked diff 加 untracked manifest 保留可重建的原始碼；單有 digest 不是可恢復快照。
+停止或 compaction 前，更新 ledger 的任務狀態、已驗證證據、blockers 與 next_instruction。以已授權 commits／stashes，或 tracked diff 加 untracked manifest 保留可重建的原始碼；單有 digest 不是可恢復快照。
 
 判斷與表述依 AGENTS.md。交付已完成項目、各項 blocker 與下一步，引用必要的 ledger 與證據；Git 狀態以實際 diff／status 為準。完成條件依共用契約判定，ledger 保存完整續接資訊，下一個 session 先讀取該 ledger 續接。

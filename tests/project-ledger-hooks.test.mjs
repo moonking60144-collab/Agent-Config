@@ -443,6 +443,7 @@ test("repo-local ledger still stores provenance under user-level projects", asyn
   runHook(provenancePath, repo, home, {
     cwd: repo,
     session_id: "session-local-ledger",
+    ledger_path: localLedger,
     hook_event_name: "SessionStart",
     source: "startup",
   });

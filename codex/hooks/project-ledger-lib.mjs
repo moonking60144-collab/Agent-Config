@@ -159,6 +159,7 @@ export async function parseLedger(filePath, scopeRoot) {
     planPath: readField(content, "plan_path"),
     nextInstruction: readField(content, "next_instruction"),
     completionContract,
+    verificationMode: readField(content, "verification_mode"),
     updatedAt: stat.mtimeMs,
   };
 }
@@ -184,6 +185,48 @@ export async function findMatchingLedgers(cwd, statuses = null) {
 export async function findNewestMatchingLedger(cwd, statuses = null) {
   const { ledgers } = await findMatchingLedgers(cwd, statuses);
   return ledgers[0] || null;
+}
+
+export function sessionProvenancePath(scopeRoot, sessionId) {
+  if (typeof sessionId !== "string" || !sessionId.trim()) return null;
+  const name = sessionId.replace(/[^A-Za-z0-9._-]+/g, "-");
+  return path.join(projectDirectoryFor(scopeRoot), "sessions", `${name}.json`);
+}
+
+export async function readSessionProvenance(scopeRoot, sessionId) {
+  const filePath = sessionProvenancePath(scopeRoot, sessionId);
+  if (!filePath) return null;
+  try {
+    const value = JSON.parse((await readBoundedRegularFile(filePath)).toString("utf8"));
+    if (value.sessionId && value.sessionId !== sessionId) throw new Error("session identity mismatch");
+    return value;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+// A repository and its newest file are not task identities. All lifecycle hooks use this binding.
+export function resolveSessionLedger(provenance, ledgers) {
+  const ledgerPath = provenance?.ledgerPath
+    || [...(Array.isArray(provenance?.events) ? provenance.events : [])]
+      .reverse().find((event) => event?.ledgerPath)?.ledgerPath || null;
+  const ledger = ledgerPath
+    ? ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(ledgerPath)) || null
+    : null;
+  return { ledgerPath, ledger };
+}
+
+export async function ledgerRequiresStrictVerification(ledger) {
+  if (ledger.verificationMode === "strict") return true;
+  if (!ledger.completionContract) return false;
+  try {
+    const contract = JSON.parse((await readBoundedRegularFile(ledger.completionContract)).toString("utf8"));
+    return [1, 2, 3].includes(contract.schemaVersion) || contract.verificationPolicy?.mode === "strict"
+      || (contract.verificationPolicy?.strictTriggers?.length ?? 0) > 0;
+  } catch {
+    return false; // Completion validates malformed/missing contracts; provenance does not certify them.
+  }
 }
 
 export function projectDirectoryFor(scopeRoot, ledgerPath = null) {

@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "ledgerPath", "findings", "requiredEvidence", "preflights"],
   "properties": {
-    "schemaVersion": { "enum": [1, 2, 3] },
+    "schemaVersion": { "enum": [1, 2, 3, 4] },
     "evidencePolicyVersion": { "const": 1 },
     "ledgerPath": { "type": "string", "minLength": 1 },
     "findings": {
@@ -36,8 +36,8 @@
           "id": { "type": "string", "minLength": 1 },
           "status": { "enum": ["missing", "present", "waived"] },
           "claim": { "type": "string", "minLength": 1 },
-          "claimScope": { "enum": ["local", "cross-boundary", "review"] },
-          "evidenceClass": { "enum": ["helper", "unit", "composed", "runtime", "production", "independent-review"] },
+          "claimScope": { "enum": ["local", "cross-boundary", "review", "static"] },
+          "evidenceClass": { "enum": ["helper", "unit", "composed", "runtime", "production", "independent-review", "static"] },
           "artifact": { "type": "string", "minLength": 1 },
           "artifactBase": { "enum": ["repo", "contract"] },
           "artifactSha256": { "type": "string", "minLength": 64 },
@@ -61,6 +61,49 @@
           "owner": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 },
           "evidence": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "verificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason", "strictTriggers"],
+      "properties": {
+        "mode": { "enum": ["native", "strict"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "strictTriggers": { "type": "array", "maxItems": 4, "items": { "enum": ["explicit-contract", "shared-state", "ownership", "async-mutation"] } }
+      }
+    },
+    "nativeVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceInputs", "checks"],
+      "properties": {
+        "sourceInputs": {
+          "type": "array", "maxItems": 256,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "state"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "state": { "enum": ["present", "absent"] },
+              "sha256": { "type": "string", "minLength": 64 }
+            }
+          }
+        },
+        "checks": {
+          "type": "array", "maxItems": 128,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["evidenceId", "command", "cwd", "exitCode", "checkedAt"],
+            "properties": {
+              "evidenceId": { "type": "string", "minLength": 1 },
+              "command": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1 } },
+              "cwd": { "type": "string", "minLength": 1 },
+              "exitCode": { "const": 0 },
+              "checkedAt": { "type": "string", "minLength": 1 }
+            }
+          }
         }
       }
     },

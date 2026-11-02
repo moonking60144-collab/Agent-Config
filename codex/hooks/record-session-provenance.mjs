@@ -5,7 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   findMatchingLedgers,
-  projectDirectoryFor,
+  ledgerRequiresStrictVerification,
+  readSessionProvenance,
+  resolveSessionLedger,
+  sessionProvenancePath,
   readBoundedRegularFile,
   readHookInput,
 } from "./project-ledger-lib.mjs";
@@ -95,18 +98,17 @@ async function main() {
   const input = await readHookInput();
   const cwd = path.resolve(input.cwd || process.cwd());
   const { scopeRoot, ledgers } = await findMatchingLedgers(cwd);
-  const ledger = ledgers.find((candidate) => ["active", "blocked", "pending", "in_progress"].includes(candidate.status)) || null;
   const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-  const projectDirectory = projectDirectoryFor(scopeRoot);
-  const sessionId = String(input.session_id || "unknown-session").replace(/[^A-Za-z0-9._-]+/g, "-");
-  const filePath = path.join(projectDirectory, "sessions", `${sessionId}.json`);
-  let previous = null;
-  try {
-    previous = JSON.parse(await fs.readFile(filePath, "utf8"));
-  } catch {
-    // First lifecycle event for this session.
+  const filePath = sessionProvenancePath(scopeRoot, input.session_id);
+  if (!filePath) return;
+  const previous = await readSessionProvenance(scopeRoot, input.session_id);
+  let { ledgerPath } = resolveSessionLedger(previous, ledgers);
+  if (Object.hasOwn(input, "ledger_path")) {
+    if (typeof input.ledger_path !== "string" || !input.ledger_path.trim()) throw new Error("ledger_path must not be blank");
+    const selected = ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(input.ledger_path));
+    if (!selected) throw new Error("ledger_path must identify a ledger for the current checkout");
+    ledgerPath = selected.filePath;
   }
-  const ledgerPath = previous?.ledgerPath || ledger?.filePath || null;
   const [globalInstruction, config, hooks, skills, projectAgents] = await Promise.all([
     preferredInstruction(codexHome),
     digestFile(path.join(codexHome, "config.toml")),
@@ -137,6 +139,7 @@ async function main() {
       filePath: candidate.filePath,
       status: candidate.status,
       updatedAt: candidate.updatedAt,
+      strictVerificationRequired: await ledgerRequiresStrictVerification(candidate),
       contentSha256: createHash("sha256").update(candidate.content).digest("hex"),
       completionContractSha256: candidate.completionContract
         ? await digestFile(candidate.completionContract)
@@ -144,12 +147,19 @@ async function main() {
     })),
   );
 
+  const strictLedgerPaths = [...new Set([
+    ...(previous?.strictLedgerPaths || []),
+    ...baselineLedgers.filter((item) => item.strictVerificationRequired).map((item) => item.filePath),
+    ...(await Promise.all(ledgers.map(async (candidate) => await ledgerRequiresStrictVerification(candidate) ? candidate.filePath : null))).filter(Boolean),
+  ])];
+
   await atomicWrite(filePath, {
     schemaVersion: 1,
     sessionId: input.session_id || null,
     ledgerPath,
     startedAt: previous?.startedAt || event.recordedAt,
     baselineLedgers,
+    strictLedgerPaths,
     codexVersion: previous?.codexVersion || codexVersion(),
     nativeSkillActivationObserved: false,
     selectedProcessSkill: null,
@@ -159,6 +169,7 @@ async function main() {
   });
 }
 
-main().catch(() => {
-  process.exitCode = 0;
+main().catch((error) => {
+  process.stderr.write(`Session provenance was not updated: ${error.message}\n`);
+  process.exitCode = 1;
 });

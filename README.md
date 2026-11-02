@@ -16,6 +16,8 @@ flowchart TB
 ```
 
 - **Lite**：範圍明確的修改；**Project**：需要持久進度與交接；**Review**：唯讀、問題優先。
+- 保存進度與驗證強度分開：一般 Project 可用原生檢查結案；共享狀態、ownership、非同步恢復或明示契約才要求嚴格 runner。新 completion v4 保存層級決策，舊契約維持既有要求。
+- 續接以明確的 session／ledger 綁定為準；同 repo 的最新紀錄只作候選，不自動接管目前任務。
 - 架構、非同步收斂、互動效能等細節依風險載入，不讓每個任務承擔整份檢查表。
 - Codex 與 Claude 的 8 個 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。task-handoff 本身寫了兩邊的做法，部署時不改寫。
 
@@ -56,6 +58,7 @@ flowchart LR
 | 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回答送出後用次一級模型檢查結論是否超出工具證據；超出證據與矛盾在下一輪交給 Claude 查證，會影響判斷的錯誤才明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知 |
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
+Codex 設定部署只查找已安裝的 Serena，不安裝／升級工具、不遷移其他專案；首次部署未找到 Serena 時略過該 MCP 區段。工具維護與 registry 遷移是獨立的授權操作。Claude 的數值用詞 heuristic 不再註冊為全域 Stop gate；檔案保留供有需要的專案選用，且只提供非阻擋提醒。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
 
 Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行。以資料夾加入的 marketplace 會直接從 repo 資料夾讀取 plugin（`claude plugin list` 的 Read from 是 repo 路徑），修改後 `/reload-plugins` 或重開 session 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。

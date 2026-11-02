@@ -1,5 +1,6 @@
 import { readInput, assistantMessage, visibleProse } from "./lib/prose.mjs";
 
+// Optional project-level heuristic, not a semantic evidence validator or a completion gate.
 // 行動指示：叫使用者去改資料／設定的祈使語氣
 const ACTION_WORDS = /(改成|填入|設為|要改|應該填|建議改|正確(?:值|數量|答案)?是|應該改成)/g;
 
@@ -39,11 +40,6 @@ for (const paragraph of prose.split(/\n\s*\n/)) {
 
 if (offense) {
   process.stdout.write(JSON.stringify({
-    decision: "block",
-    reason: `這則回覆要對方照具體數值動手（「${offense}」），而那個段落沒有標明依據。`
-      + `請在同一段補上其中一種再輸出：\n`
-      + `1. 證據來源 — 這個數字是 API 實測、欄位定義、公式推導還是歷史記錄；\n`
-      + `2. 不確定標記 — 若建立在未經驗證的業務假設上，明說是推論、列出前提，並指出要向誰確認什麼。\n`
-      + `標記要跟數字同段，放在文末不算。`,
+    systemMessage: `數值用詞提醒：「${offense}」。這只是字詞比對，無法判斷計算、使用者要求或測試是否已有充分依據；不阻擋回答，也不要求為通過檢查補上標籤。`,
   }));
 }

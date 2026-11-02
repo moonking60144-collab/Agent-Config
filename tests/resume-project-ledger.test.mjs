@@ -36,16 +36,20 @@ async function writeLedger(home, name, fields) {
   return ledgerPath;
 }
 
-function runHook(repo, home) {
-  const result = spawnSync(process.execPath, [hookPath], {
+function runHook(repo, home, extra = {}, script = hookPath) {
+  const result = spawnSync(process.execPath, [script], {
     cwd: repo,
-    input: JSON.stringify({ cwd: repo }),
+    input: JSON.stringify({ cwd: repo, session_id: "session-a", ...extra }),
     encoding: "utf8",
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    env: { ...process.env, HOME: home, USERPROFILE: home, CODEX_HOME: path.join(home, ".codex") },
   });
 
   assert.equal(result.status, 0, result.stderr);
   return result.stdout;
+}
+
+function bindLedger(repo, home, ledgerPath) {
+  runHook(repo, home, { ledger_path: ledgerPath }, path.join(repoRoot, "codex/hooks/record-session-provenance.mjs"));
 }
 
 function readAdditionalContext(stdout) {
@@ -66,6 +70,7 @@ test("restores an active ledger for the current repository", async (t) => {
     nextInstruction: "Continue from task-2.",
   });
 
+  bindLedger(repo, home, ledgerPath);
   const context = readAdditionalContext(runHook(repo, home));
   assert.match(context, new RegExp(ledgerPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(context, /Continue from task-2\./);
@@ -73,24 +78,26 @@ test("restores an active ledger for the current repository", async (t) => {
 
 test("restores a blocked ledger for the current repository", async (t) => {
   const { home, repo } = await createFixture(t);
-  await writeLedger(home, "blocked", {
+  const ledgerPath = await writeLedger(home, "blocked", {
     status: "blocked",
     repoPath: repo,
     nextInstruction: "Resolve the blocker.",
   });
 
+  bindLedger(repo, home, ledgerPath);
   assert.match(readAdditionalContext(runHook(repo, home)), /Resolve the blocker\./);
 });
 
 for (const status of ["pending", "in_progress"]) {
   test(`restores a legacy ${status} ledger for the current repository`, async (t) => {
     const { home, repo } = await createFixture(t);
-    await writeLedger(home, status, {
+    const ledgerPath = await writeLedger(home, status, {
       status,
       repoPath: repo,
       nextInstruction: `Continue ${status}.`,
     });
 
+    bindLedger(repo, home, ledgerPath);
     assert.match(readAdditionalContext(runHook(repo, home)), new RegExp(`Continue ${status}\\.`));
   });
 }
@@ -117,7 +124,7 @@ test("ignores malformed ledger headers", async (t) => {
   assert.equal(runHook(repo, home), "");
 });
 
-test("selects the newest matching unfinished ledger", async (t) => {
+test("unbound sessions receive candidates rather than the newest task's instructions", async (t) => {
   const { home, repo } = await createFixture(t);
   const older = await writeLedger(home, "older", {
     status: "active",
@@ -134,6 +141,28 @@ test("selects the newest matching unfinished ledger", async (t) => {
   await fs.utimes(newer, new Date(2_000), new Date(2_000));
 
   const context = readAdditionalContext(runHook(repo, home));
-  assert.match(context, /Use the newer ledger\./);
+  assert.match(context, /no project ledger binding/);
+  assert.ok(context.includes(older) && context.includes(newer));
+  assert.doesNotMatch(context, /Use the newer ledger\./);
   assert.doesNotMatch(context, /Use the older ledger\./);
+});
+
+test("compact preserves session A while unrelated task B becomes newest", async (t) => {
+  const { home, repo } = await createFixture(t);
+  const older = await writeLedger(home, "A", { status: "active", repoPath: repo, nextInstruction: "Continue A only." });
+  bindLedger(repo, home, older);
+  const newer = await writeLedger(home, "B", { status: "active", repoPath: repo, nextInstruction: "Continue B only." });
+  await fs.utimes(older, new Date(1000), new Date(1000));
+  await fs.utimes(newer, new Date(2000), new Date(2000));
+  runHook(repo, home, { source: "compact" }, path.join(repoRoot, "codex/hooks/record-session-provenance.mjs"));
+  const context = readAdditionalContext(runHook(repo, home, { source: "compact" }));
+  assert.match(context, /Continue A only\./, "SESSION_BINDING_ASSERT");
+  assert.doesNotMatch(context, /Continue B only\./);
+  const provenance = JSON.parse(await fs.readFile(path.join(home, ".codex/projects/repo/sessions/session-a.json"), "utf8"));
+  assert.equal(provenance.ledgerPath, older);
+  const fresh = readAdditionalContext(runHook(repo, home, { session_id: "new-session", source: "startup" }));
+  assert.doesNotMatch(fresh, /Continue [AB] only\./);
+  await fs.unlink(older);
+  assert.match(readAdditionalContext(runHook(repo, home)), /cannot be resolved/);
+  assert.doesNotMatch(readAdditionalContext(runHook(repo, home)), /Continue B only\./);
 });

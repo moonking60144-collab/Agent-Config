@@ -29,15 +29,6 @@
             "type": "command",
             "command": "node",
             "args": [
-              "__CLAUDE_EVIDENCE_HOOK_PATH__"
-            ],
-            "timeout": 20,
-            "statusMessage": "檢查結論依據"
-          },
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
               "__CLAUDE_COMPLETION_HOOK_PATH__"
             ],
             "timeout": 20,

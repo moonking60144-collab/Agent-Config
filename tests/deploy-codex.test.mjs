@@ -53,3 +53,68 @@ test("A later hook failure restores earlier replacements in the same batch", asy
   assert.equal(await fs.readFile(path.join(active, "hooks", "guard-project-completion.mjs"), "utf8"), "old hook\n");
   assert.equal(await fs.readFile(path.join(active, "config.toml"), "utf8"), "model_context_window = 1234\n");
 });
+
+async function isolatedToolDiscovery(root, { installed = true, failLater = false } = {}) {
+  const bin = path.join(root, "bin"), uvBin = path.join(root, "uv-bin");
+  const calls = path.join(root, "tool-calls.jsonl"), preload = path.join(root, "tool-discovery.cjs");
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  await fs.mkdir(bin); await fs.mkdir(uvBin);
+  for (const name of ["uv", "npx"]) await fs.writeFile(path.join(bin, name + suffix), "fixture only");
+  const serena = path.join(uvBin, "serena" + suffix);
+  if (installed) await fs.writeFile(serena, "existing version sentinel");
+  const registry = path.join(root, ".serena", "serena_config.yml");
+  const project = path.join(root, "other-project", ".serena", "project.yml");
+  for (const file of [registry, project]) {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, "unrelated project sentinel\n");
+  }
+  await fs.writeFile(preload, [
+    'const fs = require("node:fs"), path = require("node:path"), child = require("node:child_process");',
+    'child.spawnSync = function (command, args) {',
+    '  fs.appendFileSync(process.env.TEST_TOOL_CALLS, JSON.stringify({command, args}) + "\\n");',
+    '  if (path.basename(command).startsWith("uv") && JSON.stringify(args) === JSON.stringify(["tool", "dir", "--bin"])) return {status: 0, stdout: process.env.TEST_UV_BIN + "\\n", stderr: ""};',
+    '  throw new Error("Unexpected external command during settings deployment");',
+    '};',
+    'if (process.env.TEST_FAIL_LATER === "yes") {',
+    '  const original = fs.promises.readFile;',
+    '  fs.promises.readFile = async function (file, ...args) {',
+    '    if (String(file).split(path.sep).join("/").endsWith("/codex/hooks/project-ledger-completion.schema.json")) throw new Error("injected source read failure");',
+    '    return original.call(this, file, ...args);',
+    '  };',
+    '}',
+    'require("node:module").syncBuiltinESMExports();',
+  ].join("\n"));
+  const env = { ...process.env, PATH: bin, HOME: root, USERPROFILE: root, TEST_TOOL_CALLS: calls, TEST_UV_BIN: uvBin, TEST_FAIL_LATER: failLater ? "yes" : "no" };
+  return { preload, env, serena, async verify() {
+    const observed = (await fs.readFile(calls, "utf8")).trim().split("\n").map(JSON.parse);
+    assert.deepEqual(observed.map((call) => call.args), [["tool", "dir", "--bin"]], "DEPLOY_DISCOVERY_ONLY_ASSERT");
+    for (const file of [registry, project]) assert.equal(await fs.readFile(file, "utf8"), "unrelated project sentinel\n");
+    if (installed) assert.equal(await fs.readFile(serena, "utf8"), "existing version sentinel");
+  } };
+}
+
+for (const mode of ["first-install", "force-config", "later-failure", "missing-serena"]) {
+  test(`settings deployment uses read-only tool discovery: ${mode}`, async (t) => {
+    const { root, active } = await fixture(t);
+    const first = mode === "first-install" || mode === "missing-serena";
+    if (first) await fs.unlink(path.join(active, "config.toml"));
+    const tools = await isolatedToolDiscovery(root, { installed: mode !== "missing-serena", failLater: mode === "later-failure" });
+    const result = spawnSync(process.execPath, ["--require", tools.preload, deployer, "--home", root, "--backup-retention", "0", ...(first ? [] : ["--force-config"])], {
+      cwd: repoRoot, env: tools.env, encoding: "utf8", timeout: 30000,
+    });
+    await tools.verify();
+    const config = await fs.readFile(path.join(active, "config.toml"), "utf8");
+    if (mode === "later-failure") {
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /injected source read failure/);
+      assert.equal(config, "model_context_window = 1234\n");
+      assert.equal(await fs.readFile(path.join(active, "AGENTS.md"), "utf8"), "old instructions\n");
+    } else {
+      assert.equal(result.status, 0, result.stderr);
+      assert.doesNotMatch(config, /__SERENA_COMMAND__|__NPX_COMMAND__/);
+      assert.match(config, /\[mcp_servers\.context7\]/);
+      if (mode === "missing-serena") assert.doesNotMatch(config, /\[mcp_servers\.serena\]/);
+      else assert.ok(config.includes(tools.serena.split(path.sep).join("/")));
+    }
+  });
+}

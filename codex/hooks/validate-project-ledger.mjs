@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { constants as fsConstants, promises as fs, readFileSync } from "node:fs";
+import { constants as fsConstants, createReadStream, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluateReceipt, validateEvidenceLinks, digest, MAX_RECEIPT_BYTES } from "../skills/agent-core-lite/scripts/verification-contract.mjs";
@@ -124,15 +124,15 @@ function deriveRemoteCheckStatus(checks) {
 
 function validateRemoteChecks(contract, errors, blockers, options) {
   const remote = contract.remoteChecks;
-  const requiredByPolicy = options.requireRemoteChecks === true || contract.schemaVersion === 3;
-  if (requiredByPolicy && contract.schemaVersion !== 3) {
+  const requiredByPolicy = options.requireRemoteChecks === true || contract.schemaVersion >= 3;
+  if (requiredByPolicy && contract.schemaVersion < 3) {
     errors.push("remote validation completion requires schemaVersion 3");
   }
   if (!remote) {
     if (requiredByPolicy) errors.push("remoteChecks is required for current completion policy");
     return;
   }
-  if (contract.schemaVersion !== 3) {
+  if (contract.schemaVersion < 3) {
     errors.push("remoteChecks requires schemaVersion 3");
     return;
   }
@@ -218,6 +218,12 @@ function validateEvidencePolicy(contract, errors, { requireEvidencePolicy = fals
     if (!hasText(item.claim)) errors.push(`${prefix}.claim is required by evidence policy v1`);
     if (!hasText(item.claimScope)) errors.push(`${prefix}.claimScope is required by evidence policy v1`);
     if (!hasText(item.evidenceClass)) errors.push(`${prefix}.evidenceClass is required by evidence policy v1`);
+    if (item.claimScope === "static" || item.evidenceClass === "static") {
+      if (contract.schemaVersion !== 4 || item.claimScope !== "static" || item.evidenceClass !== "static") {
+        errors.push(`${prefix} static evidence requires schemaVersion 4 and matching static scope/class`);
+      }
+      if (item.status === "waived") errors.push(`${prefix} required static evidence cannot be waived`);
+    }
     if (
       item.claimScope === "cross-boundary" &&
       !["composed", "runtime", "production"].includes(item.evidenceClass)
@@ -246,7 +252,9 @@ function validateEvidencePolicy(contract, errors, { requireEvidencePolicy = fals
     }
   }
 
-  if (!contract.requiredEvidence.some((item) => item.status === "present" && ["local", "cross-boundary"].includes(item.claimScope))) {
+  const native = contract.schemaVersion === 4 && contract.verificationPolicy?.mode === "native";
+  if (!contract.requiredEvidence.some((item) => item.status === "present" &&
+    (native ? ["local", "cross-boundary", "static"] : ["local", "cross-boundary"]).includes(item.claimScope))) {
     errors.push("evidence policy v1 requires at least one present behavioral claim");
   }
   if (
@@ -293,6 +301,7 @@ export function validateCompletionContract(contract, expectedLedgerPath, options
   validateUniqueIds(contract.requiredEvidence, "requiredEvidence", errors);
   validateUniqueIds(contract.preflights, "preflights", errors);
   validateEvidencePolicy(contract, errors, options);
+  validateVerificationPolicy(contract, errors, options);
   validateRemoteChecks(contract, errors, blockers, options);
 
   if (Array.isArray(contract.findings)) {
@@ -339,6 +348,91 @@ export function validateCompletionContract(contract, expectedLedgerPath, options
 function escapesDeclaredBase(basePath, candidatePath) {
   const relativePath = path.relative(basePath, candidatePath);
   return !relativePath || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath);
+}
+
+function validateVerificationPolicy(contract, errors, options) {
+  const policy = contract.verificationPolicy;
+  if (contract.schemaVersion !== 4) {
+    if (policy || contract.nativeVerification) errors.push("verificationPolicy/nativeVerification requires schemaVersion 4");
+    return;
+  }
+  if (!policy) { errors.push("schemaVersion 4 requires verificationPolicy"); return; }
+  if (!hasText(policy.reason)) errors.push("verificationPolicy.reason must explain the selected risk tier");
+  if (policy.mode === "strict") {
+    if (contract.nativeVerification) errors.push("strict completion must use the shared receipt, not nativeVerification");
+    return;
+  }
+  if (options.requireVerification || policy.strictTriggers.length > 0) errors.push("native verification conflicts with a required strict contract");
+  if (contract.verification) errors.push("native completion must not relabel a shared receipt");
+  if (!contract.nativeVerification) { errors.push("native completion requires nativeVerification"); return; }
+  const { sourceInputs, checks } = contract.nativeVerification;
+  if (!sourceInputs.length || !checks.length) errors.push("nativeVerification requires sourceInputs and executed checks");
+  const paths = new Set();
+  for (const item of sourceInputs) {
+    if (!hasText(item.path) || path.isAbsolute(item.path) || item.path.includes("\\") ||
+      item.path !== path.posix.normalize(item.path) || [".", ".."].includes(item.path) || item.path.startsWith("../") || item.path.includes(":")) {
+      errors.push("native sourceInputs require canonical repo-relative paths");
+    }
+    const key = process.platform === "win32" ? item.path.toLowerCase() : item.path;
+    if (paths.has(key)) errors.push(`duplicate native source input: ${item.path}`);
+    paths.add(key);
+    if (item.state === "present" && !SHA256_PATTERN.test(item.sha256 || "")) errors.push(`native source input requires SHA-256: ${item.path}`);
+    if (item.state === "absent" && item.sha256 !== undefined) errors.push(`absent native input must not have a digest: ${item.path}`);
+  }
+  const checked = new Set();
+  for (const check of checks) {
+    if (!hasText(check.evidenceId) || checked.has(check.evidenceId)) errors.push("native checks require unique evidenceId values");
+    checked.add(check.evidenceId);
+    const evidence = contract.requiredEvidence.find((item) => item.id === check.evidenceId);
+    if (!evidence || evidence.status !== "present" || evidence.claimScope === "review") errors.push("native check must link present non-review evidence");
+    if (!check.command.length || check.command.some((arg) => !hasText(arg))) errors.push("native check command must not be blank");
+    if (!hasText(check.cwd) || path.isAbsolute(check.cwd) || check.cwd.includes("\\") || check.cwd.includes(":") ||
+      check.cwd !== path.posix.normalize(check.cwd) || check.cwd === ".." || check.cwd.startsWith("../")) errors.push("native check cwd must be repo-relative");
+    if (!hasText(check.checkedAt) || Number.isNaN(Date.parse(check.checkedAt))) errors.push("native check checkedAt must be a timestamp");
+  }
+  for (const item of contract.requiredEvidence) {
+    if (item.status === "present" && item.claimScope !== "review" && !checked.has(item.id)) errors.push(`native evidence lacks an executed check: ${item.id}`);
+  }
+}
+
+async function verifyNativeInputs(contract, scopeRoot) {
+  const errors = [];
+  const base = await fs.realpath(scopeRoot);
+  for (const input of contract.nativeVerification.sourceInputs) {
+    const target = path.resolve(base, input.path);
+    try {
+      // Validate existing ancestors as well, so an absent leaf cannot escape through a symlink.
+      let ancestor = target;
+      while (true) {
+        try {
+          const real = await fs.realpath(ancestor);
+          if (real !== base && escapesDeclaredBase(base, real)) throw new Error("resolves outside source scope");
+          break;
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          ancestor = path.dirname(ancestor);
+        }
+      }
+      let stat;
+      try { stat = await fs.lstat(target); } catch (error) { if (error.code !== "ENOENT") throw error; }
+      if (input.state === "absent") {
+        if (stat) errors.push(`native source input is stale (expected absent): ${input.path}`);
+        continue;
+      }
+      if (!stat?.isFile() || stat.isSymbolicLink()) throw new Error("must be a present regular file");
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(target)) hash.update(chunk);
+      if (hash.digest("hex") !== input.sha256) errors.push(`native source input is stale: ${input.path}`);
+    } catch (error) { errors.push(`native source input ${input.path}: ${error.message}`); }
+  }
+  for (const check of contract.nativeVerification.checks) {
+    try {
+      const cwd = await fs.realpath(path.resolve(base, check.cwd));
+      if (cwd !== base && escapesDeclaredBase(base, cwd)) throw new Error("outside source scope");
+      if (!(await fs.stat(cwd)).isDirectory()) throw new Error("not a directory");
+    } catch (error) { errors.push(`native check cwd ${check.cwd}: ${error.message}`); }
+  }
+  return errors;
 }
 
 const MAX_EVIDENCE_MANIFEST_ITEMS = 128;
@@ -464,8 +558,12 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
     }
   }
   const gitContext = inspectGitContext(resolvedScopeRoot);
+  const requireVerification = options.requireVerification === true || ledger.verificationMode === "strict"
+    || contract.verificationPolicy?.mode === "strict"
+    || (options.requireCompletionPolicy === true && contract.schemaVersion < 4);
   const result = validateCompletionContract(contract, ledger.filePath, {
     ...options,
+    requireVerification,
     requireRemoteChecks: options.requireEvidencePolicy === true && gitContext.hasRemote,
     currentRevision: gitContext.currentRevision,
   });
@@ -473,7 +571,10 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
   if (result.errors.length === 0) {
     result.errors.push(...await verifyEvidenceArtifacts(contract, ledger.completionContract, resolvedScopeRoot));
   }
-  if (result.errors.length === 0 && result.blockers.length === 0 && (options.requireVerification || contract.verification)) {
+  if (result.errors.length === 0 && result.blockers.length === 0 && contract.verificationPolicy?.mode === "native") {
+    result.errors.push(...await verifyNativeInputs(contract, resolvedScopeRoot));
+  }
+  if (result.errors.length === 0 && result.blockers.length === 0 && (requireVerification || contract.verification)) {
     if (!contract.verification) result.errors.push("current completion requires a shared verification receipt");
     else {
       try {
@@ -499,7 +600,7 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
 
 async function main() {
   const ledgerIndex = process.argv.indexOf("--ledger");
-  if (ledgerIndex === -1 || !process.argv[ledgerIndex + 1]) throw new Error("usage: validate-project-ledger.mjs --ledger <path> [--require-evidence-policy]");
+  if (ledgerIndex === -1 || !process.argv[ledgerIndex + 1]) throw new Error("usage: validate-project-ledger.mjs --ledger <path> [--require-evidence-policy] [--require-completion-policy] [--require-verification]");
   const ledgerPath = path.resolve(expandHome(process.argv[ledgerIndex + 1]));
   const repoIndex = process.argv.indexOf("--repo");
   const scopeRoot = repoIndex === -1 || !process.argv[repoIndex + 1]
@@ -508,6 +609,7 @@ async function main() {
   const result = await evaluateLedgerCompletion(ledgerPath, scopeRoot, {
     requireEvidencePolicy: process.argv.includes("--require-evidence-policy"),
     requireVerification: process.argv.includes("--require-verification"),
+    requireCompletionPolicy: process.argv.includes("--require-completion-policy"),
   });
   const payload = { ledgerPath, errors: result.errors, blockers: result.blockers, valid: result.errors.length === 0 && result.blockers.length === 0 };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

@@ -122,7 +122,7 @@ await Promise.all(targets.map((target) => pruneBackups(backupKey(target))));
 process.stdout.write([
   `Claude settings deployed to ${settingsTarget}`,
   `Claude instructions deployed to ${instructionsTarget}`,
-  `Claude Stop hooks deployed to ${hookTarget} and ${evidenceHookTarget}`,
+  `Claude language Stop hook deployed to ${hookTarget}; optional evidence heuristic is not globally registered`,
   `Claude hook helper deployed to ${path.join(targetDir, "hooks", "lib", "prose.mjs")}`,
   `Shared workflow deployed: ${workflow.skillNames.length} skills, 2 read-only agents, and Project lifecycle hooks`,
   `Claude workflow state: ${path.join(targetDir, "workflow", "projects")}`,

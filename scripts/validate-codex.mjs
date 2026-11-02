@@ -751,6 +751,7 @@ async function main() {
     process.execPath,
     ["--test", "--test-concurrency=1",
     path.join(repoRoot, "tests/routing-evals.test.mjs"),
+    path.join(repoRoot, "tests/native-project-completion.test.mjs"),
     path.join(repoRoot, "tests/agent-definitions.test.mjs"), path.join(repoRoot, "tests", "resume-project-ledger.test.mjs"), path.join(repoRoot, "tests", "project-ledger-hooks.test.mjs"), path.join(repoRoot, "tests", "verification-pipeline.test.mjs"), path.join(repoRoot, "tests", "deploy-codex.test.mjs")],
     { cwd: repoRoot, encoding: "utf8", shell: false }
   );

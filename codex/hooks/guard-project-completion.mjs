@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   findMatchingLedgers,
-  projectDirectoryFor,
+  readSessionProvenance,
+  resolveSessionLedger,
   readBoundedRegularFile,
   readHookInput,
 } from "./project-ledger-lib.mjs";
@@ -39,25 +39,9 @@ async function main() {
     return;
   }
 
-  const provenancePath = path.join(projectDirectoryFor(scopeRoot), "sessions", `${sessionId}.json`);
-  let provenance;
-  try {
-    provenance = JSON.parse(await fs.readFile(provenancePath, "utf8"));
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      continueTurn();
-      return;
-    }
-    throw new Error(`cannot read session provenance ${provenancePath}: ${error.message}`);
-  }
-
-  const boundLedgerPath = provenance.ledgerPath
-    || [...(Array.isArray(provenance.events) ? provenance.events : [])]
-      .reverse()
-      .find((event) => event?.ledgerPath)?.ledgerPath;
-  const boundLedger = boundLedgerPath
-    ? ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(boundLedgerPath))
-    : null;
+  const provenance = await readSessionProvenance(scopeRoot, input.session_id);
+  if (!provenance) { continueTurn(); return; }
+  const { ledgerPath: boundLedgerPath, ledger: boundLedger } = resolveSessionLedger(provenance, ledgers);
   const missingBoundLedgerMessage = boundLedgerPath && !boundLedger
     ? `Project completion guard could not resolve the session-bound ledger: ${boundLedgerPath}`
     : null;
@@ -92,7 +76,11 @@ async function main() {
   const invalidLedgers = [];
   for (const ledger of ledgersToEvaluate) {
     if (ledger.status !== "complete") continue;
-    const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, { requireEvidencePolicy: true, requireVerification: true });
+    const knownStrict = baseline.get(path.resolve(ledger.filePath))?.strictVerificationRequired
+      || (provenance.strictLedgerPaths || []).some((file) => path.resolve(file) === path.resolve(ledger.filePath));
+    const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, {
+      requireEvidencePolicy: true, requireCompletionPolicy: true, requireVerification: Boolean(knownStrict),
+    });
     if (result.errors.length === 0 && result.blockers.length === 0) continue;
 
     const details = [...result.errors, ...result.blockers].slice(0, 6).join("; ");
