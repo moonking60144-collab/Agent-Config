@@ -51,8 +51,11 @@ async function fixture(t, runtime = "codex") {
     await fs.writeFile(ledger, `project_status: ${status}\nrepo_path: ${repo}\ncompletion_contract: ${sidecar}\n${extra}`);
     await fs.writeFile(sidecar, JSON.stringify(contract));
   }
+  function rawHook(name, extra = {}) {
+    return spawnSync(process.execPath, [path.join(hooks, name)], { cwd: repo, env, encoding: "utf8", timeout: 10000, input: JSON.stringify({ cwd: repo, session_id: "native-session", ...extra }) });
+  }
   function hook(name, extra = {}) {
-    const result = spawnSync(process.execPath, [path.join(hooks, name)], { cwd: repo, env, encoding: "utf8", timeout: 10000, input: JSON.stringify({ cwd: repo, session_id: "native-session", ...extra }) });
+    const result = rawHook(name, extra);
     assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim() ? JSON.parse(result.stdout) : null;
   }
@@ -61,10 +64,53 @@ async function fixture(t, runtime = "codex") {
     return { status: result.status, ...JSON.parse(result.stdout) };
   }
   await save();
-  return { root, repo, contract, save, hook, cli, ledger, ledgerDir, sidecar };
+  return { root, repo, contract, save, hook, rawHook, cli, ledger, ledgerDir, sidecar };
 }
 
 for (const runtime of ["codex", "claude"]) {
+  test(`${runtime}: a symlink at the expected sidecar cannot authorize its external target`, { skip: process.platform === "win32" }, async (t) => {
+    const f = await fixture(t, runtime);
+    f.hook("record-session-provenance.mjs", { ledger_path: f.ledger });
+    await f.save("complete");
+    const external = path.join(f.root, "external");
+    await fs.mkdir(external);
+    const target = path.join(external, "shared.json");
+    await fs.rename(f.sidecar, target);
+    await fs.copyFile(path.join(f.ledgerDir, "check.json"), path.join(external, "check.json"));
+    await fs.symlink(target, f.sidecar);
+    await fs.writeFile(f.ledger, `project_status: complete\nrepo_path: ${f.repo}\ncompletion_contract: ${target}\n`);
+    const result = f.cli();
+    assert.equal(result.valid, false, "An external target must not become the owning sibling sidecar");
+    assert.match(result.errors.join("; "), /sibling sidecar/);
+    assert.equal(f.hook("guard-project-completion.mjs").decision, "block");
+  });
+
+  test(`${runtime}: a symlink alias binds the same ledger and survives compact`, async (t) => {
+    const f = await fixture(t, runtime);
+    const alias = path.join(f.root, "ledger-alias");
+    await fs.symlink(await fs.realpath(f.ledgerDir), alias, process.platform === "win32" ? "junction" : "dir");
+    await f.save("active", "next_instruction: Resume the aliased task.\n");
+    f.hook("record-session-provenance.mjs", { ledger_path: path.join(alias, "task.md") });
+    f.hook("record-session-provenance.mjs", { source: "compact" });
+    const resumed = f.hook("resume-project-ledger.mjs", { source: "compact" }).hookSpecificOutput.additionalContext;
+    assert.match(resumed, /Resume the aliased task\./);
+    await f.save("complete");
+    assert.equal(f.cli().valid, true);
+    const completion = f.hook("guard-project-completion.mjs");
+    assert.equal(completion.decision, undefined, JSON.stringify(completion));
+  });
+
+  test(`${runtime}: canonicalization still rejects a ledger for another checkout`, async (t) => {
+    const f = await fixture(t, runtime);
+    const other = path.join(f.ledgerDir, "other.md");
+    await fs.writeFile(other, `project_status: active\nrepo_path: ${path.join(f.root, "other-repo")}\n`);
+    const alias = path.join(f.root, "ledger-alias");
+    await fs.symlink(await fs.realpath(f.ledgerDir), alias, process.platform === "win32" ? "junction" : "dir");
+    const result = f.rawHook("record-session-provenance.mjs", { ledger_path: path.join(alias, "other.md") });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ledger_path must identify a ledger for the current checkout/);
+  });
+
   test(`${runtime}: low-risk Project completes through CLI and Stop without a full-repo receipt`, async (t) => {
     const f = await fixture(t, runtime);
     const unrelated = await fs.open(path.join(f.repo, "unrelated-large-asset.bin"), "w");
@@ -107,6 +153,7 @@ for (const change of ["edit", "delete", "create-absent", "artifact"]) {
 }
 
 const invalidCases = [
+  ["wrong owning ledger", (c) => { c.ledgerPath += ".other"; }],
   ["empty sources", (c) => { c.nativeVerification.sourceInputs = []; }],
   ["empty checks", (c) => { c.nativeVerification.checks = []; }],
   ["failed check", (c) => { c.nativeVerification.checks[0].exitCode = 1; }],

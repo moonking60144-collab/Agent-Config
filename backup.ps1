@@ -47,7 +47,14 @@ function Normalize-ClaudeSettingsTemplate {
   param([Parameter(Mandatory=$true)][string]$Text)
 
   $homeDir = Get-HomeDir
-  $normalized = $Text.Replace(($homeDir -replace '\\','/'), '__USERPROFILE__').Replace($homeDir, '__USERPROFILE__')
+  $node = (Get-Command node -ErrorAction Stop).Source
+  $previousEncoding = $OutputEncoding
+  try {
+    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $cleaned = $Text | & $node (Join-Path $PSScriptRoot 'scripts/retire-claude-hooks.mjs') --target-dir (Join-Parts $homeDir '.claude')
+    if($LASTEXITCODE -ne 0){ throw 'Cannot retire old Claude hooks; no template was written.' }
+  } finally { $OutputEncoding = $previousEncoding }
+  $normalized = ($cleaned -join "`n").Replace(($homeDir -replace '\\','/'), '__USERPROFILE__').Replace($homeDir, '__USERPROFILE__')
   try {
     $obj = $normalized | ConvertFrom-Json
     $obj.PSObject.Properties.Remove('model')
@@ -58,9 +65,6 @@ function Normalize-ClaudeSettingsTemplate {
         if((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-traditional\.mjs')){
           $hook.args = @('__CLAUDE_STOP_HOOK_PATH__')
           $hook.statusMessage = '檢查繁體中文'
-        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-evidence\.mjs')){
-          $hook.args = @('__CLAUDE_EVIDENCE_HOOK_PATH__')
-          $hook.statusMessage = '檢查結論依據'
         } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'record-session-provenance\.mjs')){
           $hook.args = @('__CLAUDE_PROVENANCE_HOOK_PATH__')
         } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'resume-project-ledger\.mjs')){
@@ -74,7 +78,7 @@ function Normalize-ClaudeSettingsTemplate {
     }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
-    return $normalized.Replace('__USERPROFILE__/.claude/hooks/check-traditional.mjs', '__CLAUDE_STOP_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/check-evidence.mjs', '__CLAUDE_EVIDENCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/record-session-provenance.mjs', '__CLAUDE_PROVENANCE_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-project-ledger.mjs', '__CLAUDE_RESUME_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/guard-project-completion.mjs', '__CLAUDE_COMPLETION_HOOK_PATH__').Replace('__USERPROFILE__/.claude/hooks/resume-handoff.mjs', '__CLAUDE_HANDOFF_HOOK_PATH__')
+    throw "Cannot normalize Claude settings; no template was written: $_"
   }
 }
 
@@ -137,7 +141,7 @@ if(Test-Path $cs){
 } else { Skip "$cs 不存在" }
 
 # Claude managed hooks and their shared helper
-foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'check-evidence.mjs', 'resume-handoff.mjs')){
+foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'resume-handoff.mjs')){
   $hk = Join-Parts $U '.claude' 'hooks' $relative
   $target = Join-Parts $src 'claude' 'hooks' $relative
   if(Test-Path $hk){

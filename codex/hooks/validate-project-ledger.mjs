@@ -522,10 +522,12 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
     `${path.basename(ledger.filePath, extension)}.completion.json`,
   );
   const actualContractPath = path.resolve(ledger.completionContract);
-  const expectedResolvedPath = path.resolve(expectedContractPath);
+  // Resolve directory aliases without letting a file symlink redefine the owning sidecar.
+  const comparableContractPath = path.join(await canonicalPath(path.dirname(actualContractPath)), path.basename(actualContractPath));
+  const expectedResolvedPath = path.join(await canonicalPath(path.dirname(expectedContractPath)), path.basename(expectedContractPath));
   const isExpectedSibling = process.platform === "win32"
-    ? actualContractPath.toLowerCase() === expectedResolvedPath.toLowerCase()
-    : actualContractPath === expectedResolvedPath;
+    ? comparableContractPath.toLowerCase() === expectedResolvedPath.toLowerCase()
+    : comparableContractPath === expectedResolvedPath;
   if (options.requireEvidencePolicy && !isExpectedSibling) {
     return {
       errors: [`current Stop completion_contract must be the sibling sidecar ${expectedContractPath}`],
@@ -561,7 +563,7 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
   const requireVerification = options.requireVerification === true || ledger.verificationMode === "strict"
     || contract.verificationPolicy?.mode === "strict"
     || (options.requireCompletionPolicy === true && contract.schemaVersion < 4);
-  const result = validateCompletionContract(contract, ledger.filePath, {
+  const result = validateCompletionContract({ ...contract, ledgerPath: await canonicalPath(contract.ledgerPath) }, await canonicalPath(ledger.filePath), {
     ...options,
     requireVerification,
     requireRemoteChecks: options.requireEvidencePolicy === true && gitContext.hasRemote,
@@ -616,7 +618,7 @@ async function main() {
   if (!payload.valid) process.exitCode = 1;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (process.argv[1] && await canonicalPath(fileURLToPath(import.meta.url)) === await canonicalPath(process.argv[1])) {
   main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

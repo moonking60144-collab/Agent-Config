@@ -373,6 +373,8 @@ async function main() {
   const skillsSource = path.join(sourceRoot, "skills");
   const skillsTarget = path.join(codexHome, "skills");
   const skillBackupRoot = path.join(codexHome, "backups", "skills");
+  // The shared handoff skill replaces the former local-only Codex draft.
+  await access(path.join(skillsSource, "task-handoff", "SKILL.md"));
 
   await mkdir(codexHome, { recursive: true });
   const activeConfig = path.join(codexHome, "config.toml");
@@ -391,9 +393,17 @@ async function main() {
     await moveLegacySkillBackups(skillsTarget, skillBackupRoot);
     await mkdir(skillsTarget, { recursive: true });
     for (const entry of await readdir(skillsSource, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && entry.name !== "codex-task-handoff") {
         journal.push(await deployDirectory(path.join(skillsSource, entry.name), path.join(skillsTarget, entry.name), skillBackupRoot, options.backupRetention));
       }
+    }
+
+    const retiredSkill = path.join(skillsTarget, "codex-task-handoff");
+    if (await exists(retiredSkill)) {
+      const backupPath = await backupIfExists(retiredSkill, skillBackupRoot);
+      journal.push({ target: retiredSkill, existed: true, backupPath, backupRoot: skillBackupRoot, retention: options.backupRetention });
+      await rm(retiredSkill, { recursive: true, force: true });
+      console.log("  [退役] " + retiredSkill);
     }
 
     await deployTopLevelFiles(path.join(sourceRoot, "agents"), path.join(codexHome, "agents"), journal, { extension: ".toml", retention: options.backupRetention });

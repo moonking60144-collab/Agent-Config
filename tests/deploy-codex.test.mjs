@@ -34,6 +34,9 @@ test("Codex deployment preserves existing config and installs every managed hook
 
 test("A later hook failure restores earlier replacements in the same batch", async (t) => {
   const { root, active } = await fixture(t);
+  const retired = path.join(active, "skills", "codex-task-handoff", "SKILL.md");
+  await fs.mkdir(path.dirname(retired), { recursive: true });
+  await fs.writeFile(retired, "legacy handoff sentinel\n");
   const preload = path.join(root, "fail-second-hook.cjs");
   await fs.writeFile(preload, [
     'const fs = require("node:fs"), path = require("node:path");',
@@ -52,6 +55,33 @@ test("A later hook failure restores earlier replacements in the same batch", asy
   assert.equal(await fs.readFile(path.join(active, "AGENTS.md"), "utf8"), "old instructions\n");
   assert.equal(await fs.readFile(path.join(active, "hooks", "guard-project-completion.mjs"), "utf8"), "old hook\n");
   assert.equal(await fs.readFile(path.join(active, "config.toml"), "utf8"), "model_context_window = 1234\n");
+  assert.equal(await fs.readFile(retired, "utf8"), "legacy handoff sentinel\n");
+});
+
+test("Codex deployment retires the duplicate handoff even when an old source draft remains", async (t) => {
+  const { root, active } = await fixture(t);
+  const isolated = path.join(root, "source");
+  await fs.mkdir(path.join(isolated, "scripts"), { recursive: true });
+  await fs.copyFile(deployer, path.join(isolated, "scripts", "deploy-codex.mjs"));
+  for (const name of ["task-handoff", "codex-task-handoff"]) {
+    await fs.mkdir(path.join(isolated, "codex", "skills", name), { recursive: true });
+    await fs.writeFile(path.join(isolated, "codex", "skills", name, "SKILL.md"), name);
+  }
+  await fs.writeFile(path.join(isolated, "codex", "AGENTS.md"), "fixture instructions");
+  for (const name of ["codex-task-handoff", "foreign-skill"]) {
+    await fs.mkdir(path.join(active, "skills", name), { recursive: true });
+    await fs.writeFile(path.join(active, "skills", name, "SKILL.md"), `${name} sentinel`);
+  }
+  for (let run = 0; run < 2; run++) {
+    const result = spawnSync(process.execPath, [path.join(isolated, "scripts", "deploy-codex.mjs"), "--home", root, "--backup-retention", "0"], { encoding: "utf8", timeout: 30000 });
+    assert.equal(result.status, 0, result.stderr);
+    await assert.rejects(fs.access(path.join(active, "skills", "codex-task-handoff")), { code: "ENOENT" });
+    assert.equal(await fs.readFile(path.join(active, "skills", "task-handoff", "SKILL.md"), "utf8"), "task-handoff");
+    assert.equal(await fs.readFile(path.join(active, "skills", "foreign-skill", "SKILL.md"), "utf8"), "foreign-skill sentinel");
+  }
+  const backups = (await fs.readdir(path.join(active, "backups", "skills"))).filter(name => name.startsWith("codex-task-handoff.bak."));
+  assert.equal(backups.length, 1);
+  assert.equal(await fs.readFile(path.join(active, "backups", "skills", backups[0], "SKILL.md"), "utf8"), "codex-task-handoff sentinel");
 });
 
 async function isolatedToolDiscovery(root, { installed = true, failLater = false } = {}) {

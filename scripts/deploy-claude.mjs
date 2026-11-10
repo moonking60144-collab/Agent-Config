@@ -19,8 +19,8 @@ const backupRetention = Number.parseInt(backupRetentionRaw, 10);
 const sourceDir = path.join(repoRoot, "claude");
 const targetDir = path.join(home, ".claude");
 const hookTarget = path.join(targetDir, "hooks", "check-traditional.mjs");
-const evidenceHookTarget = path.join(targetDir, "hooks", "check-evidence.mjs");
-const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "check-evidence.mjs", "resume-handoff.mjs"];
+const retiredHookTarget = path.join(targetDir, "hooks", "check-evidence.mjs");
+const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "resume-handoff.mjs"];
 const backupDir = path.join(targetDir, "backups", "deploy-claude");
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -90,7 +90,6 @@ const hookTokens = new Map([
   ["__CLAUDE_RESUME_HOOK_PATH__", path.join(targetDir, "hooks", "resume-project-ledger.mjs")],
   ["__CLAUDE_COMPLETION_HOOK_PATH__", path.join(targetDir, "hooks", "guard-project-completion.mjs")],
   ["__CLAUDE_STOP_HOOK_PATH__", hookTarget],
-  ["__CLAUDE_EVIDENCE_HOOK_PATH__", evidenceHookTarget],
   ["__CLAUDE_HANDOFF_HOOK_PATH__", path.join(targetDir, "hooks", "resume-handoff.mjs")],
 ]);
 for (const group of Object.values(template.hooks).flat()) {
@@ -111,18 +110,20 @@ const merged = {
 delete merged.skipWorkflowUsageWarning;
 
 const managedFiles = [...hooks, ...workflow.files];
-const targets = [settingsTarget, instructionsTarget, ...managedFiles.map((file) => file.target)];
+const targets = [settingsTarget, instructionsTarget, retiredHookTarget, ...managedFiles.map((file) => file.target)];
 await Promise.all(targets.map(backup));
 // Publish dependencies before enabling their hook registrations.
 for (const file of managedFiles) await atomicWrite(file.target, file.content);
 await atomicWrite(instructionsTarget, instructions);
 await atomicWrite(settingsTarget, `${JSON.stringify(merged, null, 2)}\n`);
+// Disable the old registration before removing its backed-up implementation.
+await fs.rm(retiredHookTarget, { force: true });
 await Promise.all(targets.map((target) => pruneBackups(backupKey(target))));
 
 process.stdout.write([
   `Claude settings deployed to ${settingsTarget}`,
   `Claude instructions deployed to ${instructionsTarget}`,
-  `Claude language Stop hook deployed to ${hookTarget}; optional evidence heuristic is not globally registered`,
+  `Claude language Stop hook deployed to ${hookTarget}; retired evidence heuristic removed`,
   `Claude hook helper deployed to ${path.join(targetDir, "hooks", "lib", "prose.mjs")}`,
   `Shared workflow deployed: ${workflow.skillNames.length} skills, 2 read-only agents, and Project lifecycle hooks`,
   `Claude workflow state: ${path.join(targetDir, "workflow", "projects")}`,

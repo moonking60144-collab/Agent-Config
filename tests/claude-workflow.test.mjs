@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const sourceFiles = [
   "scripts/deploy-claude.mjs", "scripts/claude-workflow.mjs", "claude/settings.json", "claude/CLAUDE.md",
-  "claude/hooks/check-traditional.mjs", "claude/hooks/check-evidence.mjs", "claude/hooks/lib/prose.mjs",
+  "claude/hooks/check-traditional.mjs", "claude/hooks/lib/prose.mjs",
   "claude/hooks/resume-handoff.mjs",
 ];
 
@@ -52,7 +52,7 @@ function hookDecision(script, message, extra = {}) {
   return result.stdout.trim() ? JSON.parse(result.stdout) : {};
 }
 
-const hookPaths = ["check-traditional.mjs", "check-evidence.mjs"];
+const hookPaths = ["check-traditional.mjs"];
 
 test("Claude deployment preserves local settings, dependencies and repeatability", async (t) => {
   const { active, deploy } = await fixture(t);
@@ -66,10 +66,9 @@ test("Claude deployment preserves local settings, dependencies and repeatability
   assert.deepEqual(settings.permissions.allow, ["Read"]);
   assert.equal(settings.env.WORKFLOW_TEST_SENTINEL, "preserve");
   assert.equal(settings.hooks.Stop[0].hooks.length, 2);
-  for (const [index, name] of hookPaths.entries()) {
+  for (const name of hookPaths) {
     const script = path.join(active, "hooks", name);
-    if (index === 0) assert.deepEqual(settings.hooks.Stop[0].hooks[index].args, [script]);
-    else assert.ok(!settings.hooks.Stop[0].hooks.some((hook) => hook.args?.includes(script)));
+    assert.deepEqual(settings.hooks.Stop[0].hooks[0].args, [script]);
     assert.equal(hookDecision(script, "這是正體中文。", {}).decision, undefined);
   }
   for (const relative of ["CLAUDE.md", ...hookPaths.map(name => `hooks/${name}`), "hooks/lib/prose.mjs"]) {
@@ -246,8 +245,7 @@ for (const hook of hookPaths) {
   for (const [name, lines, blocked] of fences) {
     test(`${hook}: ${name}`, () => {
       const result = hookDecision(path.join(repoRoot, "claude/hooks", hook), lines.join("\n"));
-      assert.equal(hook === "check-evidence.mjs" ? Boolean(result.systemMessage) : result.decision === "block", blocked);
-      if (hook === "check-evidence.mjs") assert.equal(result.decision, undefined);
+      assert.equal(result.decision === "block", blocked);
     });
   }
   test(`${hook}: stop continuation cannot loop`, () => {
@@ -261,30 +259,65 @@ test("Traditional hook accepts legitimate Traditional characters", () => {
   assert.equal(result.decision, undefined);
 });
 
-test("Optional evidence heuristic only advises; labels are not a completion gate", () => {
-  const script = path.join(repoRoot, "claude/hooks/check-evidence.mjs");
-  for (const message of ["建議改成 12 支。", "這是公式欄位，建議改成 12 支。", "建議改成 12 支。\n\n已確認事實：其他欄位正常。"]) {
-    const result = hookDecision(script, message);
-    assert.equal(result.decision, undefined);
-    assert.ok(result.systemMessage);
-  }
-  for (const message of ["依欄位定義，建議改成 12 支。", "這是推論，建議改成 12 支。", "目前共有 12 支。"]) {
-    assert.equal(hookDecision(script, message).decision, undefined);
-  }
-  for (const message of ["已依你的要求，將每頁顯示數量改成 20 筆，測試通過。", "100 × 0.8 = 80，所以正確答案是 80 元。", "公式推導：建議改成 12 支。"])
-    assert.equal(hookDecision(script, message).decision, undefined);
-});
-
 test("Claude sync retires the previous global evidence gate and preserves foreign hooks", async (t) => {
   const { active, deploy } = await fixture(t, { sourceEntrypoint: true });
   const settingsPath = path.join(active, "settings.json");
   const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
   const oldHook = { type: "command", command: "node", args: [path.join(active, "hooks/check-evidence.mjs")] };
   const foreign = { type: "command", command: "custom-review" };
-  settings.hooks = { Stop: [{ hooks: [oldHook, foreign] }] };
+  const oldCommand = { type: "command", command: `node "${oldHook.args[0]}"` };
+  settings.hooks = { Stop: [{ hooks: [oldHook, oldCommand, foreign] }] };
+  await fs.mkdir(path.dirname(oldHook.args[0]), { recursive: true });
+  await fs.writeFile(oldHook.args[0], "legacy evidence sentinel\n");
   await fs.writeFile(settingsPath, JSON.stringify(settings));
   assert.equal(deploy().status, 0);
   const hooks = JSON.parse(await fs.readFile(settingsPath, "utf8")).hooks.Stop.flatMap((group) => group.hooks);
   assert.ok(hooks.some((hook) => hook.command === foreign.command));
   assert.ok(!hooks.some((hook) => hook.args?.includes(oldHook.args[0])));
+  assert.ok(!hooks.some((hook) => hook.command === oldCommand.command));
+  await assert.rejects(fs.access(oldHook.args[0]), { code: "ENOENT" });
+  const backupDir = path.join(active, "backups", "deploy-claude");
+  const backups = (await fs.readdir(backupDir)).filter(name => name.startsWith(encodeURIComponent(path.join("hooks", "check-evidence.mjs")) + "."));
+  assert.equal(backups.length, 1);
+  assert.equal(await fs.readFile(path.join(backupDir, backups[0]), "utf8"), "legacy evidence sentinel\n");
+  assert.equal(deploy().status, 0);
+  await assert.rejects(fs.access(oldHook.args[0]), { code: "ENOENT" });
+});
+
+test("Windows backup JSON retires escaped paths before a cross-machine deployment", async (t) => {
+  const { active, repo, deploy } = await fixture(t);
+  const targetDir = "C:\\Users\\Alice\\.claude";
+  const script = `${targetDir}\\hooks\\check-evidence.mjs`;
+  const foreign = { type: "command", command: "node", args: ["C:\\foreign\\check-evidence.mjs"] };
+  const settings = {
+    env: { SENTINEL: "正體中文資料" },
+    hooks: { Stop: [{ matcher: "", hooks: [
+      { type: "command", command: "node", args: [script] },
+      { type: "command", command: `node "${script}"` },
+      { type: "command", command: "node", args: [script.toUpperCase()] },
+      foreign,
+    ] }] },
+  };
+  const result = run(path.join(repoRoot, "scripts", "retire-claude-hooks.mjs"), ["--target-dir", targetDir], JSON.stringify(settings));
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /[^\x00-\x7f]/);
+  const cleaned = JSON.parse(result.stdout);
+  assert.equal(cleaned.env.SENTINEL, settings.env.SENTINEL);
+  assert.deepEqual(cleaned.hooks.Stop, [{ matcher: "", hooks: [foreign] }]);
+  const templatePath = path.join(repo, "claude", "settings.json");
+  const template = JSON.parse(await fs.readFile(templatePath, "utf8"));
+  template.hooks.Stop.push(...cleaned.hooks.Stop, { hooks: [{ type: "command", command: "node", args: ["__CLAUDE_EVIDENCE_HOOK_PATH__"] }] });
+  await fs.writeFile(templatePath, JSON.stringify(template));
+  assert.equal(deploy().status, 0);
+  const deployed = JSON.parse(await fs.readFile(path.join(active, "settings.json"), "utf8"));
+  const registered = deployed.hooks.Stop.flatMap((group) => group.hooks);
+  assert.ok(registered.some((hook) => hook.args?.includes(foreign.args[0])));
+  assert.ok(!registered.some((hook) => hook.args?.includes("__CLAUDE_EVIDENCE_HOOK_PATH__")));
+  await assert.rejects(fs.access(path.join(active, "hooks", "check-evidence.mjs")), { code: "ENOENT" });
+});
+
+test("Backup hook retirement refuses malformed JSON without partial output", () => {
+  const result = run(path.join(repoRoot, "scripts", "retire-claude-hooks.mjs"), ["--target-dir", "/home/user/.claude"], "{");
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
 });

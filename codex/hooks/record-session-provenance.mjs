@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  canonicalPath,
   findMatchingLedgers,
   ledgerRequiresStrictVerification,
   readSessionProvenance,
@@ -105,7 +106,9 @@ async function main() {
   let { ledgerPath } = resolveSessionLedger(previous, ledgers);
   if (Object.hasOwn(input, "ledger_path")) {
     if (typeof input.ledger_path !== "string" || !input.ledger_path.trim()) throw new Error("ledger_path must not be blank");
-    const selected = ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(input.ledger_path));
+    const requestedPath = await canonicalPath(input.ledger_path);
+    const candidatePaths = await Promise.all(ledgers.map((candidate) => canonicalPath(candidate.filePath)));
+    const selected = ledgers.find((candidate, index) => candidatePaths[index] === requestedPath);
     if (!selected) throw new Error("ledger_path must identify a ledger for the current checkout");
     ledgerPath = selected.filePath;
   }

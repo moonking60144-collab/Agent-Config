@@ -1,6 +1,6 @@
 ---
 name: task-handoff
-description: "使用者要求把目前工作交接到新的 task、session 或 thread 時使用，常見說法是「開新 task，名稱和模型跟目前一樣，交接完成後封存這個 task」；預設在新 task 接手後封存目前這個。只要交接摘要、要 fork 保留完整歷史，或只是在同一個 task 繼續時不使用。"
+description: "使用者要求把目前工作交接到新的 task、session 或 thread 時使用，常見說法是「開新 task，名稱和模型跟目前一樣，交接完成後封存這個 task」；預設在新 task 接手後封存目前這個。只要交接摘要、要 fork 保留完整歷史、討論／修改本 skill，或只是在同一個 task 繼續時不使用。"
 ---
 
 # Task Handoff
@@ -30,6 +30,16 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 | Claude Code 桌面版（Code 分頁） | 有 `start_session` 時用 `get_session`、`start_session`、`list_events`、`detach_session`、`archive_session` 開新 session 接手；沒有或不能用時在原 session 寫交接檔再用 `clear_session` 清除對話。細節見「Claude Code 桌面版」一節。 |
 | Codex app | 用目前 session 提供的 thread 工具建立、讀回與封存；工具名稱以實際工具清單為準。 |
 | 沒有建立 task 工具的 surface（即使有封存工具） | 完成流程 1–3，把交接內容交給使用者自己開新 task；明說沒有建立、也沒有封存。 |
+
+## Codex app
+
+- 先查目前提供的 thread 工具與 schema；從當前 context 取得來源 thread ID，需要時用 `list_threads` 定位、`read_thread` 補資料。同名不代表同一個 task，不能只靠標題或最近更新時間選來源。
+- 使用相符 host 的 `create_thread`；repo 工作先確認 `projectId`、實際 checkout 與來源環境。工具無法保留來源 worktree／遠端／projectless 環境時，先說明差異並確認，不改用同名 repo。名稱遭工具正規化時，以 `set_thread_title` 修正新 task。
+- 交接內容明說這是續接資料，不是再次開 task 的指令；單純換 task 時請接收方讀取後等待，只有本輪要求繼續工作才交付執行任務。不轉交憑證，也不把歷史的一次性授權延伸成新操作授權。
+- 保存建立回傳的 ID 與 host。`clientThreadId`、`operationId` 和 `threadId` 不混用；依工具提供的查詢方式等到新 task 就緒。交接 prompt 已受理、名稱與要求的模型／環境已核對才算完成，不必等業務工作做完。
+- 建立逾時或結果不明時，先依本次 ID／建立紀錄查詢，不盲目重送。已建立成功就只處理尚未完成的交接或封存，不再建立第二份。
+- 封存用 `set_thread_archived` 指向來源 ID，新舊 ID 必須不同。回報依 App 契約提供新 task 入口與 `created-thread` directive；封存失敗保留新 task，明說來源尚未封存。
+- 不直接修改對話資料庫或 rollout，不以 CLI session 冒充 Desktop task；交接不附帶 commit、push、搬檔、清除 worktree 或定時工作。
 
 ## Claude Code（claude-code-remote）
 

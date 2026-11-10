@@ -107,9 +107,29 @@ export async function prepareClaudeWorkflow(repoRoot, targetDir) {
   return { files, skillNames };
 }
 
+export function removeRetiredClaudeHooks(hooks, targetDir) {
+  const windows = process.platform === "win32" || /^[A-Za-z]:[\\/]|^\\\\/.test(targetDir);
+  const normalize = (value) => {
+    const normalized = String(value ?? "").replaceAll("\\", "/");
+    return windows ? normalized.toLowerCase() : normalized;
+  };
+  const retired = new Set([
+    `${targetDir.replace(/[\\/]$/, "")}/hooks/check-evidence.mjs`,
+    "__USERPROFILE__/.claude/hooks/check-evidence.mjs", "__CLAUDE_EVIDENCE_HOOK_PATH__",
+  ].map(normalize));
+  return Object.fromEntries(Object.entries(hooks ?? {}).map(([event, groups]) => [event,
+    groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) =>
+      !hook.args?.some((argument) => retired.has(normalize(argument))) &&
+      ![...retired].some((file) => normalize(hook.command) === `node "${file}"`)
+    ) })).filter((group) => group.hooks.length),
+  ]));
+}
+
 export function mergeClaudeHooks(existing, managed, targetDir) {
+  existing = removeRetiredClaudeHooks(existing, targetDir);
+  managed = removeRetiredClaudeHooks(managed, targetDir);
   const owned = new Set([
-    "check-traditional.mjs", "check-evidence.mjs", "record-session-provenance.mjs",
+    "check-traditional.mjs", "record-session-provenance.mjs",
     "resume-project-ledger.mjs", "guard-project-completion.mjs", "resume-handoff.mjs",
   ].map((name) => path.join(targetDir, "hooks", name)));
   // Hooks identical to a template entry were published by an earlier deploy, even without args.
