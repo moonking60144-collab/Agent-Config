@@ -2,7 +2,8 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,8 +14,8 @@ const casesPath = path.join(repoRoot, "codex", "evals", "workflow-routing.cases.
 const schemaPath = path.join(repoRoot, "codex", "evals", "workflow-routing.output.schema.json");
 const processValues = new Set(["none", "review", "repo-onboarding-audit", "agent-failure-debugging", "agent-core-lite", "agent-core-project", "agent-core-engine", "frontend-ui-designer", "task-handoff"]);
 
-function parseArgs(argv) {
-  const options = { mode: "validate", caseIds: [], all: false, repeat: null, minPass: null, model: null, reasoning: null, timeoutMs: 180000, output: null };
+export function parseArgs(argv) {
+  const options = { mode: "validate", caseIds: [], all: false, repeat: null, minPass: null, model: null, reasoning: null, timeoutMs: 180000, output: null, codexBin: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--run") options.mode = "run";
@@ -28,12 +29,47 @@ function parseArgs(argv) {
     else if (argument === "--reasoning") options.reasoning = argv[++index];
     else if (argument === "--timeout-ms") options.timeoutMs = Number.parseInt(argv[++index], 10);
     else if (argument === "--output") options.output = path.resolve(argv[++index]);
+    else if (argument === "--codex-bin") {
+      const value = argv[++index];
+      if (!value?.trim() || value.startsWith("--")) throw new Error("--codex-bin 必須指定可執行檔");
+      options.codexBin = value;
+    }
     else throw new Error("未知參數：" + argument);
   }
   for (const [name, value] of [["repeat", options.repeat], ["min-pass", options.minPass], ["timeout-ms", options.timeoutMs]]) {
     if (value !== null && (!Number.isInteger(value) || value < 1)) throw new Error("--" + name + " 必須是正整數");
   }
   return options;
+}
+
+export async function resolveCodexRuntime(requested = "codex", env = process.env) {
+  const direct = path.isAbsolute(requested) || /[\\/]/.test(requested);
+  const names = process.platform === "win32" && !path.extname(requested)
+    ? [requested + ".exe", requested + ".com", requested] : [requested];
+  const candidates = direct ? [path.resolve(requested)] : (env.PATH ?? env.Path ?? "")
+    .split(path.delimiter).filter(Boolean)
+    .flatMap(directory => names.map(name => path.resolve(directory.replace(/^"|"$/g, ""), name)));
+  let executable;
+  for (const candidate of candidates) {
+    try {
+      const target = await realpath(candidate);
+      if (!(await stat(target)).isFile()) continue;
+      await access(target, constants.X_OK);
+      executable = target;
+      break;
+    } catch (error) {
+      if (direct) throw new Error("無法使用 --codex-bin " + requested + ": " + error.message);
+    }
+  }
+  if (!executable) throw new Error("找不到 Codex 可執行檔：" + requested + "；可用 --codex-bin 指定實際路徑");
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(executable)) {
+    throw new Error("--codex-bin 需要原生可執行檔，不能使用 .cmd/.bat wrapper");
+  }
+  const result = spawnSync(executable, ["--version"], { env, encoding: "utf8", shell: false, timeout: 10000 });
+  if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+    throw new Error("Codex 版本查詢失敗：" + executable + ": " + (result.error?.message || result.stderr?.trim() || "exit=" + result.status));
+  }
+  return { requested_binary: requested, binary_path: executable, version: result.stdout.trim() };
 }
 
 async function exists(target) {
@@ -236,7 +272,7 @@ export function modelProvenanceForExec(requestedModel) {
   };
 }
 
-async function runCase(item, runIndex, options, codexVersion) {
+export async function runCase(item, runIndex, options, runtime) {
   const temp = await mkdtemp(path.join(os.tmpdir(), "codex-routing-eval-"));
   try {
     const finalPath = path.join(temp, "final.json");
@@ -245,7 +281,7 @@ async function runCase(item, runIndex, options, codexVersion) {
     if (options.reasoning) args.push("-c", "model_reasoning_effort=\"" + options.reasoning + "\"");
     args.push(buildPrompt(item));
 
-    const processResult = await runProcess("codex", args, options);
+    const processResult = await runProcess(runtime.binary_path, args, options);
     const events = [];
     for (const line of processResult.stdout.split(/\r?\n/).filter((value) => value.trim())) {
       try { events.push(JSON.parse(line)); }
@@ -284,7 +320,8 @@ async function runCase(item, runIndex, options, codexVersion) {
       event_types: [...new Set(types)],
       event_errors: [...new Set(eventErrors)],
       ...modelEvidence,
-      codex_version: codexVersion,
+      codex_version: runtime.version,
+      codex_binary: runtime.binary_path,
     };
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -330,10 +367,9 @@ async function main() {
     if (minimum > repeats) throw new Error(item.id + " minimum passes 不可大於 repeats");
   }
   const activeRoot = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+  const runtime = await resolveCodexRuntime(options.codexBin ?? "codex");
   await validateEnvironment(activeRoot);
 
-  const versionResult = spawnSync("codex", ["--version"], { encoding: "utf8", shell: false });
-  const codexVersion = versionResult.status === 0 ? versionResult.stdout.trim() : "unknown";
   const managedNames = (await readdir(path.join(repoRoot, "codex", "skills"), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
@@ -343,7 +379,9 @@ async function main() {
     evidence_level: "routing_classifier_only",
     native_skill_activation_observed: false,
     limitations: ["No native skill activation event was observed or asserted.", "Body/reference usage requires a separate integration tier."],
-    codex_version: codexVersion,
+    requested_codex_binary: runtime.requested_binary,
+    codex_binary: runtime.binary_path,
+    codex_version: runtime.version,
     model_override: options.model,
     reasoning_override: options.reasoning,
     repo_agents_sha256: await digestFile(path.join(repoRoot, "codex", "AGENTS.md")),
@@ -359,7 +397,7 @@ async function main() {
     const minimum = options.minPass ?? Math.min(item.min_pass, repeats);
     let passes = 0;
     for (let runIndex = 1; runIndex <= repeats; runIndex += 1) {
-      const result = await runCase(item, runIndex, options, codexVersion);
+      const result = await runCase(item, runIndex, options, runtime);
       results.push(result);
       if (result.pass) passes += 1;
       console.log(item.id + " " + runIndex + "/" + repeats + " " + (result.pass ? "PASS" : "FAIL") + (result.failures.length ? " " + result.failures.join("; ") : ""));

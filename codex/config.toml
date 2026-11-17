@@ -159,7 +159,7 @@ SystemRoot = '__SYSTEM_ROOT__'
 command = '__SERENA_COMMAND__'
 args = [
   "start-mcp-server",
-  "--context", "claude-code",
+  "--context", "codex",
   "--enable-web-dashboard", "false",
   "--enable-gui-log-window", "false"
 ]

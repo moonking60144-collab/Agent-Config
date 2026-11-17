@@ -24,8 +24,11 @@ test('parent-only settings and misspelled fields are rejected', () => {
 });
 
 test('feature overrides can only disable supported inherited capabilities', () => {
-  assert.deepEqual(validateAgentDefinition({ ...base, features: { shell_tool: false, apps: false } }), []);
-  assert.ok(validateAgentDefinition({ ...base, features: { shell_tool: true } }).length > 0);
+  const features = { shell_tool: false, apps: false, plugins: false, memories: false, request_permissions_tool: false };
+  assert.deepEqual(validateAgentDefinition({ ...base, features }), []);
+  for (const name of Object.keys(features)) {
+    assert.ok(validateAgentDefinition({ ...base, features: { [name]: true } }).length > 0);
+  }
   assert.ok(validateAgentDefinition({ ...base, features: { unknown: false } }).length > 0);
 });
 

@@ -22,6 +22,8 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 預設路徑是 `~/.codex/projects/<repo-slug>/plans/` 與 ledgers/。Repo 名稱衝突時附加簡短路徑 hash。只有使用者要求且符合共用 [verification 放置契約](../agent-core-lite/references/verification.md) 時，才使用 repo-local 控制產物。無專案工作使用 `projectless-<thread-id>` 與外部控制產物；相同 runner 支援沒有 Git HEAD 的目前檔案快照。給使用者的報告可放在暫存輸出目錄；控制狀態留在 ledger。
 
+Ledger 目錄保存續接狀態、必要證據與可重建快照，不作為驗證 checkout、node_modules 或 build cache 的工作區。這類可拋棄產物放在本次擁有的暫存目錄；必要紀錄及恢復材料保存完成、沒有程序或未完成任務依賴後，於本次授權內清理。測試失敗且仍需診斷時，記錄暫存路徑及保留原因。既有資料先盤點引用與用途，不依大小或存放天數批次刪除。
+
 ## 盤點、計畫與 Ledger
 
 每項交付記錄足以續接的目標、檔案、依賴與驗收標準；ownership、consumer、恢復與阻塞決策只記本案適用者。領域決策放在 plan，證據方法依共用 [verification contract](../agent-core-lite/references/verification.md)。Ledger 引用適用的完成證據；strict 引用 runner plan／receipt，不複製 consumer 清單或檢查定義。特定 repo 的治理留在該 repo，不由 Project 另列要求。
@@ -41,6 +43,8 @@ next_instruction: Read <ledger path> first, then continue <task>.
 ```
 
 任務狀態為 pending、in_progress、done_verified、blocked、skipped。done_verified 任務引用實際證據，只有證據過期或使用者要求時才重做。保留 Eliminated 區段，記錄已推翻的假設與證據。
+
+階段結束時更新專案狀態與 next_instruction；未解工作保持 active／blocked，符合完成契約才標 complete，明確停止追蹤才標 archived。長期未更新只是需要盤點，不自動結案；project_status 不使用任務層的 done_verified。
 
 ## 執行
 
@@ -81,5 +85,7 @@ node ~/.codex/hooks/validate-project-ledger.mjs --ledger <ledger> --require-evid
 ## 交接
 
 停止或 compaction 前，更新 ledger 的任務狀態、已驗證證據、blockers 與 next_instruction。以已授權 commits／stashes，或 tracked diff 加 untracked manifest 保留可重建的原始碼；單有 digest 不是可恢復快照。
+
+階段已完成且後續目標不同，或壓縮後反覆重建同一背景時，提出階段交接；不按回合數強制換 session，建立或封存對話仍依使用者授權。
 
 判斷與表述依 AGENTS.md。交付已完成項目、各項 blocker 與下一步，引用必要的 ledger 與證據；Git 狀態以實際 diff／status 為準。完成條件依共用契約判定，ledger 保存完整續接資訊，下一個 session 先讀取該 ledger 續接。

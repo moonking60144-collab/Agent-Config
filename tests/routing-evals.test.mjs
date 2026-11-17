@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { evaluateResult, modelProvenanceForExec, validateCases } from '../scripts/run-codex-evals.mjs';
+import { evaluateResult, modelProvenanceForExec, parseArgs, resolveCodexRuntime, runCase, validateCases } from '../scripts/run-codex-evals.mjs';
 
 const cases = (await readFile(new URL('../codex/evals/workflow-routing.cases.jsonl', import.meta.url), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const base = cases.find(item => item.id === 'simple_question_no_process');
@@ -73,4 +75,65 @@ test('requested model aliases remain requests, never observations', () => {
   });
   assert.equal(modelProvenanceForExec(undefined).requested_model, null);
   assert.equal(modelProvenanceForExec(undefined).resolved_model, 'unknown');
+});
+
+test('binary override requires a value and preserves a path containing spaces', () => {
+  assert.equal(parseArgs(['--run', '--codex-bin', '/App Resources/codex']).codexBin, '/App Resources/codex');
+  for (const args of [['--codex-bin'], ['--codex-bin', ''], ['--codex-bin', '--run']]) {
+    assert.throws(() => parseArgs(args), /--codex-bin/);
+  }
+});
+
+test('missing binary overrides fail instead of using another installed Codex', async () => {
+  await assert.rejects(resolveCodexRuntime('/missing-eval-runtime/codex'), /--codex-bin/);
+  await assert.rejects(resolveCodexRuntime('missing-codex-runtime', { PATH: '' }), /--codex-bin/);
+});
+
+async function fakeCodex(t, { versionExit = 0 } = {}) {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'codex eval '));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const program = path.join(root, 'runtime.mjs');
+  const binary = path.join(root, 'codex');
+  const expected = result(scenario(), []);
+  await writeFile(program, `import fs from 'node:fs';
+if (process.argv.includes('--version')) {
+  console.log('codex-cli fixture-selected'); process.exit(${versionExit});
+}
+const output = process.argv[process.argv.indexOf('-o') + 1];
+fs.writeFileSync(output, ${JSON.stringify(JSON.stringify(expected))});
+console.log(JSON.stringify({type:'turn.completed'}));
+`);
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  await writeFile(binary, '#!/bin/sh\nexec ' + quote(process.execPath) + ' ' + quote(program) + ' "$@"\n');
+  await chmod(binary, 0o755);
+  return { root, binary };
+}
+
+test('version probe and eval execute the selected binary, not PATH Codex', { skip: process.platform === 'win32' }, async t => {
+  const fixture = await fakeCodex(t);
+  const alias = path.join(fixture.root, 'desktop-alias');
+  await symlink(fixture.binary, alias);
+  const decoy = path.join(fixture.root, 'decoy');
+  await mkdir(decoy);
+  await writeFile(path.join(decoy, 'codex'), '#!/bin/sh\nexit 79\n', { mode: 0o755 });
+  const originalPath = process.env.PATH;
+  t.after(() => { if (originalPath === undefined) delete process.env.PATH; else process.env.PATH = originalPath; });
+  process.env.PATH = decoy;
+  const runtime = await resolveCodexRuntime(alias);
+  assert.equal(runtime.binary_path, await realpath(fixture.binary));
+  assert.equal(runtime.version, 'codex-cli fixture-selected');
+  const observed = await runCase(scenario(), 1, { timeoutMs: 10000 }, runtime);
+  assert.equal(observed.pass, true, observed.failures.join('; '));
+  assert.equal(observed.codex_binary, runtime.binary_path);
+  assert.equal(observed.codex_version, runtime.version);
+  assert.equal(observed.resolved_model, 'unknown');
+});
+
+test('default binary discovery resolves PATH and rejects a failed version probe', { skip: process.platform === 'win32' }, async t => {
+  const fixture = await fakeCodex(t);
+  const runtime = await resolveCodexRuntime('codex', { ...process.env, PATH: fixture.root });
+  assert.equal(runtime.binary_path, await realpath(fixture.binary));
+  const failing = await fakeCodex(t, { versionExit: 7 });
+  await assert.rejects(resolveCodexRuntime(failing.binary), /版本查詢失敗/);
+  await assert.rejects(resolveCodexRuntime(fixture.root), /找不到 Codex/);
 });

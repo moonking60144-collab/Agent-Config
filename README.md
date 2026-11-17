@@ -20,6 +20,7 @@ flowchart TB
 - 續接以明確的 session／ledger 綁定為準；同 repo 的最新紀錄只作候選，不自動接管目前任務。
 - 架構、非同步收斂、互動效能等細節依風險載入，不讓每個任務承擔整份檢查表。
 - Codex 與 Claude 的 8 個 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。task-handoff 本身寫了兩邊的做法，部署時不改寫。
+- 通用工程判斷集中於上述規則與 skills；重複的 `karpathy-guidelines` 不另行部署。純探索／審查子 agent 關閉 apps、plugins、memories 與權限請求工具；檔案權限仍繼承主 session，安裝及寫入驗證由主 agent 執行。
 
 ## 順序
 
@@ -58,8 +59,10 @@ flowchart LR
 | 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回答送出後用次一級模型檢查結論是否超出工具證據；超出證據與矛盾在下一輪交給 Claude 查證，會影響判斷的錯誤才明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知 |
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
-Codex 設定部署只查找已安裝的 Serena，不安裝／升級工具、不遷移其他專案；首次部署未找到 Serena 時略過該 MCP 區段。工具維護與 registry 遷移是獨立的授權操作。Claude 的數值用詞 heuristic 不再註冊為全域 Stop gate；檔案保留供有需要的專案選用，且只提供非阻擋提醒。
+Codex 設定部署只查找已安裝的 Serena，使用 `codex` context，不安裝／升級工具、不遷移其他專案；首次部署未找到 Serena 時略過該 MCP 區段。既有 `config.toml` 預設保留，設定遷移須另做精準修改與驗收，不用整份覆蓋保留模型及本機選項。Claude 的舊數值用詞 hook 已退役，部署會清理舊註冊與檔案。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
+
+Routing eval 用 `--codex-bin "/path/to/codex"` 指定實際使用的 Desktop／IDE／CLI 執行檔；未指定時解析 PATH。版本查詢與測試共用同一支執行檔，artifact 記錄其絕對路徑與版本。這層驗證 routing classifier，App 操作及原生 skill 啟用另行驗收。
 
 Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行。以資料夾加入的 marketplace 會直接從 repo 資料夾讀取 plugin（`claude plugin list` 的 Read from 是 repo 路徑），修改後 `/reload-plugins` 或重開 session 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
 
