@@ -13,14 +13,14 @@ description: "適用於需要跨可獨立驗證子系統或跨 context 持久保
 
 只有需要子系統獨立驗收、compaction／交接、不可逆／高影響範圍操作，或多階段實作清單必須探索後才知道時，才使用 Project。計算可獨立測試的行為，而非檔案、層數或工具數。不需持久化執行時降級至 Lite。
 
-建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及專案規則或先前交接指定的精確 repo-local 路徑，尋找相符的未完成 ledger。目標與本輪 checkout 相符時從 next_instruction 續接；不重新探索仍有效的 done_verified 工作。跨 task／worktree 的 ledger 只提供線索，先核對本輪原始碼與 runtime，不照搬過期完成狀態。只有現有證據無法解決的歸屬衝突才詢問。
+建立產物前，檢查 `~/.codex/projects/<repo-slug>/ledgers/` 及下列支援目錄內由專案或交接指定的 ledger，尋找相符的未完成 ledger。目標與本輪 checkout 相符時從 next_instruction 續接；不重新探索仍有效的 done_verified 工作。跨 task／worktree 的 ledger 只提供線索，先核對本輪原始碼與 runtime，不照搬過期完成狀態。只有現有證據無法解決的歸屬衝突才詢問。
 
-同 repo 可以有多項工作，不以修改時間選擇目前任務。確認目前 session 與 ledger 後，可將 JSON `{cwd, session_id, ledger_path}` 傳入 `node ~/.codex/hooks/record-session-provenance.mjs` 的 stdin 建立明確綁定；`ledger_path` 必須屬於該 checkout。Session ID 從目前原生 session 資訊取得，不猜其他 session 的 ID。資訊不可得時保留未綁定狀態並依任務脈絡工作；恢復 hook 只提示候選，不替新 session 接手工作。
+同 repo 可以有多項工作，不以修改時間選擇目前任務。新建或接手 ledger 時，立即將 JSON `{cwd, session_id, ledger_path}` 傳入 `node ~/.codex/hooks/record-session-provenance.mjs` 的 stdin 建立明確綁定；`ledger_path` 必須屬於該 checkout。Session ID 從目前原生 session 資訊取得，不猜其他 session 的 ID。升級前未綁定的 session 若收到遷移提醒，只綁定自己的 ledger，不改其他 task。未綁定的 ledger 不受此 session 的 Stop 守門；綁定失敗或無 session ID 時明列此狀態，結案前直接執行下方 validator。恢復 hook 只提示候選，不替新 session 接手工作。
 
 
 ## 產物歸屬
 
-預設路徑是 `~/.codex/projects/<repo-slug>/plans/` 與 ledgers/。Repo 名稱衝突時附加簡短路徑 hash。只有使用者要求且符合共用 [verification 放置契約](../agent-core-lite/references/verification.md) 時，才使用 repo-local 控制產物。無專案工作使用 `projectless-<thread-id>` 與外部控制產物；相同 runner 支援沒有 Git HEAD 的目前檔案快照。給使用者的報告可放在暫存輸出目錄；控制狀態留在 ledger。
+預設路徑是 `~/.codex/projects/<repo-slug>/plans/` 與 ledgers/。Repo 名稱衝突時附加簡短路徑 hash。只有使用者要求且符合共用 [verification 放置契約](../agent-core-lite/references/verification.md) 時，才使用 repo-local 控制產物；ledger 直接放在 checkout 根目錄的 `.codex/ledgers/` 或 `docs/codex/ledgers/`。其他路徑可作參考，但不要當成 hook 會續接或守門的 ledger。無專案工作使用 `projectless-<thread-id>` 與外部控制產物；相同 runner 支援沒有 Git HEAD 的目前檔案快照。給使用者的報告可放在暫存輸出目錄；控制狀態留在 ledger。
 
 Ledger 目錄保存續接狀態、必要證據與可重建快照，不作為驗證 checkout、node_modules 或 build cache 的工作區。這類可拋棄產物放在本次擁有的暫存目錄；必要紀錄及恢復材料保存完成、沒有程序或未完成任務依賴後，於本次授權內清理。測試失敗且仍需診斷時，記錄暫存路徑及保留原因。既有資料先盤點引用與用途，不依大小或存放天數批次刪除。
 

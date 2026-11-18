@@ -38,6 +38,8 @@ function adaptInstructions(text, relativePath) {
     .replaceAll("~/.codex/skills/", "~/.claude/skills/")
     .replaceAll("~/.codex/hooks/", "~/.claude/hooks/")
     .replaceAll("~/.codex/AGENTS.md", "~/.claude/CLAUDE.md");
+  text = text.replaceAll("`.codex/ledgers/`", "`.claude/ledgers/`")
+    .replaceAll("`docs/codex/ledgers/`", "`docs/claude/ledgers/`");
   if (relativePath !== "repo-onboarding-audit/SKILL.md") {
     text = text.replaceAll("AGENTS.md", "CLAUDE.md");
   }
@@ -62,8 +64,9 @@ function adaptProjectHook(text, name) {
       'path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")');
     text = replaceRequired(text, '["AGENTS.override.md", "AGENTS.md"]', '["CLAUDE.md", ".claude/CLAUDE.md"]');
     text = replaceRequired(text, 'execFileSync("codex",', 'execFileSync("claude",');
-    text = text.replaceAll("codexVersion", "claudeCliVersion")
-      .replaceAll('"config.toml"', '"settings.json"')
+    text = replaceRequired(text, 'import { readRolloutCreationCliVersion } from "./session-runtime-version.mjs";',
+      "const readRolloutCreationCliVersion = () => null; // No equivalent rollout header on this surface.");
+    text = text.replaceAll('"config.toml"', '"settings.json"')
       .replaceAll('"hooks.json"', '"settings.json"')
       .replaceAll("Codex hooks expose active files and lifecycle input, not native skill/reference activation telemetry.",
         "Observed standard instruction files are candidates, not the complete resolved instruction chain. The CLI version is not proof of the Desktop runtime version. Hook input does not prove skill/reference activation.");

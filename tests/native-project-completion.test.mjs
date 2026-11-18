@@ -216,3 +216,24 @@ for (const version of [2, 3]) {
     assert.equal(f.hook("guard-project-completion.mjs").decision, "block");
   });
 }
+
+for (const runtime of ["codex", "claude"]) {
+  test(`${runtime}: documented repo-local roots support binding, resume and Stop`, async (t) => {
+    const f = await fixture(t, runtime);
+    for (const dir of [path.join("." + runtime, "ledgers"), path.join("docs", runtime, "ledgers"), "custom-ledgers"]) {
+      const ledger = path.join(f.repo, dir, "task.md");
+      await fs.mkdir(path.dirname(ledger), { recursive: true });
+      const write = status => fs.writeFile(ledger, "project_status: " + status + "\nrepo_path: " + f.repo + "\n");
+      await write("active");
+      const bind = f.rawHook("record-session-provenance.mjs", { ledger_path: ledger });
+      if (dir === "custom-ledgers") {
+        assert.equal(bind.status, 1);
+        continue;
+      }
+      assert.equal(bind.status, 0, bind.stderr);
+      assert.ok(f.hook("resume-project-ledger.mjs").hookSpecificOutput.additionalContext.includes(ledger));
+      await write("complete");
+      assert.equal(f.hook("guard-project-completion.mjs").decision, "block");
+    }
+  });
+}

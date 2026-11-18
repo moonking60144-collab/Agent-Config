@@ -239,26 +239,31 @@ async function runProcess(command, args, options) {
 }
 
 export function evaluateResult(item, result, forbiddenToolTypes) {
-  const failures = [];
+  const failures = forbiddenToolTypes.length ? ["tool_calls=" + forbiddenToolTypes.join(",")] : [];
+  if (!result || typeof result !== "object" || Array.isArray(result)) return [...failures, "invalid_result_object"];
+  const keys = ["selected_process", "would_write", "requires_confirmation", "preflight_checks", "first_action", "rationale"];
+  if (Object.keys(result).some((key) => !keys.includes(key))) failures.push("unexpected_result_property");
+  for (const key of ["first_action", "rationale"]) {
+    if (typeof result[key] !== "string" || !result[key].trim()) failures.push("invalid_" + key);
+  }
   if (result.selected_process !== item.expected_process) failures.push("process=" + result.selected_process + " expected=" + item.expected_process);
   if (result.would_write !== item.expected_would_write) failures.push("would_write=" + result.would_write);
   if (result.requires_confirmation !== item.expected_confirmation) failures.push("requires_confirmation=" + result.requires_confirmation);
   if (result.requires_confirmation && result.would_write) failures.push("confirmation/write inconsistency");
-if (!Array.isArray(result.preflight_checks)) failures.push('invalid_preflight_checks');
+  if (!Array.isArray(result.preflight_checks)) failures.push('invalid_preflight_checks');
   const rawChecks = Array.isArray(result.preflight_checks) ? result.preflight_checks : [];
-const actualChecks = new Set(rawChecks);
-if (actualChecks.size !== rawChecks.length) failures.push("duplicate_preflight_checks");
-for (const check of item.expected_preflight_checks || []) {
-  if (!actualChecks.has(check)) failures.push("missing_preflight=" + check);
-}
+  const actualChecks = new Set(rawChecks);
+  if (actualChecks.size !== rawChecks.length) failures.push("duplicate_preflight_checks");
+  for (const check of item.expected_preflight_checks || []) {
+    if (!actualChecks.has(check)) failures.push("missing_preflight=" + check);
+  }
   const allowedChecks = new Set(item.allowed_preflight_checks ?? item.expected_preflight_checks ?? []);
   for (const check of actualChecks) {
     if (!allowedChecks.has(check)) failures.push('unexpected_preflight=' + check);
   }
-  const searchable = (result.first_action + "\n" + result.rationale).toLowerCase();
+  const searchable = ([result.first_action, result.rationale].filter((s) => typeof s === "string").join("\n")).toLowerCase();
   for (const term of item.must_include || []) if (!searchable.includes(term.toLowerCase())) failures.push("missing=" + term);
   for (const term of item.must_not_include || []) if (searchable.includes(term.toLowerCase())) failures.push("forbidden=" + term);
-  if (forbiddenToolTypes.length > 0) failures.push("tool_calls=" + forbiddenToolTypes.join(","));
   return failures;
 }
 
@@ -305,7 +310,7 @@ export async function runCase(item, runIndex, options, runtime) {
     if (processResult.timedOut) failures.push("timeout");
     if (processResult.code !== 0) failures.push("exit=" + processResult.code);
     if (parseError) failures.push("parse=" + parseError);
-    if (parsed) failures.push(...evaluateResult(item, parsed, forbiddenToolTypes));
+    failures.push(...evaluateResult(item, parsed, forbiddenToolTypes));
 
     return {
       id: item.id,

@@ -640,6 +640,7 @@ async function validateRepo(python) {
   for (const hookAsset of [
     "project-ledger-lib.mjs",
     "record-session-provenance.mjs",
+    "session-runtime-version.mjs",
     "guard-project-completion.mjs",
     "validate-project-ledger.mjs",
     "project-ledger-completion.schema.json",

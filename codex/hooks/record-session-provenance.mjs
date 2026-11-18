@@ -1,26 +1,20 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
+import { readRolloutCreationCliVersion } from "./session-runtime-version.mjs";
 import os from "node:os";
 import path from "node:path";
 import {
   canonicalPath,
   findMatchingLedgers,
   ledgerRequiresStrictVerification,
+  legacyCompletionBaseline,
   readSessionProvenance,
   resolveSessionLedger,
   sessionProvenancePath,
-  readBoundedRegularFile,
+  boundedFileSha256,
   readHookInput,
 } from "./project-ledger-lib.mjs";
-
-async function digestFile(filePath) {
-  try {
-    return createHash("sha256").update(await readBoundedRegularFile(filePath)).digest("hex");
-  } catch {
-    return null;
-  }
-}
 
 async function preferredInstruction(directory) {
   for (const name of ["AGENTS.override.md", "AGENTS.md"]) {
@@ -80,7 +74,7 @@ async function projectAgentDigests(scopeRoot, cwd) {
   return files;
 }
 
-function codexVersion() {
+function pathCliVersion() {
   try {
     return execFileSync("codex", ["--version"], { encoding: "utf8", timeout: 1500 }).trim();
   } catch {
@@ -114,12 +108,14 @@ async function main() {
   }
   const [globalInstruction, config, hooks, skills, projectAgents] = await Promise.all([
     preferredInstruction(codexHome),
-    digestFile(path.join(codexHome, "config.toml")),
-    digestFile(path.join(codexHome, "hooks.json")),
+    boundedFileSha256(path.join(codexHome, "config.toml")),
+    boundedFileSha256(path.join(codexHome, "hooks.json")),
     digestTree(path.join(codexHome, "skills")),
     projectAgentDigests(scopeRoot, cwd),
   ]);
+  const rolloutCreationCliVersion = previous?.rolloutCreationCliVersion ?? await readRolloutCreationCliVersion(codexHome, input);
   const event = {
+    sessionRuntimeVersion: null, // Neither the rollout header nor PATH identifies the current host process.
     recordedAt: new Date().toISOString(),
     source: input.source || null,
     model: input.model || null,
@@ -137,33 +133,22 @@ async function main() {
     },
   };
 
-  const baselineLedgers = previous?.baselineLedgers || await Promise.all(
-    ledgers.map(async (candidate) => ({
-      filePath: candidate.filePath,
-      status: candidate.status,
-      updatedAt: candidate.updatedAt,
-      strictVerificationRequired: await ledgerRequiresStrictVerification(candidate),
-      contentSha256: createHash("sha256").update(candidate.content).digest("hex"),
-      completionContractSha256: candidate.completionContract
-        ? await digestFile(candidate.completionContract)
-        : null,
-    })),
-  );
-
   const strictLedgerPaths = [...new Set([
     ...(previous?.strictLedgerPaths || []),
-    ...baselineLedgers.filter((item) => item.strictVerificationRequired).map((item) => item.filePath),
+    ...(previous?.baselineLedgers || []).filter((item) => item.strictVerificationRequired).map((item) => item.filePath),
     ...(await Promise.all(ledgers.map(async (candidate) => await ledgerRequiresStrictVerification(candidate) ? candidate.filePath : null))).filter(Boolean),
   ])];
 
   await atomicWrite(filePath, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId: input.session_id || null,
     ledgerPath,
     startedAt: previous?.startedAt || event.recordedAt,
-    baselineLedgers,
     strictLedgerPaths,
-    codexVersion: previous?.codexVersion || codexVersion(),
+    legacyCompletionBaseline: ledgerPath ? null : legacyCompletionBaseline(previous),
+    rolloutCreationCliVersion,
+    sessionRuntimeVersion: event.sessionRuntimeVersion,
+    pathCliVersion: pathCliVersion(),
     nativeSkillActivationObserved: false,
     selectedProcessSkill: null,
     loadedConditionalReferences: null,

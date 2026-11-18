@@ -61,10 +61,10 @@ description: "使用者要求把目前工作交接到新的 task、session 或 t
 
 ### 原地清除
 
-取代流程 4–6：不建立新 session，也不封存；`clear_session` 清除後 session 的名稱、資料夾、模型、權限與設定都留著，舊對話可從「Resume previous session」找回。
+使用者要求保留來源時不走本節。取代流程 4–6：不建立新 session，也不封存；`clear_session` 清除後 session 的名稱、資料夾、模型、權限與設定都留著，舊對話可從「Resume previous session」找回。
 
-- 寫交接檔：用 Write 工具把流程 3 的交接內容存成一般文字檔（例如 scratchpad 裡的 `handoff.md`），再執行 `node ~/.claude/hooks/resume-handoff.mjs --write <文字檔路徑>`（PowerShell 寫成 `node "$HOME\.claude\hooks\resume-handoff.mjs"`）。它以這個 session 的 `CLAUDE_CODE_HOST_SESSION_ID` 命名交接檔並印出路徑；exit code 不是 0 就不清除，回報錯誤。不要自己手寫交接檔的 JSON。
-- 先回報：交接重點、即將清除、舊對話怎麼找回，以及清除後要送一則訊息（例如「繼續」）新對話才會開始，隔多久再送都可以。
-- 清除：`clear_session` 帶 `"self"`，這是最後一個動作，這一輪結束後才執行。被拒絕時（例如這個 session 正透過 Remote Control 連線）刪掉 `--write` 印出的交接檔並回報原因。
-- 清除沒有發生、下一輪仍在同一段對話時（例如清除前使用者又送了訊息），也刪掉那個交接檔，避免日後再清除時注入舊內容。
-- 新對話：同一個 session 清除後第一次啟動時，SessionStart hook 會把交接內容與寫入時間注入 context，注入後改名為 `.consumed`；內容明顯過時就先跟使用者確認。
+- 寫交接檔：用 Write 工具把流程 3 的交接內容存成一般文字檔（例如 scratchpad 裡的 `handoff.md`），再執行 `node ~/.claude/hooks/resume-handoff.mjs --write <文字檔路徑>`（PowerShell 寫成 `node "$HOME\.claude\hooks\resume-handoff.mjs"`）。它回傳本次交接檔的 `path` 和專屬的 `resumePrompt`；exit code 不是 0 就不清除，回報錯誤。不要自己手寫交接檔的 JSON。
+- 先回報：交接重點、即將清除、舊對話怎麼找回，並把本次 `resumePrompt` 原樣交給使用者。清除後傳送這句才會採用本次摘要；一般訊息不觸發。
+- 清除：`clear_session` 帶 `"self"`，這是最後一個動作，這一輪結束後才執行。被拒絕時（例如這個 session 正透過 Remote Control 連線）僅清理本次回傳的 `path`並回報原因。
+- 清除沒有發生、下一輪仍在同一段對話時（例如清除前使用者又送了訊息），也刪掉那個交接檔，避免留下不用的暫存資料。
+- 新對話：只有同一個 Desktop host 收到完全相符的 `續接交接 <交接碼>` 時，UserPromptSubmit hook 才會取用該檔一次。如果取用後訊息被其他 hook 擋下，在同一個 host 重送同一句，可依回傳的精確檔案路徑讀取原摘要。啟動、手動 clear 或單說「繼續」都不讀取摘要。舊版沒有交接碼的待接檔不會自動取用；需要時依使用者明確指定的檔案手動恢復。

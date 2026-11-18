@@ -53,7 +53,7 @@ flowchart LR
 |---|---|
 | 常駐協作規則 | [Codex](codex/AGENTS.md) · [Claude](claude/CLAUDE.md) |
 | 架構取捨與驗證方法 | [Architecture](codex/skills/agent-core-lite/references/architecture-preflight.md) · [Verification](codex/skills/agent-core-lite/references/verification.md) |
-| 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) · [Task handoff](codex/skills/task-handoff/SKILL.md)：開同名、同模型的新 task 接手，確認後封存目前 task；Claude 桌面版有 `start_session` 時同樣開新 session，沒有或來源在 worktree 裡時改在原 session 清除對話，由 [handoff hook](claude/hooks/resume-handoff.mjs) 帶入交接內容 |
+| 長任務與交接 | [Project skill](codex/skills/agent-core-project/SKILL.md) · [Task handoff](codex/skills/task-handoff/SKILL.md)：開同名、同模型的新 task 接手，確認後封存目前 task；Claude 桌面版有 `start_session` 時同樣開新 session，沒有或來源在 worktree 裡時改在原 session 清除對話，清除後以本次交接碼請 [handoff hook](claude/hooks/resume-handoff.mjs) 帶入指定摘要 |
 | UI 設計查詢與跨頁規範 | [Frontend + UI UX Pro Max](codex/skills/frontend-ui-designer/references/ui-ux-pro-max.md) |
 | 規則如何演進 | [Config governance](AGENTS.md) · [介入紀錄](INTERVENTIONS.md) |
 | 回合結論檢查 | [claim-check mod](claude/plugins/claim-check/hooks/register.ts)：回答送出後用次一級模型檢查結論是否超出工具證據；超出證據與矛盾在下一輪交給 Claude 查證，會影響判斷的錯誤才明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知 |
@@ -61,6 +61,8 @@ flowchart LR
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
 Codex 設定部署只查找已安裝的 Serena，使用 `codex` context，不安裝／升級工具、不遷移其他專案；首次部署未找到 Serena 時略過該 MCP 區段。既有 `config.toml` 預設保留，設定遷移須另做精準修改與驗收，不用整份覆蓋保留模型及本機選項。Claude 的舊數值用詞 hook 已退役，部署會清理舊註冊與檔案。
 檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
+
+Session provenance 分開記錄建立 rollout 的 CLI 與 PATH CLI；沒有獨立的當輪宿主版本證據時，`sessionRuntimeVersion` 保持空值。
 
 Routing eval 用 `--codex-bin "/path/to/codex"` 指定實際使用的 Desktop／IDE／CLI 執行檔；未指定時解析 PATH。版本查詢與測試共用同一支執行檔，artifact 記錄其絕對路徑與版本。這層驗證 routing classifier，App 操作及原生 skill 啟用另行驗收。
 

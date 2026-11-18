@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +51,15 @@ export async function readHookInput() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+}
+
+export async function boundedFileSha256(filePath) {
+  if (!filePath) return null;
+  try {
+    return createHash("sha256").update(await readBoundedRegularFile(filePath)).digest("hex");
+  } catch {
+    return null;
+  }
 }
 
 export async function findGitRoot(start) {
@@ -215,6 +225,14 @@ export function resolveSessionLedger(provenance, ledgers) {
     ? ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(ledgerPath)) || null
     : null;
   return { ledgerPath, ledger };
+}
+
+// Only v1 sessions need this migration notice. A completion change is never proof of ownership.
+export function legacyCompletionBaseline(record) {
+  if (record?.schemaVersion !== 1) return record?.legacyCompletionBaseline ?? null;
+  return (record.baselineLedgers ?? []).filter((item) => item.status === "complete")
+    .map(({ filePath, updatedAt, contentSha256, completionContractSha256 }) =>
+      ({ filePath, updatedAt, contentSha256, completionContractSha256 }));
 }
 
 export async function ledgerRequiresStrictVerification(ledger) {

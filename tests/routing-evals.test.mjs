@@ -89,18 +89,17 @@ test('missing binary overrides fail instead of using another installed Codex', a
   await assert.rejects(resolveCodexRuntime('missing-codex-runtime', { PATH: '' }), /--codex-bin/);
 });
 
-async function fakeCodex(t, { versionExit = 0 } = {}) {
+async function fakeCodex(t, { versionExit = 0, output = result(scenario(), []) } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'codex eval '));
   t.after(() => rm(root, { recursive: true, force: true }));
   const program = path.join(root, 'runtime.mjs');
   const binary = path.join(root, 'codex');
-  const expected = result(scenario(), []);
   await writeFile(program, `import fs from 'node:fs';
 if (process.argv.includes('--version')) {
   console.log('codex-cli fixture-selected'); process.exit(${versionExit});
 }
 const output = process.argv[process.argv.indexOf('-o') + 1];
-fs.writeFileSync(output, ${JSON.stringify(JSON.stringify(expected))});
+fs.writeFileSync(output, ${JSON.stringify(JSON.stringify(output))});
 console.log(JSON.stringify({type:'turn.completed'}));
 `);
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -136,4 +135,21 @@ test('default binary discovery resolves PATH and rejects a failed version probe'
   const failing = await fakeCodex(t, { versionExit: 7 });
   await assert.rejects(resolveCodexRuntime(failing.binary), /版本查詢失敗/);
   await assert.rejects(resolveCodexRuntime(fixture.root), /找不到 Codex/);
+});
+
+test('exit zero with JSON null is a failed run, not a passing sample', { skip: process.platform === 'win32' }, async t => {
+  const { binary } = await fakeCodex(t, { output: null });
+  const observed = await runCase(scenario(), 1, { timeoutMs: 10000 }, await resolveCodexRuntime(binary));
+  assert.equal(observed.exit_code, 0);
+  assert.equal(observed.pass, false);
+  assert.ok(observed.failures.includes('invalid_result_object'));
+});
+
+test('untrusted output must satisfy the full classifier contract', () => {
+  const item = scenario();
+  for (const bad of [null, false, '', 0, [], {}, { ...result(item, []), first_action: ' ' },
+    { ...result(item, []), rationale: null }, { ...result(item, []), extra: true }]) {
+    assert.ok(evaluateResult(item, bad, []).length);
+  }
+  assert.ok(evaluateResult(item, false, ['file_change']).includes('tool_calls=file_change'));
 });

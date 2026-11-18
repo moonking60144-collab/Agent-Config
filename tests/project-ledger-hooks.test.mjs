@@ -263,7 +263,7 @@ test("Stop hook continues an invalid complete ledger once", async (t) => {
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "completion-session",
+    session_id: "completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, [
@@ -298,7 +298,7 @@ test("Stop hook ignores an older invalid complete ledger when the newest ledger 
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "active-session",
+    session_id: "active-session", ledger_path: activeLedger,
     hook_event_name: "SessionStart",
   });
 
@@ -315,7 +315,7 @@ test("Stop hook evaluates the session-bound ledger instead of the newest ledger"
   await fs.writeFile(boundContract, JSON.stringify(contract));
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "bound-session",
+    session_id: "bound-session", ledger_path: boundLedger,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(boundLedger, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${boundContract}\n`);
@@ -381,7 +381,7 @@ test("SessionStart hook writes provenance with explicit activation limit", async
   assert.match(provenance.events[0].digests.globalAgents, /^[a-f0-9]{64}$/);
 });
 
-test("SessionStart hook records an empty ledger baseline when no unfinished ledger exists", async (t) => {
+test("SessionStart hook records an unbound session when no unfinished ledger exists", async (t) => {
   const { home, repo } = await fixture(t);
   runHook(provenancePath, repo, home, {
     cwd: repo,
@@ -391,7 +391,7 @@ test("SessionStart hook records an empty ledger baseline when no unfinished ledg
   const sessionPath = path.join(home, ".codex", "projects", "repo", "sessions", "read-only-session.json");
   const provenance = JSON.parse(await fs.readFile(sessionPath, "utf8"));
   assert.equal(provenance.ledgerPath, null);
-  assert.deepEqual(provenance.baselineLedgers, []);
+  assert.deepEqual(provenance.strictLedgerPaths, []);
   assert.match(provenance.startedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
@@ -408,6 +408,7 @@ test("Stop hook strict-validates a ledger created after SessionStart", async (t)
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
   await fs.writeFile(contractPath, JSON.stringify(baseContract(ledgerPath)));
 
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "late-ledger-session", ledger_path: ledgerPath });
   const result = runHook(guardPath, repo, home, {
     cwd: repo,
     session_id: "late-ledger-session",
@@ -612,7 +613,7 @@ test("current Stop policy rejects an otherwise valid schema-v1 contract", async 
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "legacy-completion-session",
+    session_id: "legacy-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -728,7 +729,7 @@ test("Stop hook accepts schema-v2 evidence only when artifact digests match", as
   await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "strict-completion-session",
+    session_id: "strict-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -773,7 +774,7 @@ test("Stop hook blocks evidence whose artifact changed after hashing", async (t)
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "tampered-completion-session",
+    session_id: "tampered-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(path.join(evidenceDir, "unit.txt"), "changed output\n");
@@ -820,7 +821,7 @@ test("Stop hook blocks evidence artifacts that escape their declared base", asyn
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "escape-completion-session",
+    session_id: "escape-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -922,7 +923,7 @@ test("Stop hook rejects FIFO evidence without blocking on read", { skip: process
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "fifo-completion-session",
+    session_id: "fifo-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -967,7 +968,7 @@ test("Stop hook rejects evidence artifacts larger than 5 MiB", async (t) => {
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "oversized-completion-session",
+    session_id: "oversized-completion-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1026,7 +1027,7 @@ test("Stop hook accepts legal relative names that only begin with dot-dot or til
   await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "legal-prefixes-session",
+    session_id: "legal-prefixes-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1039,14 +1040,14 @@ test("Stop hook accepts legal relative names that only begin with dot-dot or til
   }), { continue: true });
 });
 
-test("Stop hook evaluates a late complete ledger even when an active ledger is session-bound", async (t) => {
+test("A is not blocked by B completing an invalid ledger after A starts; B is blocked", async (t) => {
   const { home, repo, ledgerDir } = await fixture(t);
   const boundLedgerPath = path.join(ledgerDir, "bound-active.md");
   await fs.writeFile(boundLedgerPath, `project_status: active\nrepo_path: ${repo}\n`);
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "bound-plus-late-session",
+    session_id: "bound-plus-late-session", ledger_path: boundLedgerPath,
     hook_event_name: "SessionStart",
   });
 
@@ -1061,12 +1062,13 @@ test("Stop hook evaluates a late complete ledger even when an active ledger is s
     hook_event_name: "Stop",
     stop_hook_active: false,
   });
-  assert.equal(result.decision, "block");
-  assert.match(result.reason, /late-complete\.md/);
-  assert.match(result.reason, /schemaVersion 2/);
+  assert.deepEqual(result, { continue: true });
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "B", ledger_path: lateLedgerPath });
+  assert.match(runHook(guardPath, repo, home, { cwd: repo, session_id: "B" }).reason, /late-complete\.md/);
+  assert.deepEqual(runHook(guardPath, repo, home, { cwd: repo, session_id: "bound-plus-late-session" }), { continue: true });
 });
 
-test("Stop hook aggregates every invalid ledger into its single continuation", async (t) => {
+test("An unbound session never adopts other newly completed ledgers", async (t) => {
   const { home, repo, ledgerDir } = await fixture(t);
   runHook(provenancePath, repo, home, {
     cwd: repo,
@@ -1087,10 +1089,7 @@ test("Stop hook aggregates every invalid ledger into its single continuation", a
     hook_event_name: "Stop",
     stop_hook_active: false,
   });
-  assert.equal(result.decision, "block");
-  assert.match(result.reason, /2 project ledger\(s\)/);
-  assert.match(result.reason, /first-invalid\.md/);
-  assert.match(result.reason, /second-invalid\.md/);
+  assert.deepEqual(result, { continue: true });
 });
 
 test("Stop hook rejects evidence manifests above the bounded item limit", async (t) => {
@@ -1120,7 +1119,7 @@ test("Stop hook rejects evidence manifests above the bounded item limit", async 
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "too-many-evidence-session",
+    session_id: "too-many-evidence-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1163,7 +1162,7 @@ test("Stop hook caches repeated artifact digests within the bounded manifest", a
   await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "cached-evidence-session",
+    session_id: "cached-evidence-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1210,7 +1209,7 @@ test("Stop hook rejects unique artifacts above the manifest byte budget", async 
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "aggregate-budget-session",
+    session_id: "aggregate-budget-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1269,7 +1268,7 @@ test("Stop hook detects invalid recompletion when ledger timestamps are preserve
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "preserved-time-session",
+    session_id: "preserved-time-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: active\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1303,7 +1302,7 @@ test("schema-v2 Stop rejects an external completion sidecar", async (t) => {
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "external-sidecar-session",
+    session_id: "external-sidecar-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1346,7 +1345,7 @@ test("schema-v2 Stop accepts contract-relative evidence beside the ledger", asyn
   await attachVerification(repo, contractPath);
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "contract-relative-session",
+    session_id: "contract-relative-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1377,7 +1376,7 @@ test("schema-v2 Stop rejects a symlinked completion sidecar", { skip: process.pl
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "symlink-sidecar-session",
+    session_id: "symlink-sidecar-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1402,7 +1401,7 @@ test("SessionStart and Stop reject a FIFO completion sidecar without blocking", 
 
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "fifo-sidecar-session",
+    session_id: "fifo-sidecar-session", ledger_path: ledgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
@@ -1417,13 +1416,13 @@ test("SessionStart and Stop reject a FIFO completion sidecar without blocking", 
   assert.match(result.reason, /regular, non-symlink file/);
 });
 
-test("Stop hook still evaluates late ledgers when the session-bound ledger disappears", async (t) => {
+test("Missing binding warns about its own ledger and does not adopt a replacement", async (t) => {
   const { home, repo, ledgerDir } = await fixture(t);
   const boundLedgerPath = path.join(ledgerDir, "removed-bound.md");
   await fs.writeFile(boundLedgerPath, `project_status: active\nrepo_path: ${repo}\n`);
   runHook(provenancePath, repo, home, {
     cwd: repo,
-    session_id: "removed-bound-session",
+    session_id: "removed-bound-session", ledger_path: boundLedgerPath,
     hook_event_name: "SessionStart",
   });
   await fs.rm(boundLedgerPath);
@@ -1439,8 +1438,9 @@ test("Stop hook still evaluates late ledgers when the session-bound ledger disap
     hook_event_name: "Stop",
     stop_hook_active: false,
   });
-  assert.equal(result.decision, "block");
-  assert.match(result.reason, /late-after-removal\.md/);
+  assert.equal(result.continue, true);
+  assert.match(result.systemMessage, /removed-bound\.md/);
+  assert.doesNotMatch(result.systemMessage, /late-after-removal/);
 });
 
 function remoteCompletionContract(ledgerPath, remoteChecks) {
@@ -1495,7 +1495,7 @@ test("Stop schema v3 preserves evidence integrity and preflight scope requiremen
   await fs.writeFile(contractPath, JSON.stringify(contract));
   contract.verification = await attachVerification(repo, contractPath);
   contract.requiredEvidence[0].verificationChecks = ["fixture-marker"];
-  runHook(provenancePath, repo, home, { cwd: repo, session_id: "v3-integrity", hook_event_name: "SessionStart" });
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "v3-integrity", ledger_path: ledgerPath, hook_event_name: "SessionStart" });
   await fs.writeFile(ledgerPath, ledgerText("complete"));
   const input = { cwd: repo, session_id: "v3-integrity", hook_event_name: "Stop", stop_hook_active: false };
   assert.deepEqual(runHook(guardPath, repo, home, input), { continue: true });
@@ -1521,7 +1521,7 @@ test("Stop rejects null completion sidecars without escaping contract validation
   const ledgerPath = path.join(ledgerDir, "null-contract.md");
   const contractPath = path.join(ledgerDir, "null-contract.completion.json");
   await fs.writeFile(ledgerPath, `project_status: active\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
-  runHook(provenancePath, repo, home, { cwd: repo, session_id: "null-contract", hook_event_name: "SessionStart" });
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: "null-contract", ledger_path: ledgerPath, hook_event_name: "SessionStart" });
   await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
   for (const value of [null, [], "invalid root"]) {
     await fs.writeFile(contractPath, JSON.stringify(value));
@@ -1544,7 +1544,7 @@ for (const version of [2, 3]) {
     contract.requiredEvidence[0].artifactSha256 = sha256("behavior\n");
     await fs.writeFile(contractPath, JSON.stringify(contract));
     await fs.writeFile(ledgerPath, `project_status: active\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
-    runHook(provenancePath, repo, home, { cwd: repo, session_id: "verified", hook_event_name: "SessionStart" });
+    runHook(provenancePath, repo, home, { cwd: repo, session_id: "verified", ledger_path: ledgerPath, hook_event_name: "SessionStart" });
     await fs.writeFile(ledgerPath, `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`);
     const input = { cwd: repo, session_id: "verified", hook_event_name: "Stop" };
     const missingReceipt = runHook(guardPath, repo, home, input);
@@ -1594,7 +1594,7 @@ async function verificationSession(t, version, local = false) {
   const ledger = (status) => `project_status: ${status}\nrepo_path: ${repo}\ncompletion_contract: ${contractPath}\n`;
   await fs.writeFile(ledgerPath, ledger("active"));
   const sessionId = `scope-${version}`;
-  runHook(provenancePath, repo, home, { cwd: repo, session_id: sessionId, hook_event_name: "SessionStart" });
+  runHook(provenancePath, repo, home, { cwd: repo, session_id: sessionId, ledger_path: ledgerPath, hook_event_name: "SessionStart" });
   return { home, repo, ledgerPath, contractPath, ledger, input: { cwd: repo, session_id: sessionId, hook_event_name: "Stop" } };
 }
 
@@ -1706,3 +1706,101 @@ test("remote completion allows evidenced not-applicable policy", () => {
   );
   assert.deepEqual(result, { errors: [], blockers: [] });
 });
+
+test("rollout creation is session-bound and never becomes a resumed host version", async (t) => {
+  const { home, repo } = await fixture(t);
+  const root = path.join(home, ".codex"), sessions = path.join(root, "sessions");
+  await fs.mkdir(sessions, { recursive: true });
+  const transcript = path.join(sessions, "rollout.jsonl");
+  const header = id => JSON.stringify({ type: "session_meta", payload: { id, cli_version: "9.9.9-desktop.fixture" } }) + "\n";
+  const recordPath = path.join(root, "projects/repo/sessions/host-id.json");
+  await fs.mkdir(path.dirname(recordPath), { recursive: true });
+  await fs.writeFile(recordPath, JSON.stringify({ schemaVersion: 1, sessionId: "host-id", codexVersion: "old-path-cli" }));
+  const update = async (file, source = "startup") => {
+    runHook(provenancePath, repo, home, { cwd: repo, session_id: "host-id", transcript_path: file, source });
+    return JSON.parse(await fs.readFile(recordPath, "utf8"));
+  };
+  const outside = path.join(repo, "untrusted.jsonl");
+  await fs.writeFile(outside, header("host-id"));
+  assert.equal((await update(outside)).rolloutCreationCliVersion, null);
+  await fs.writeFile(transcript, header("other") + header("host-id"));
+  assert.equal((await update(transcript)).rolloutCreationCliVersion, null);
+  await fs.writeFile(transcript, header("host-id") + "invalid conversation data");
+  const state = await update(transcript);
+  assert.equal(state.rolloutCreationCliVersion, "9.9.9-desktop.fixture");
+  assert.notEqual(state.pathCliVersion, state.rolloutCreationCliVersion);
+  assert.ok(Object.hasOwn(state, "pathCliVersion"));
+  for (const resumed of [await update(transcript, "resume"), await update(undefined, "compact")]) {
+    assert.equal(resumed.rolloutCreationCliVersion, state.rolloutCreationCliVersion);
+    assert.equal(resumed.sessionRuntimeVersion, null);
+    assert.ok(resumed.events.every((event) => event.sessionRuntimeVersion === null));
+  }
+});
+
+test("legacy unbound Stop warns across compact without claiming another task; explicit bind restores enforcement", async (t) => {
+  const { home, repo, ledgerDir } = await fixture(t);
+  const session = { cwd: repo, session_id: "legacy" };
+  const record = path.join(home, ".codex/projects/repo/sessions/legacy.json");
+  const old = path.join(ledgerDir, "old.md"), own = path.join(ledgerDir, "own.md");
+  await fs.writeFile(old, `project_status: complete\nrepo_path: ${repo}\n`);
+  await fs.mkdir(path.dirname(record), { recursive: true });
+  await fs.writeFile(record, JSON.stringify({ schemaVersion: 1, sessionId: "legacy", ledgerPath: null,
+    baselineLedgers: [{ filePath: old, status: "complete", updatedAt: (await fs.stat(old)).mtimeMs }] }));
+  const stop = () => runHook(guardPath, repo, home, session);
+  assert.deepEqual(stop(), { continue: true });
+  await fs.writeFile(own, `project_status: complete\nrepo_path: ${repo}\n`);
+  const warn = () => {
+    const result = stop();
+    assert.equal(result.continue, true);
+    assert.equal(result.decision, undefined);
+    assert.match(result.systemMessage, /未驗證結案/);
+    assert.ok(!result.systemMessage.includes(own) && !result.systemMessage.includes(old));
+  };
+  warn();
+  runHook(provenancePath, repo, home, { ...session, source: "compact" });
+  warn();
+  runHook(provenancePath, repo, home, { ...session, ledger_path: own });
+  assert.equal(stop().decision, "block");
+  assert.equal(JSON.parse(await fs.readFile(record, "utf8")).legacyCompletionBaseline, null);
+});
+
+for (const change of ["contract-only", "ledger-preserved-mtime", "removed-contract"]) {
+  test(`legacy compact preserves digest evidence: ${change} warns without claiming the ledger`, async (t) => {
+    const { home, repo, ledgerDir } = await fixture(t);
+    const session = { cwd: repo, session_id: "migrating-unbound" };
+    const record = path.join(home, ".codex/projects/repo/sessions/migrating-unbound.json");
+    const ledger = path.join(ledgerDir, "other-task.md");
+    const contract = path.join(ledgerDir, "other-task.completion.json");
+    const content = `project_status: complete\nrepo_path: ${repo}\ncompletion_contract: ${contract}\n`;
+    const sidecar = JSON.stringify(baseContract(ledger));
+    const fixed = new Date(1700000000000);
+    await fs.writeFile(ledger, content);
+    await fs.utimes(ledger, fixed, fixed);
+    await fs.writeFile(contract, sidecar);
+    const updatedAt = (await fs.stat(ledger)).mtimeMs;
+    await fs.mkdir(path.dirname(record), { recursive: true });
+    await fs.writeFile(record, JSON.stringify({ schemaVersion: 1, sessionId: session.session_id, ledgerPath: null,
+      baselineLedgers: [{ filePath: ledger, status: "complete", updatedAt,
+        contentSha256: sha256(content), completionContractSha256: sha256(sidecar) }] }));
+    const stop = () => runHook(guardPath, repo, home, session);
+    runHook(provenancePath, repo, home, { ...session, source: "compact" });
+    assert.deepEqual(stop(), { continue: true });
+    if (change === "ledger-preserved-mtime") {
+      await fs.appendFile(ledger, "next_instruction: review the evidence\n");
+      await fs.utimes(ledger, fixed, fixed);
+    } else if (change === "removed-contract") {
+      await fs.unlink(contract);
+    } else {
+      await fs.writeFile(contract, JSON.stringify({ ...baseContract(ledger),
+        requiredEvidence: [{ id: "runtime", status: "missing" }] }));
+    }
+    assert.equal((await fs.stat(ledger)).mtimeMs, updatedAt);
+    runHook(provenancePath, repo, home, { ...session, source: "compact" });
+    const result = stop();
+    assert.equal(result.continue, true);
+    assert.equal(result.decision, undefined);
+    assert.match(result.systemMessage, /未驗證結案/);
+    assert.ok(!result.systemMessage.includes(ledger));
+    assert.equal(JSON.parse(await fs.readFile(record, "utf8")).ledgerPath, null);
+  });
+}

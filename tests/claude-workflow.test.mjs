@@ -146,12 +146,12 @@ test("Claude deployment publishes the shared workflow and keeps foreign hooks", 
   }
 });
 
-function runHandoff(script, args, hostSession) {
+function runHandoff(script, args, hostSession, event = { hook_event_name: "SessionStart", source: "startup" }) {
   const env = { ...process.env };
   delete env.CLAUDE_CODE_HOST_SESSION_ID;
   if (hostSession) env.CLAUDE_CODE_HOST_SESSION_ID = hostSession;
   const result = spawnSync(process.execPath, [script, ...args], {
-    input: JSON.stringify({ hook_event_name: "SessionStart", source: "startup" }),
+    input: JSON.stringify(event),
     encoding: "utf8", timeout: 20000, shell: false, env,
   });
   assert.ifError(result.error);
@@ -164,31 +164,44 @@ test("Handoff hook delivers a session's handoff once, only to that session, at a
   const script = path.join(active, "hooks", "resume-handoff.mjs");
   const textFile = path.join(active, "..", "handoff.md");
   const owner = "local_handoff-owner";
-  const handoff = path.join(active, "workflow", "handoffs", `${owner}.json`);
   const write = async (text) => {
     await fs.writeFile(textFile, text);
     const result = runHandoff(script, ["--write", textFile], owner);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(path.basename(result.stdout.trim()), `${owner}.json`);
-    await fs.access(handoff);
+    return JSON.parse(result.stdout);
   };
-  const start = (hostSession) => {
-    const result = runHandoff(script, [], hostSession);
+  const send = (host, event) => {
+    const result = runHandoff(script, [], host, event);
     assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim() ? JSON.parse(result.stdout).hookSpecificOutput.additionalContext : null;
+    return result.stdout ? JSON.parse(result.stdout).hookSpecificOutput.additionalContext : null;
   };
-  const windowsPath = "C:\\Users\\moonk\\專案";
-  await write(`FIRST_HANDOFF ${windowsPath}`);
-  // Desktop cold-starts the cleared conversation only on the next message, so age must not matter.
-  const old = new Date(Date.now() - 3 * 60 * 60 * 1000);
-  await fs.utimes(handoff, old, old);
-  assert.equal(start("local_other-session"), null);
-  assert.equal(start(undefined), null);
-  assert.ok(start(owner).includes(`FIRST_HANDOFF ${windowsPath}`));
-  await fs.access(`${handoff}.consumed`);
-  assert.equal(start(owner), null);
-  await write("SECOND_HANDOFF");
-  assert.match(start(owner), /SECOND_HANDOFF/);
+  const settings = JSON.parse(await fs.readFile(path.join(active, "settings.json"), "utf8"));
+  const registered = (event) => settings.hooks[event].flatMap(g => g.hooks).some(h => h.args?.includes(script));
+  assert.equal(registered("UserPromptSubmit"), true);
+  assert.equal(registered("SessionStart"), false);
+  const abandoned = await write("ABANDONED SUMMARY");
+  const wanted = await write("USE ONLY THIS SUMMARY");
+  const prompt = { hook_event_name: "UserPromptSubmit", prompt: wanted.resumePrompt };
+  for (const source of ["startup", "clear"]) {
+    assert.equal(send(owner, { ...prompt, hook_event_name: "SessionStart", source }), null);
+  }
+  assert.equal(send(owner, { ...prompt, prompt: "繼續" }), null);
+  assert.equal(send(owner, { ...prompt, prompt: "example: " + wanted.resumePrompt }), null);
+  assert.doesNotMatch(send("another-host", prompt), /USE ONLY THIS SUMMARY/);
+  assert.equal(send(undefined, prompt), null);
+  await fs.utimes(wanted.path, new Date(1000), new Date(1000));
+  const restored = send(owner, prompt);
+  assert.match(restored, /USE ONLY THIS SUMMARY/);
+  assert.doesNotMatch(restored, /ABANDONED SUMMARY/);
+  // Simulate the first hook response being discarded by another blocking prompt hook.
+  const retry = send(owner, prompt);
+  assert.doesNotMatch(retry, /USE ONLY THIS SUMMARY/);
+  assert.ok(retry.includes(JSON.stringify(wanted.path + ".consumed")));
+  assert.ok(!retry.includes(abandoned.path));
+  assert.equal(JSON.parse(await fs.readFile(wanted.path + ".consumed", "utf8")).content, "USE ONLY THIS SUMMARY");
+  assert.ok(!send("another-host", prompt).includes(wanted.path));
+  await fs.access(wanted.path + ".consumed");
+  await fs.access(abandoned.path);
 });
 
 test("Handoff writer refuses without a host session or handoff text", async (t) => {

@@ -65,9 +65,10 @@
             "statusMessage": "續接專案 ledger"
           }
         ]
-      },
+      }
+    ],
+    "UserPromptSubmit": [
       {
-        "matcher": "startup|clear",
         "hooks": [
           {
             "type": "command",

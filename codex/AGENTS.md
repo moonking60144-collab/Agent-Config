@@ -50,7 +50,7 @@
 - 明確 read-only review 優先使用 review，不得因任務很大而進 implementation loop。
 - agent-core-project 用於需跨子系統持久協調、compaction／handoff、不可逆高影響範圍或 audit-first 未知工作清單；範圍明確且不需持久協調時用 agent-core-lite，不以步數或子系統數量機械升級。
 - 自訂 agent runtime、tool loop、compactor、retry engine、transcript/resume implementation 才使用 agent-core-engine。
-- 續接任務前檢查 ~/.codex/projects/ 的 unfinished ledger，以及 project rules／既有 handoff 明確指定的 repo-local ledger path；有匹配 ledger 時先依 next_instruction resume，不重新 discovery或廣掃 repo。
+- 續接任務前檢查 ~/.codex/projects/ 的 unfinished ledger，以及 Project skill 支援目錄內、專案或交接明確指定的 ledger；有匹配 ledger 時先依 next_instruction resume，不重新 discovery或廣掃 repo。
 - Cross-boundary architecture、async mutation convergence 與高頻 UI interaction 的詳細方法由 agent-core-lite conditional references 提供，不放在 always-loaded AGENTS。
 - Skill 的一般偏好不取代本輪明示要求；授權與副作用邊界仍須遵守。Skill／工具不可用時，採可行的等效方法；若因此阻塞，指出具體限制與未完成工作，不為了符合流程而停工。
 
