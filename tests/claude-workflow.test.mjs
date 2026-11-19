@@ -248,6 +248,15 @@ const fences = [
   ["outside prose remains checked", [t3, "code", t3, flagged], true],
   ["four-space list fence ends before prose", ["1. item", "", "    " + t3, "    " + flagged, "    " + t3, "", flagged], true],
   ["four-space list fence protects code", ["1. item", "", "    " + t3, "    " + flagged, "    " + t3, "", "正常"], false],
+  ["lazy list paragraph retains the base of a following fence", ["1. item", "lazy continuation", "", "    " + t3 + "text", "   简体代码", "    " + t3, "", "正常"], false],
+  ["lazy paragraph text remains visible from its first character", ["1. item", "简體", "", "    " + t3, "   code", "    " + t3], true],
+  ["prose after a lazy list fence is still checked", ["1. item", "lazy", "", "    " + t3, "   code", "    " + t3, "", flagged], true],
+  ["dedented heading ends the list paragraph", ["1. item", "# Heading", "", "    " + t3, "   " + flagged, "    " + t3], true],
+  ["dedented thematic break ends the list paragraph", ["1. item", "***", "", "    " + t3, "   " + flagged, "    " + t3], true],
+  ["a quoted paragraph can continue after leaving a list", ["1. item", "> quote", "    " + flagged], true],
+  ["a blank ends an empty item before a top-level indented block", ["1. item", "-", "", "    " + t3 + "text", "   " + flagged, "    " + t3], true],
+  ["an empty item can contain an immediately following fence", ["1. item", "-", "    " + t3 + "text", "   " + flagged, "    " + t3], false],
+  ["a list heading cannot start a lazy paragraph", ["1. # Heading", "outside", "", "    " + t3, "   " + flagged, "    " + t3], true],
   ["indented code does not open a top-level fence", ["    " + t3, "    " + flagged, "", flagged], true],
   ["indented continuation of a paragraph is prose", ["Paragraph wrapped manually", "    " + flagged], true],
   ["indented code after a blank line stays exempt", ["Paragraph", "", "    " + flagged], false],
@@ -263,7 +272,7 @@ for (const hook of hookPaths) {
   for (const [name, lines, blocked] of fences) {
     test(`${hook}: ${name}`, () => {
       const result = hookDecision(path.join(repoRoot, "claude/hooks", hook), lines.join("\n"));
-      assert.equal(result.decision === "block", blocked);
+      assert.equal(result.decision === "block", blocked, "PROSE_VISIBILITY: " + name);
     });
   }
   test(`${hook}: stop continuation cannot loop`, () => {
@@ -339,7 +348,7 @@ test("backup and deployment preserve foreign same-name hooks and managed argumen
   const script = path.join(repoRoot, "scripts", "retire-claude-hooks.mjs");
   const home = path.dirname(active);
   const foreign = { type: "command", command: "node", args: [path.join(home, "personal", "check-traditional.mjs"), "--verify"] };
-  const managed = { type: "command", command: process.platform === "win32" ? "NODE" : "node", args: [path.join(active, "hooks", "check-traditional.mjs"), "--flag"] };
+  const managed = { type: "command", command: process.platform === "win32" ? "NODE" : "node", args: ["--no-warnings", "--import=node:fs", "--", path.join(active, "hooks", "check-traditional.mjs"), "--flag"] };
   const argumentOnly = { type: "command", command: "node", args: ["other-tool.mjs", ...managed.args] };
   const input = { hooks: { Stop: [{ hooks: [foreign, managed, argumentOnly] }] } };
   const settings = path.join(repo, "claude", "settings.json");
@@ -356,7 +365,7 @@ test("backup and deployment preserve foreign same-name hooks and managed argumen
     await fs.writeFile(settings, result.stdout);
   }
   const backed = JSON.parse((await fs.readFile(settings, "utf8")).replace(/^\uFEFF/, ""));
-  assert.deepEqual(backed.hooks.Stop[0].hooks, [foreign, { ...managed, args: ["__CLAUDE_STOP_HOOK_PATH__", "--flag"] }, argumentOnly]);
+  assert.deepEqual(backed.hooks.Stop[0].hooks, [foreign, { ...managed, args: ["--no-warnings", "--import=node:fs", "--", "__CLAUDE_STOP_HOOK_PATH__", "--flag"] }, argumentOnly]);
   // Deploy with the ordinary full template plus the exported Stop group.
   const template = JSON.parse(await fs.readFile(path.join(repoRoot, "claude/settings.json"), "utf8"));
   template.hooks.Stop = backed.hooks.Stop;
@@ -371,4 +380,35 @@ test("Backup hook retirement refuses malformed JSON without partial output", () 
   const result = run(path.join(repoRoot, "scripts", "retire-claude-hooks.mjs"), ["--target-dir", "/home/user/.claude"], "{");
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
+});
+
+test("flagged Node hooks are retired or merged by their entry script", async (t) => {
+  const { active, deploy } = await fixture(t, { sourceEntrypoint: true });
+  const settingsPath = path.join(active, "settings.json");
+  const retired = path.join(active, "hooks", "check-evidence.mjs");
+  const current = path.join(active, "hooks", "check-traditional.mjs");
+  const node = (...args) => ({ type: "command", command: "node", args });
+  const legacy = node("--no-warnings", retired);
+  const foreign = [
+    node("foreign.mjs", retired), node("--require", retired, "foreign.mjs"),
+    node("-e", "void 0", current), node("--check", current), node("--prof-process=yes", current),
+    { type: "command", command: "other", args: ["--", retired] },
+  ];
+  await fs.mkdir(path.dirname(retired), { recursive: true });
+  await fs.writeFile(retired, "console.log('legacy ok')");
+  const before = spawnSync(process.execPath, legacy.args, { encoding: "utf8" });
+  assert.equal(before.status, 0, before.stderr);
+  await fs.writeFile(settingsPath, JSON.stringify({ hooks: { Stop: [{ hooks: [
+    legacy, node("--no-warnings", current), node("--require", "node:fs", "--", current),
+    node("--expose-gc", "--title", "test hook", "--dns-result-order", "ipv4first", current), ...foreign,
+  ] }] } }));
+  for (let i = 0; i < 2; i++) {
+    const result = deploy();
+    assert.equal(result.status, 0, result.stderr);
+    const hooks = JSON.parse(await fs.readFile(settingsPath, "utf8")).hooks.Stop.flatMap(group => group.hooks);
+    assert.ok(!hooks.some(h => h.args?.[0] === "--no-warnings" && h.args.includes(retired)), "RETIRED_SCRIPT_STILL_REGISTERED");
+    assert.equal(hooks.filter(h => h.args?.includes(current) && !foreign.some(f => JSON.stringify(f) === JSON.stringify(h))).length, 1);
+    for (const entry of foreign) assert.ok(hooks.some(h => JSON.stringify(h) === JSON.stringify(entry)));
+    await assert.rejects(fs.access(retired), { code: "ENOENT" });
+  }
 });

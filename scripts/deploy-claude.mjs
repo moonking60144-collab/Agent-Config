@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { prepareClaudeWorkflow, mergeClaudeHooks, managedHookPaths, isNodeHook } from "./claude-workflow.mjs";
+import { prepareClaudeWorkflow, mergeClaudeHooks, managedHookPaths, nodeScriptIndex } from "./claude-workflow.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDir);
@@ -88,9 +88,9 @@ const workflow = await prepareClaudeWorkflow(repoRoot, targetDir);
 const hookTokens = managedHookPaths(targetDir);
 for (const group of Object.values(template.hooks).flat()) {
   for (const hook of group.hooks) {
-    if (isNodeHook(hook, targetDir) && hookTokens.has(hook.args?.[0])) {
-      hook.args[0] = hookTokens.get(hook.args[0]);
-    }
+    const index = nodeScriptIndex(hook, targetDir);
+    const file = hookTokens.get(hook.args?.[index]);
+    if (file) hook.args[index] = file;
   }
 }
 const merged = {

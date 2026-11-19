@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -128,8 +129,49 @@ function hookPathKey(file, targetDir) {
   return hookPlatform(targetDir) === path.win32 ? value.replaceAll("\\", "/").toLowerCase() : value;
 }
 
-export function isNodeHook(hook, targetDir) {
-  return hookPathKey(hook.command, targetDir) === "node";
+// Read only the running Node's own option grammar. Never execute a hook to
+// discover its entrypoint; an option value or script argument may name our file.
+let nodeOptions;
+function launchOptions() {
+  if (nodeOptions) return nodeOptions;
+  const options = new Map();
+  const help = execFileSync(process.execPath, ["--help"], { encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "" } });
+  for (const line of help.split(/\r?\n/)) {
+    const declaration = line.match(/^  (-\S.*?)(?: {2,}|$)/)?.[1];
+    if (!declaration) continue;
+    const aliases = declaration.split(", ");
+    const takesValue = aliases.some(alias => /^[-\w]+=/u.test(alias));
+    for (const alias of aliases) options.set(alias.split(/[=\[]/, 1)[0], takesValue);
+  }
+  nodeOptions = options;
+  return options;
+}
+
+export function nodeScriptIndex(hook, targetDir) {
+  const command = hookPathKey(hook.command, targetDir);
+  if (command !== "node" && !(command === "node.exe" && hookPlatform(targetDir) === path.win32)) return -1;
+  if (!Array.isArray(hook.args)) return -1;
+  for (let i = 0; i < hook.args.length; i++) {
+    const arg = hook.args[i];
+    if (typeof arg !== "string" || !arg || arg === "-") return -1;
+    if (arg === "--") return i + 1 < hook.args.length ? i + 1 : -1;
+    if (!arg.startsWith("-")) return i;
+    const option = arg.split("=", 1)[0].replaceAll("_", "-");
+    const allowed = process.allowedNodeEnvironmentFlags;
+    if (/^--(?:prof-process|entry-url|snapshot-blob|test(?:-|$))/.test(option)) return -1;
+    if (!allowed.has(option) && option !== "--env-file" && option !== "--env-file-if-exists") return -1;
+    if (arg.includes("=")) continue;
+    const takesValue = launchOptions().get(option);
+    if (takesValue === undefined) {
+      // --help may show just one spelling of a boolean pair. Unlisted V8
+      // value flags require the attached =value form, handled above.
+      const name = option.replace(/^--(?:no-)?/, "");
+      if (allowed.has("--" + name) && allowed.has("--no-" + name)) continue;
+      return -1;
+    }
+    if (takesValue && typeof hook.args[++i] !== "string") return -1;
+  }
+  return -1;
 }
 
 export function removeRetiredClaudeHooks(hooks, targetDir) {
@@ -140,7 +182,7 @@ export function removeRetiredClaudeHooks(hooks, targetDir) {
   ].map(normalize));
   return Object.fromEntries(Object.entries(hooks ?? {}).map(([event, groups]) => [event,
     groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) =>
-      !(isNodeHook(hook, targetDir) && retired.has(normalize(hook.args?.[0]))) &&
+      !retired.has(normalize(hook.args?.[nodeScriptIndex(hook, targetDir)])) &&
       ![...retired].some((file) => normalize(hook.command) === `node "${file}"`)
     ) })).filter((group) => group.hooks.length),
   ]));
@@ -152,9 +194,9 @@ export function portableClaudeHooks(hooks, targetDir) {
     .map(([token, file]) => [hookPathKey(file, targetDir), token]));
   for (const group of Object.values(result).flat()) {
     for (const hook of group.hooks) {
-      if (!isNodeHook(hook, targetDir) || !Array.isArray(hook.args)) continue;
-      const token = tokens.get(hookPathKey(hook.args[0], targetDir));
-      if (token) hook.args = [token, ...hook.args.slice(1)];
+      const index = nodeScriptIndex(hook, targetDir);
+      const token = tokens.get(hookPathKey(hook.args?.[index], targetDir));
+      if (token) hook.args = hook.args.with(index, token);
     }
   }
   return result;
@@ -171,7 +213,7 @@ export function mergeClaudeHooks(existing, managed, targetDir) {
   for (const [event, groups] of Object.entries(existing ?? {})) {
     result[event] = groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) => {
       if (templateHooks.has(JSON.stringify(hook))) return false;
-      if (Array.isArray(hook.args)) return !(isNodeHook(hook, targetDir) && ownedPaths.has(hookPathKey(hook.args[0], targetDir)));
+      if (Array.isArray(hook.args)) return !ownedPaths.has(hookPathKey(hook.args[nodeScriptIndex(hook, targetDir)], targetDir));
       return ![...owned].some((file) => hook.command === `node "${file}"`);
     }) })).filter((group) => group.hooks.length);
   }

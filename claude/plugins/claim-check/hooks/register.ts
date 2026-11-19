@@ -155,10 +155,27 @@ async function logPath($: EngineInterface): Promise<string> {
   return `${home}/.claude/workflow/claim-check/${await $.session.id()}.jsonl`
 }
 
-async function record($: EngineInterface, entry: Record<string, unknown>): Promise<void> {
+async function readRows($: EngineInterface) {
+  const path = await logPath($)
+  if (!await $.fs.exists(path)) return []
+  return String(await $.fs.read(path)).split('\n').filter(Boolean).map(line => JSON.parse(line))
+}
+
+function restoreQuotes(rows: Awaited<ReturnType<typeof readRows>>): Map<string, string> {
+  const pending = new Map<string, string>()
+  for (const row of rows) {
+    // Old reviews did not log a missed short answer, so their eligibility is unknown.
+    if (row.event === 'main_review' && row.quotePending === true) pending.set(row.id, row.correction)
+    if (row.event === 'correction_in_answer' || row.event === 'correction_not_in_answer') pending.delete(row.id)
+  }
+  return pending
+}
+
+async function record($: EngineInterface, entries: Record<string, unknown>[]): Promise<void> {
   const path = await logPath($)
   const previous = (await $.fs.exists(path)) ? ((await $.fs.read(path)) as string) : ''
-  await $.fs.write(path, `${previous}${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`)
+  const at = new Date().toISOString()
+  await $.fs.write(path, previous + entries.map(entry => JSON.stringify({ at, ...entry }) + '\n').join(''))
 }
 
 export const register: Register = (on, options) => {
@@ -168,7 +185,8 @@ export const register: Register = (on, options) => {
     writeTail = result.catch(() => undefined)
     return result
   }
-  const pendingQuotes = new Map<string, string>()
+  let pendingQuotes: Map<string, string> | undefined
+  let unwrittenComparisons: { event: string; id: string; turnId: string }[] = []
   const completedTools = new Set<string>()
   const name = 'record_finding'
   on('session.start', async ($, e, next) => {
@@ -187,14 +205,19 @@ export const register: Register = (on, options) => {
       return invalid('核實結果需附上證據，更正只適用於成立的項目。')
     if (ref !== undefined && (!correction || typeof ref !== 'string' || !completedTools.has(ref)))
       return invalid('operation_ref 必須對應近期成功的主模型工具呼叫。')
-    const file = await logPath($)
-    const rows = await $.fs.exists(file) ? String(await $.fs.read(file)).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : []
+    const rows = await readRows($)
     if (!rows.some(row => row.forwardedIds?.includes(id))) return invalid('此 session 沒有轉交該項目。')
     const previous = rows.filter(row => row.event === 'main_review' && row.id === id).at(-1)
     const addsCorrection = previous?.verdict === 'confirmed' && verdict === 'confirmed' && !previous.correction && Boolean(correction)
     if (previous && previous.verdict !== 'inconclusive' && !addsCorrection) return invalid('此項目已有最終核實結果。')
-    await record($, { event: 'main_review', id, verdict, evidence: clip(basis.trim(), 1500), correction: typeof correction === 'string' ? clip(correction, 1500) : undefined, observedToolRef: ref })
-    if (typeof correction === 'string' && ref === undefined) pendingQuotes.set(id, correction.trim())
+    const quote = typeof correction === 'string' && ref === undefined ? correction.trim() : undefined
+    await record($, [{ event: 'main_review', id, verdict, evidence: clip(basis.trim(), 1500),
+      correction: quote ?? (typeof correction === 'string' ? clip(correction, 1500) : undefined),
+      quotePending: quote ? true : undefined, observedToolRef: ref }])
+    if (quote) {
+      pendingQuotes ??= restoreQuotes(rows)
+      pendingQuotes.set(id, quote)
+    }
     return { result: '核實結果已記錄。' }
   }))
   on('tool.call', async ($, e, next) => {
@@ -215,15 +238,20 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId !== undefined || e.reason !== 'answer') return done
-    if (pendingQuotes.size) {
-      await serialize(async () => {
-        for (const [id, quote] of pendingQuotes) {
-          if (e.answer.includes(quote)) await record($, { event: 'correction_in_answer', id, turnId: e.turnId })
-          pendingQuotes.delete(id)
-        }
-      })
-    }
-    if (e.answer.length < MIN_ANSWER_CHARS) return done
+    const notices: string[] = []
+    await serialize(async () => {
+      pendingQuotes ??= restoreQuotes(await readRows($))
+      for (const [id, quote] of pendingQuotes) {
+        unwrittenComparisons.push({ event: e.answer.includes(quote) ? 'correction_in_answer' : 'correction_not_in_answer', id, turnId: e.turnId })
+      }
+      pendingQuotes.clear()
+      // On write failure retry this answer's outcome, without comparing a later answer.
+      if (unwrittenComparisons.length) {
+        await record($, unwrittenComparisons)
+        unwrittenComparisons = []
+      }
+    }).catch((error: unknown) => { notices.push(`更正比對紀錄寫入失敗：${describe(error)}`) })
+    if (e.answer.length < MIN_ANSWER_CHARS) return notices.length ? { ...done, text: oneLine(notices.join('；')) } : done
     const answeredBy = e.usage?.model ?? 'unknown'
     const prompt = [
       `## 最終回覆（${answeredBy}）`,
@@ -237,7 +265,6 @@ export const register: Register = (on, options) => {
     const outcome = await check($, prompt, checkersFor(answeredBy, options.checker), attempts)
     const ms = Date.now() - started
     // Findings are for the main model, which reads them next turn; the person only hears about a check that did not complete.
-    const notices: string[] = []
     if (outcome.kind === 'unparsed') notices.push(`結論檢查（${outcome.checker}）：檢查模型的回覆格式不符，已略過`)
     if (outcome.kind === 'skipped') notices.push(`結論檢查未執行：${outcome.text}`)
     const forwardedIds = outcome.kind === 'flagged'
@@ -246,7 +273,7 @@ export const register: Register = (on, options) => {
         return []
       })
       : []
-    await serialize(() => record($, { event: 'check', turnId: e.turnId, answeredBy, ms, attempts, fed: forwardedIds.length, forwardedIds, promptChars: prompt.length + SYSTEM.length, ...outcome })).catch((error: unknown) => {
+    await serialize(() => record($, [{ event: 'check', turnId: e.turnId, answeredBy, ms, attempts, fed: forwardedIds.length, forwardedIds, promptChars: prompt.length + SYSTEM.length, ...outcome }])).catch((error: unknown) => {
       notices.push(`結論檢查紀錄寫入失敗：${describe(error)}`)
     })
     if (notices.length === 0) return done

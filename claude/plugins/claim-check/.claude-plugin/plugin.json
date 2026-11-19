@@ -1,6 +1,6 @@
 {
   "name": "claim-check",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": { "name": "moonking60144-collab" },
   "description": "回答送出後用次一級模型檢查最終回覆的結論是否超出工具證據；超出證據與矛盾在下一輪交給主模型查證，會影響判斷的錯誤才明確更正，屬事後校正、不是送出前攔截；不顯示給使用者，檢查沒完成時才通知。",
   "userConfig": {

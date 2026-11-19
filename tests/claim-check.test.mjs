@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { register } from "../claude/plugins/claim-check/hooks/register.ts";
 import { summarize } from "../scripts/claim-check-stats.mjs";
 
-function engine(complete, checker = "auto") {
-  const handlers = new Map(), files = new Map(), calls = [], forwarded = [];
+function engine(complete, checker = "auto", files = new Map()) {
+  const handlers = new Map(), calls = [], forwarded = [];
   const on = (event, filter, method) => { handlers.set(event, method ?? filter); return { catch() {} }; };
   register(on, { checker });
   const host = { env: { get: async () => "/mock" }, session: { id: async () => "test", append: async m => forwarded.push(m) },
@@ -30,6 +30,32 @@ test("timeouts, account quota, generic provider errors and abort do not try anot
   }
 });
 
+test("a pending correction survives reload and only consumes the next main answer", async () => {
+  const longQuote = "x".repeat(1501) + " final characters";
+  for (const [answer, hit] of [["Corrected result", true], ["another answer", false], [longQuote, true]]) {
+    const files = new Map();
+    const load = () => engine(() => ({ ...ok, text: "- [矛盾] wrong result" }), "auto", files);
+    const quote = answer === longQuote ? longQuote : "Corrected result";
+    const first = load();
+    await first.turn();
+    const [id] = first.rows()[0].forwardedIds;
+    const verdict = await first.invoke("tool.run", { id, verdict: "confirmed", evidence: "report line 2", correction: quote });
+    assert.ok(!verdict.deny);
+    const resumed = load();
+    const respond = (e, text, extra) => e.invoke("turn.complete", { reason: "answer", turnId: "next", answer: text, ...extra });
+    await respond(resumed, "unrelated", { agentId: "child" });
+    await respond(resumed, "unrelated", { reason: "tool_use" });
+    await respond(resumed, answer);
+    const again = load();
+    await respond(again, quote, { turnId: "later" });
+    const events = again.rows().filter(row => row.id === id && row.event.startsWith("correction_"));
+    assert.deepEqual(events.map(row => [row.event, row.turnId]), [[hit ? "correction_in_answer" : "correction_not_in_answer", "next"]], "RELOAD_MUST_CONSUME_ONCE");
+    const stats = summarize([again.rows()]);
+    assert.equal(stats.mainReportedCorrections, 1);
+    assert.equal(stats.correctionExcerptObserved, Number(hit));
+  }
+});
+
 test("only a successful observed main tool call can be cited as a correction operation", async () => {
   const e = engine(()=>({...ok,text:"- [矛盾] release was wrong"}));
   await e.turn();
@@ -40,6 +66,39 @@ test("only a successful observed main tool call can be cited as a correction ope
   assert.ok(!(await e.invoke("tool.run",verdict)).deny);
   const stats = summarize([e.rows()]);
   assert.equal(stats.correctionToolCallObserved,1); assert.equal(stats.correctionExcerptObserved,0);
+});
+
+test("a restart never reopens old ambiguous reviews, tool corrections or completed comparisons", async () => {
+  const rows = [
+    { event: "check", kind: "flagged", fed: 4, forwardedIds: ["old", "tool", "hit", "miss"] },
+    ...["old", "tool", "hit", "miss"].map(id => ({ event: "main_review", id, verdict: "confirmed", correction: "same quote",
+      ...(id === "tool" ? { observedToolRef: "tool-1" } : {}), ...(["hit", "miss"].includes(id) ? { quotePending: true } : {}) })),
+    { event: "correction_in_answer", id: "hit", turnId: "first" },
+    { event: "correction_not_in_answer", id: "miss", turnId: "first" },
+  ];
+  const text = rows.map(row => JSON.stringify(row)).join("\n") + "\n";
+  const files = new Map([["/mock/.claude/workflow/claim-check/test.jsonl", text]]);
+  const e = engine(() => ok, "auto", files);
+  await e.invoke("turn.complete", { reason: "answer", answer: "same quote", turnId: "later" });
+  assert.deepEqual(e.rows(), rows);
+  const stats = summarize([e.rows()]);
+  assert.equal(stats.correctionToolCallObserved, 1);
+  assert.equal(stats.correctionExcerptObserved, 1);
+});
+
+test("retrying a failed log write keeps the outcome of the original answer", async () => {
+  const files = new Map();
+  const e = engine(() => ({ ...ok, text: "- [矛盾] wrong result" }), "auto", files);
+  await e.turn();
+  const [id] = e.rows()[0].forwardedIds;
+  await e.invoke("tool.run", { id, verdict: "confirmed", evidence: "test.log", correction: "corrected" });
+  files.set = () => { throw new Error("disk full"); };
+  const failed = await e.invoke("turn.complete", { reason: "answer", answer: "no match", turnId: "first" });
+  assert.match(failed.text, /disk full/);
+  delete files.set;
+  await e.invoke("turn.complete", { reason: "answer", answer: "corrected", turnId: "later" });
+  const outcomes = e.rows().filter(row => row.event.startsWith("correction_"));
+  assert.deepEqual(outcomes.map(row => [row.event, row.turnId]), [["correction_not_in_answer", "first"]]);
 });
 test("model-specific denials share one remaining budget; fixed checker never cascades", async t => {
   t.mock.timers.enable({apis:["Date"], now:100000});

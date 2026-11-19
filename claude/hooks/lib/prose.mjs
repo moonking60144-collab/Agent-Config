@@ -34,6 +34,20 @@ export async function assistantMessage(input) {
   return "";
 }
 
+const listItem = /^ {0,3}(?:[-+*]|\d{1,9}[.)])(?: {1,4}(?=\S|$)|$)/;
+const thematicBreak = /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+const headingOrQuote = /^ {0,3}(?:#{1,6}(?=[ \t]|$)|>)/;
+const htmlBlock = /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|pre|script|search|section|style|summary|table|tbody|td|textarea|tfoot|th|thead|title|tr|track|ul)(?=[ \t/>]|$))/i;
+
+function openingFence(line) {
+  const match = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  return match && (match[1][0] === "~" || !match[2].includes("`")) ? match[1] : null;
+}
+
+function startsOtherBlock(line) {
+  return headingOrQuote.test(line) || thematicBreak.test(line) || htmlBlock.test(line);
+}
+
 // 逐行掃圍欄開關狀態，不用正規式成對比對。
 //
 // 舊版是 /```[\s\S]*?```/g。散文裡只要出現一個落單的三反引號序列（例如在說明
@@ -45,6 +59,7 @@ export function visibleProse(text) {
   const kept = [];
   let fence = null;
   let listIndents = [];
+  let emptyItemBase;
   let inParagraph = false;
   for (let line of String(text ?? "").split(/\r?\n/)) {
     const expanded = line.replace(/^[ \t]*/, (prefix) => {
@@ -52,6 +67,8 @@ export function visibleProse(text) {
       for (const ch of prefix) width += ch === "\t" ? 4 - width % 4 : 1;
       return " ".repeat(width);
     });
+    if (emptyItemBase !== undefined && !expanded.trim()) listIndents = listIndents.filter(base => base < emptyItemBase);
+    emptyItemBase = undefined;
     const indent = expanded.match(/^ */)[0].length;
     if (expanded.trim() && fence && indent < fence.base) fence = null;
     if (fence) {
@@ -59,25 +76,32 @@ export function visibleProse(text) {
       if (close && close[1][0] === fence.character && close[1].length >= fence.length) fence = null;
       continue;
     }
-    if (expanded.trim()) listIndents = listIndents.filter((base) => base <= indent);
-    let base = listIndents.at(-1) ?? 0;
+    let base = listIndents.findLast(width => width <= indent) ?? 0;
     line = expanded.slice(base);
-    const item = line.match(/^ {0,3}(?:[-+*]|\d{1,9}[.)]) {1,4}(?=\S|$)/);
+    const markerAtAncestor = openingFence(line);
+    const item = thematicBreak.test(line) ? null : line.match(listItem);
+    const dedented = base < (listIndents.at(-1) ?? 0);
+    // Lazy text belongs to the open paragraph even without its list indentation.
+    const lazy = dedented && inParagraph && line.trim() && !item && !markerAtAncestor && !startsOtherBlock(line);
+    if (dedented && line.trim() && !lazy) listIndents = listIndents.filter(width => width <= base);
     if (item) {
       inParagraph = false;
-      base += item[0].length;
-      listIndents.push(base);
       line = line.slice(item[0].length);
+      base += line.trim() ? item[0].length : item[0].trimEnd().length + 1;
+      listIndents.push(base);
+      if (!line.trim()) emptyItemBase = base;
     }
-    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (marker && (marker[1][0] === "~" || !marker[2].includes("`"))) {
-      fence = { character: marker[1][0], length: marker[1].length, base };
+    const marker = item ? openingFence(line) : markerAtAncestor;
+    if (marker) {
+      fence = { character: marker[0], length: marker.length, base };
       inParagraph = false;
       continue;
     }
     if (!inParagraph && line.startsWith("    ")) continue;
     kept.push(line.replace(/`[^`\n]*`/g, "").replace(/https?:\/\/\S+/g, ""));
-    inParagraph = Boolean(line.trim());
+    const setextHeading = inParagraph && !lazy && /^ {0,3}(?:=+|-+)[ \t]*$/.test(line);
+    const paragraphText = line.replace(/^(?: {0,3}>[ \t]?)+/, "");
+    inParagraph = Boolean(paragraphText.trim()) && !startsOtherBlock(paragraphText) && !setextHeading;
   }
   return kept.join("\n");
 }

@@ -77,6 +77,6 @@ claude plugin marketplace add <本 repo 路徑>
 claude plugin install claim-check@agent-config
 ```
 
-執行 `node scripts/claim-check-stats.mjs` 可從本機紀錄彙整耗時、模型回報的 token、轉交數、待查數、主模型核實成立數與自報更正數。另列下一則主模型回答確實出現更正原句的筆數，以及有成功工具呼叫 ID 的操作數。主模型查證後以 `record_finding` 回報 ID 和證據，稍後可為已成立的項目補記更正。沒有逐項 ID 的舊提醒另計。沒有紀錄時，尚無資料可評估成效。
+執行 `node scripts/claim-check-stats.mjs` 可從本機紀錄彙整耗時、模型回報的 token、轉交數、待查數、主模型核實成立數與自報更正數。另列下一則主模型回答確實出現更正原句的筆數，以及有成功工具呼叫 ID 的操作數。主模型查證後以 `record_finding` 回報 ID 和證據，稍後可為已成立的項目補記更正。外掛重新載入後會接續比對同一個 session 的下一則主模型回答，命中與未命中都會留下紀錄。0.4.0 的日誌保留已觀察到的命中；舊版沒有記錄未命中的短答，無法回推哪些更正仍在等待比對。沒有逐項 ID 的舊提醒另計。沒有紀錄時，尚無資料可評估成效。
 
 其他機器也可用 `/plugin install claim-check --marketplace moonking60144-collab/Agent-Config` 從 GitHub 安裝。
