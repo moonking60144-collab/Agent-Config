@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 const VALID_STATUSES = new Set(["active", "blocked", "pending", "in_progress", "complete", "archived"]);
+const projectsRoot = path.join(os.homedir(), ".codex", "projects");
 export const MAX_COMPLETION_CONTRACT_BYTES = 1024 * 1024;
 
 export async function readBoundedRegularFile(
@@ -135,7 +136,6 @@ async function findLedgerRoots(cwd, scopeRoot) {
     path.join(scopeRoot, "docs", "codex", "ledgers"),
   ]);
 
-  const projectsRoot = path.join(os.homedir(), ".codex", "projects");
   try {
     for (const entry of await fs.readdir(projectsRoot, { withFileTypes: true })) {
       if (entry.isDirectory()) roots.add(path.join(projectsRoot, entry.name, "ledgers"));
@@ -163,7 +163,7 @@ export async function parseLedger(filePath, scopeRoot) {
     : null;
   const stat = await fs.stat(filePath);
   return {
-    filePath,
+    filePath: await canonicalPath(filePath),
     status,
     content,
     planPath: readField(content, "plan_path"),
@@ -174,9 +174,9 @@ export async function parseLedger(filePath, scopeRoot) {
   };
 }
 
-export async function findMatchingLedgers(cwd, statuses = null) {
-  const resolvedCwd = path.resolve(cwd);
-  const scopeRoot = await findGitRoot(resolvedCwd) || resolvedCwd;
+export async function findMatchingLedgers(cwd, statuses = null, boundScope = null) {
+  const resolvedCwd = await canonicalPath(cwd);
+  const scopeRoot = boundScope ? await canonicalPath(boundScope) : await findGitRoot(resolvedCwd) || resolvedCwd;
   const roots = await findLedgerRoots(resolvedCwd, scopeRoot);
   const files = (await Promise.all(roots.map((root) => collectMarkdownFiles(root)))).flat();
   const statusSet = statuses ? new Set(statuses) : null;
@@ -206,6 +206,10 @@ export function sessionProvenancePath(scopeRoot, sessionId) {
 export async function readSessionProvenance(scopeRoot, sessionId) {
   const filePath = sessionProvenancePath(scopeRoot, sessionId);
   if (!filePath) return null;
+  return readSessionFile(filePath, sessionId);
+}
+
+async function readSessionFile(filePath, sessionId) {
   try {
     const value = JSON.parse((await readBoundedRegularFile(filePath)).toString("utf8"));
     if (value.sessionId && value.sessionId !== sessionId) throw new Error("session identity mismatch");
@@ -216,15 +220,58 @@ export async function readSessionProvenance(scopeRoot, sessionId) {
   }
 }
 
-// A repository and its newest file are not task identities. All lifecycle hooks use this binding.
-export function resolveSessionLedger(provenance, ledgers) {
-  const ledgerPath = provenance?.ledgerPath
+function previousLedgerPath(provenance) {
+  return provenance?.ledgerPath
     || [...(Array.isArray(provenance?.events) ? provenance.events : [])]
       .reverse().find((event) => event?.ledgerPath)?.ledgerPath || null;
-  const ledger = ledgerPath
-    ? ledgers.find((candidate) => path.resolve(candidate.filePath) === path.resolve(ledgerPath)) || null
-    : null;
-  return { ledgerPath, ledger };
+}
+
+export function sessionBindingPath(sessionId) {
+  if (typeof sessionId !== "string" || !sessionId.trim()) return null;
+  const key = createHash("sha256").update(sessionId).digest("hex");
+  return path.join(projectsRoot, ".session-bindings", key + ".json");
+}
+
+async function findSessionBinding(sessionId) {
+  const index = sessionBindingPath(sessionId);
+  if (!index) return null;
+  const binding = await readSessionFile(index, sessionId);
+  if (binding) return binding;
+
+  // Older installs kept the explicit binding only in the checkout's session record.
+  let directories;
+  try { directories = await fs.readdir(projectsRoot, { withFileTypes: true }); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  const filename = path.basename(sessionProvenancePath(projectsRoot, sessionId));
+  const records = await Promise.all(directories.filter((item) => item.isDirectory() && item.name !== ".session-bindings")
+    .map((item) => readSessionFile(path.join(projectsRoot, item.name, "sessions", filename), sessionId)));
+  const matches = new Map();
+  for (const record of records) {
+    const ledgerPath = previousLedgerPath(record);
+    if (!ledgerPath || record.sessionId !== sessionId) continue;
+    const event = record.events?.findLast((item) => item.ledgerPath === ledgerPath);
+    const cwd = record.bindingCwd ?? event?.cwd;
+    if (cwd) matches.set(await canonicalPath(ledgerPath), { cwd, ledgerPath, scopeRoot: record.bindingScope ?? event?.scopeRoot });
+  }
+  if (matches.size > 1) throw new Error("Multiple previous bindings for this session; explicitly bind its ledger again.");
+  return matches.values().next().value ?? null;
+}
+
+export async function sessionLedgerContext(cwd, sessionId, explicitBind = false) {
+  const binding = explicitBind ? null : await findSessionBinding(sessionId);
+  const bindingCwd = await canonicalPath(binding?.cwd ?? cwd);
+  const { scopeRoot, ledgers } = await findMatchingLedgers(bindingCwd, null, binding?.scopeRoot);
+  const provenance = await readSessionProvenance(scopeRoot, sessionId);
+  const stored = binding?.ledgerPath ?? previousLedgerPath(provenance);
+  const ledgerPath = stored ? await canonicalPath(stored) : null;
+  const ledger = ledgers.find((item) => item.filePath === ledgerPath) ?? null;
+  return { scopeRoot, ledgers, provenance, ledgerPath, ledger, bindingCwd };
+}
+
+// Strictness is monotonic. A delayed compact can replace a session snapshot but cannot undo this marker.
+export function strictBindingMarker(sessionId, ledgerPath) {
+  const key = createHash("sha256").update(ledgerPath).digest("hex");
+  return sessionBindingPath(sessionId) + "." + key + ".strict";
 }
 
 // Only v1 sessions need this migration notice. A completion change is never proof of ownership.
@@ -249,7 +296,6 @@ export async function ledgerRequiresStrictVerification(ledger) {
 
 export function projectDirectoryFor(scopeRoot, ledgerPath = null) {
   if (ledgerPath) {
-    const projectsRoot = path.join(os.homedir(), ".codex", "projects");
     const resolvedLedger = path.resolve(ledgerPath);
     const ledgerDirectory = path.dirname(ledgerPath);
     if (
@@ -260,5 +306,5 @@ export function projectDirectoryFor(scopeRoot, ledgerPath = null) {
     }
   }
   const slug = path.basename(scopeRoot).replace(/[^A-Za-z0-9._-]+/g, "-") || "projectless";
-  return path.join(os.homedir(), ".codex", "projects", slug);
+  return path.join(projectsRoot, slug);
 }

@@ -63,6 +63,7 @@ test("Codex deployment retires the duplicate handoff even when an old source dra
   const isolated = path.join(root, "source");
   await fs.mkdir(path.join(isolated, "scripts"), { recursive: true });
   await fs.copyFile(deployer, path.join(isolated, "scripts", "deploy-codex.mjs"));
+  await fs.copyFile(path.join(repoRoot, "scripts/optional-mcp.mjs"), path.join(isolated, "scripts/optional-mcp.mjs"));
   for (const name of ["task-handoff", "codex-task-handoff"]) {
     await fs.mkdir(path.join(isolated, "codex", "skills", name), { recursive: true });
     await fs.writeFile(path.join(isolated, "codex", "skills", name, "SKILL.md"), name);

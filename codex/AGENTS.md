@@ -40,7 +40,7 @@
 - 依本輪要求的成果與語意判斷實作授權，不以特定動詞為準；commit 或 push 仍須使用者明確要求。
 - 有相依交付、範圍會演進或需要 checkpoint 時，在 update_plan 可用時使用；否則保留簡短計畫。不以工具呼叫數決定流程重量。
 - 修改後做與風險相稱的驗證。缺檔、依賴、測試或錯誤未解時，不宣稱完成。
-- 以下操作執行前必須取得使用者明確確認：git reset --hard、force push、刪分支／檔案、覆寫未提交變更、修改 CI/CD 或共享外部呼叫策略，以及不可逆或影響他人的動作。
+- 本輪建立的暫存產物，確認歸屬及無後續依賴後可在原授權內清理。刪除既有檔案或分支、覆寫未提交變更、git reset --hard、force push、修改 CI/CD 或共享外部呼叫策略，以及不可逆或影響他人的操作，須有使用者明確授權涵蓋具體對象與範圍。
 - Destructive Git 確認前先唯讀盤點 current branch、remote／target、uncommitted diff 與 rollback／recovery；不得先執行破壞性命令。
 - 不回退或覆寫非本輪建立的變更。發現意外 worktree 變動時停止並詢問。
 

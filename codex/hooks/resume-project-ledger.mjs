@@ -1,10 +1,8 @@
-import { findMatchingLedgers, readHookInput, readSessionProvenance, resolveSessionLedger } from "./project-ledger-lib.mjs";
+import { readHookInput, sessionLedgerContext } from "./project-ledger-lib.mjs";
 
 async function main() {
   const input = await readHookInput();
-  const { scopeRoot, ledgers } = await findMatchingLedgers(input.cwd || process.cwd());
-  const provenance = await readSessionProvenance(scopeRoot, input.session_id);
-  const { ledger, ledgerPath } = resolveSessionLedger(provenance, ledgers);
+  const { ledgers, ledger, ledgerPath } = await sessionLedgerContext(input.cwd || process.cwd(), input.session_id);
   const unfinished = ledgers.filter((candidate) => ["active", "blocked", "pending", "in_progress"].includes(candidate.status));
   if (ledger && !unfinished.includes(ledger)) return;
   if (!ledger && !ledgerPath && unfinished.length === 0) return;

@@ -1,23 +1,47 @@
 #!/bin/sh
-# Deterministic repo checks only: no model calls, and --skip-active keeps machine-specific state out of the gate.
-set -e
-cd "$(git rev-parse --show-toplevel)"
-# Git exports GIT_DIR and related variables to hooks; tests that create their own repos must not inherit them.
+set -eu
+repo=$(git rev-parse --show-toplevel)
+# Git sets these for the pushing worktree, but checks also create their own repos.
 unset $(git rev-parse --local-env-vars)
-node --test tests/*.test.mjs
-node scripts/validate-codex.mjs --skip-active
-if command -v python3 >/dev/null 2>&1; then python3 tests/ui-ux-pro-max.test.py; else python tests/ui-ux-pro-max.test.py; fi
-# Mod APIs move between Claude Code releases; an installed build that lists `plugin test` runs the mod tests.
-# Builds without the subcommand still exit 0 on `--help`, so the listing is what tells them apart.
-runner=""
-for candidate in claude "$HOME"/Library/Application\ Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude; do
-  if "$candidate" plugin --help 2>/dev/null | grep -Eq '^[[:space:]]+test[[:space:]]'; then runner=$candidate; fi
-done
-for plugin in claude/plugins/*/; do
-  [ -d "${plugin}tests" ] || continue
-  if [ -n "$runner" ]; then
-    "$runner" plugin test "$plugin"
-  else
-    echo "pre-push: skipped ${plugin} mod tests: no installed Claude Code build lists 'plugin test'" >&2
-  fi
+
+run_checks() (
+  node --test tests/*.test.mjs
+  node scripts/validate-codex.mjs --skip-active
+  if command -v python3 >/dev/null 2>&1; then python3 -B tests/ui-ux-pro-max.test.py; else python -B tests/ui-ux-pro-max.test.py; fi
+  # Mod APIs move between Claude Code releases; an installed build that lists `plugin test` runs the mod tests.
+  # Builds without the subcommand still exit 0 on `--help`, so the listing is what tells them apart.
+  runner=""
+  for candidate in claude "$HOME"/Library/Application\ Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude; do
+    if "$candidate" plugin --help 2>/dev/null | grep -Eq '^[[:space:]]+test[[:space:]]'; then runner=$candidate; fi
+  done
+  for plugin in claude/plugins/*/; do
+    [ -d "${plugin}tests" ] || continue
+    if [ -n "$runner" ]; then
+      "$runner" plugin test "$plugin"
+    else
+      echo "pre-push: skipped ${plugin} mod tests: no installed Claude Code build lists 'plugin test'" >&2
+    fi
+  done
+)
+
+scratch=$(mktemp -d)
+scratch=$(cd "$scratch" && pwd -P)
+trap 'rm -rf -- "$scratch"' EXIT
+trap 'exit 1' HUP INT TERM
+mkdir "$scratch/empty-hooks"
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  case "$local_oid" in *[!0]*) ;; *) continue ;; esac
+  commit=$(git -C "$repo" rev-parse --verify "${local_oid}^{commit}") || {
+    echo "pre-push: cannot check $local_ref ($local_oid) as a commit" >&2
+    exit 1
+  }
+  checkout="$scratch/$commit"
+  [ ! -d "$checkout" ] || continue
+
+  # The clone borrows objects only. Its refs, index, config and test outputs are private.
+  git -c core.hooksPath="$scratch/empty-hooks" clone -q --shared --no-checkout -- "$repo" "$checkout" </dev/null
+  git -C "$checkout" -c core.hooksPath="$scratch/empty-hooks" checkout -q --detach "$commit" </dev/null
+  echo "pre-push: checking $commit ($local_ref)" >&2
+  (cd "$checkout" && run_checks) </dev/null
 done

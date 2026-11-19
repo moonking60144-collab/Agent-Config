@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { digest, validatePlan, evaluateReceipt, observationFrom, isBehavioralFailure, PROTOCOL_VERSION, MAX_RECEIPT_BYTES } from "./verification-contract.mjs";
+import { digest, snapshotDigest, validatePlan, evaluateReceipt, observationFrom, isBehavioralFailure, PROTOCOL_VERSION, MAX_RECEIPT_BYTES } from "./verification-contract.mjs";
 import { spawnRipgrep } from "./ripgrep.mjs";
 
 let repositoryVariables;
@@ -38,7 +38,13 @@ async function inventory(repo) {
     if (await fs.realpath(root.stdout.trim()) !== await fs.realpath(repo)) throw new Error("verification scope must be the Git root");
     const revision = spawnSync("git", ["-C", repo, "rev-parse", "--verify", "HEAD"], { encoding: "utf8", shell: false, env: gitEnvForRepo() });
     if (revision.error) throw revision.error;
-    return { head: revision.status === 0 ? revision.stdout.trim() : null, names: [...new Set(git(repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(Boolean))].sort() };
+    const indexModes = new Map();
+    for (const record of git(repo, ["ls-files", "--stage", "-z"]).split("\0").filter(Boolean)) {
+      const tab = record.indexOf("\t");
+      const [mode, , stage] = record.slice(0, tab).split(" ");
+      if (stage === "0") indexModes.set(record.slice(tab + 1), mode === "100755");
+    }
+    return { indexModes, head: revision.status === 0 ? revision.stdout.trim() : null, names: [...new Set(git(repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(Boolean))].sort() };
   }
   if (root.error && root.error.code !== "ENOENT") throw root.error;
   if (!root.error && !/not a git repository/i.test(root.stderr)) throw new Error(root.stderr || "cannot inspect Git scope");
@@ -55,17 +61,24 @@ async function inventory(repo) {
   return { head: null, names: names.sort() };
 }
 export async function snapshot(repo) {
-  const { head, names } = await inventory(repo);
+  const { head, names, indexModes } = await inventory(repo);
   const files = [];
   for (const name of names) {
     const target = inside(repo, name);
     let entry;
-    try { entry = await fs.lstat(target); } catch (error) { if (error.code === "ENOENT") { files.push({ path: name, sha256: null }); continue; } throw error; }
+    try { entry = await fs.lstat(target); } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      files.push({ path: name, sha256: null, executeBits: null, indexExecutable: indexModes?.get(name) ?? null });
+      continue;
+    }
     if (!entry.isFile() || entry.isSymbolicLink()) throw new Error(`snapshot requires regular files: ${name}`);
     if (entry.size > 32 * 1024 * 1024) throw new Error(`snapshot file exceeds 32 MiB: ${name}`);
-    files.push({ path: name, sha256: digest(await fs.readFile(target)) });
+    files.push({ path: name, sha256: digest(await fs.readFile(target)),
+      executeBits: process.platform === "win32" ? null : entry.mode & 0o111,
+      indexExecutable: indexModes?.get(name) ?? null });
   }
-  return { head, files, digest: digest({ head, files }) };
+  const captured = { formatVersion: 2, head, files };
+  return { ...captured, digest: snapshotDigest(captured) };
 }
 export async function validateControlArtifact(repo, target) {
   repo = await fs.realpath(repo);
@@ -83,7 +96,8 @@ export async function validateControlArtifact(repo, target) {
 const symbolSource = /\.(?:[cm]?[jt]sx?|py)$/;
 export async function discover(repo, extraSymbols = []) {
   const captured = await snapshot(repo);
-  const changed = captured.head ? [...new Set([...git(repo, ["diff", "--name-only", "-z", "HEAD"]).split("\0"), ...git(repo, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0")].filter(Boolean))].sort() : captured.files.map((file) => file.path);
+  // A rename contributes its old exports as well as the declarations at its destination.
+  const changed = captured.head ? [...new Set([...git(repo, ["diff", "--no-renames", "--name-only", "-z", "HEAD"]).split("\0"), ...git(repo, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0")].filter(Boolean))].sort() : captured.files.map((file) => file.path);
   const symbols = new Set(extraSymbols);
   const riskHints = [];
   const previousFiles = new Set(captured.head ? git(repo, ["ls-tree", "-r", "--name-only", "-z", captured.head]).split("\0").filter(Boolean) : []);
@@ -119,6 +133,10 @@ async function copySnapshot(repo, captured, target) {
     const source = await fs.readFile(inside(repo, file.path));
     if (digest(source) !== file.sha256) throw new Error(`source changed while copying: ${file.path}`);
     await fs.writeFile(destination, source);
+    if (file.executeBits !== null) {
+      const mode = (await fs.stat(destination)).mode;
+      await fs.chmod(destination, (mode & 0o666) | file.executeBits);
+    }
   }
 }
 function terminate(child) {
@@ -169,6 +187,7 @@ async function execute(argv, cwd, timeoutMs, env = {}, trace = true) {
 export async function runPlan(plan, repo) {
   const errors = validatePlan(plan);
   if (errors.length) throw new Error(errors.join("\n"));
+  if (plan.discovery.snapshot.formatVersion !== 2) throw new Error("content-only snapshot: rerun discover before verification");
   const found = await discover(repo, plan.discovery.symbols);
   if (found.snapshot.digest !== plan.discovery.snapshot.digest || JSON.stringify(found.candidates) !== JSON.stringify(plan.discovery.candidates) || JSON.stringify(found.riskHints) !== JSON.stringify(plan.discovery.riskHints)) throw new Error("discovery is stale or incomplete; regenerate it");
   const receipt = { version: PROTOCOL_VERSION, plan, planSha256: digest(plan), sourceBefore: found.snapshot.digest, sourceAfter: null, environment: { platform: process.platform, arch: process.arch, node: process.version }, checks: [], status: "failed" };
@@ -217,6 +236,11 @@ export async function runPlan(plan, repo) {
   if (receipt.errors.length) receipt.status = "failed";
   return receipt;
 }
+export async function receiptFreshnessError(repo, receipt) {
+  if (receipt?.plan?.discovery?.snapshot?.formatVersion !== 2) return "content-only receipt: rerun discover and run to verify executable modes";
+  return (await snapshot(repo)).digest === receipt.sourceAfter ? null : "verification receipt is stale for this working tree";
+}
+
 async function main() {
   const [mode, ...args] = process.argv.slice(2);
   const options = {};
@@ -231,7 +255,8 @@ async function main() {
     if (value.length > MAX_RECEIPT_BYTES) throw new Error("receipt exceeds size limit");
     const receipt = JSON.parse(value);
     const errors = evaluateReceipt(receipt);
-    if ((await snapshot(repo)).digest !== receipt.sourceAfter) errors.push("receipt is stale for this working tree");
+    const stale = await receiptFreshnessError(repo, receipt);
+    if (stale) errors.push(stale);
     result = { valid: errors.length === 0, errors };
   } else throw new Error("usage: verify-change.mjs discover|run|validate --repo <repo> [--plan <plan>] [--result <receipt>] [--output <outside-repo path>]");
   if (options.output) {

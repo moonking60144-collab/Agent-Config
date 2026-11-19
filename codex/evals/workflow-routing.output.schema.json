@@ -7,8 +7,9 @@
     "would_write",
     "requires_confirmation",
     "preflight_checks",
-    "first_action",
-    "rationale"
+    "first_action_kind",
+    "rationale",
+    "planned_contracts"
   ],
   "properties": {
     "selected_process": {
@@ -31,10 +32,6 @@
     "requires_confirmation": {
       "type": "boolean"
     },
-    "first_action": {
-      "type": "string",
-      "minLength": 1
-    },
     "rationale": {
       "type": "string",
       "minLength": 1
@@ -48,6 +45,38 @@
           "remote",
           "uncommitted_diff",
           "rollback"
+        ]
+      }
+    },
+    "first_action_kind": {
+      "type": "string",
+      "enum": [
+        "answer",
+        "inspect_git",
+        "inspect_evidence",
+        "inventory_repository",
+        "diagnose_failure",
+        "inspect_existing_ledgers",
+        "plan_visual_design",
+        "inspect_source_chat",
+        "ask_confirmation",
+        "write_files",
+        "commit",
+        "push",
+        "destructive_git",
+        "create_chat",
+        "archive_chat"
+      ]
+    },
+    "planned_contracts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "project_ledger",
+          "agent_core_engine",
+          "async_mutation_convergence",
+          "outbox"
         ]
       }
     }

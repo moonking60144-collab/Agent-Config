@@ -246,6 +246,11 @@ const fences = [
   ["shorter tildes are not a closing fence", ["~~~~markdown", "~~~", flagged, "~~~", "~~~~"], false],
   ["closing fence cannot have an info string", [t3 + "text", t3 + "not-a-close", flagged, t3], false],
   ["outside prose remains checked", [t3, "code", t3, flagged], true],
+  ["four-space list fence ends before prose", ["1. item", "", "    " + t3, "    " + flagged, "    " + t3, "", flagged], true],
+  ["four-space list fence protects code", ["1. item", "", "    " + t3, "    " + flagged, "    " + t3, "", "正常"], false],
+  ["indented code does not open a top-level fence", ["    " + t3, "    " + flagged, "", flagged], true],
+  ["indented continuation of a paragraph is prose", ["Paragraph wrapped manually", "    " + flagged], true],
+  ["indented code after a blank line stays exempt", ["Paragraph", "", "    " + flagged], false],
   ["longer closing fence is accepted", [t3, "code", t4, flagged], true],
   ["closing whitespace is accepted", ["~~~text", "code", "  ~~~~ \t", flagged], true],
   ["four-space indentation cannot close backticks", [t3 + "text", "    " + t3, flagged, t3], false],
@@ -327,6 +332,39 @@ test("Windows backup JSON retires escaped paths before a cross-machine deploymen
   assert.ok(registered.some((hook) => hook.args?.includes(foreign.args[0])));
   assert.ok(!registered.some((hook) => hook.args?.includes("__CLAUDE_EVIDENCE_HOOK_PATH__")));
   await assert.rejects(fs.access(path.join(active, "hooks", "check-evidence.mjs")), { code: "ENOENT" });
+});
+
+test("backup and deployment preserve foreign same-name hooks and managed arguments", async (t) => {
+  const { active, repo, deploy } = await fixture(t);
+  const script = path.join(repoRoot, "scripts", "retire-claude-hooks.mjs");
+  const home = path.dirname(active);
+  const foreign = { type: "command", command: "node", args: [path.join(home, "personal", "check-traditional.mjs"), "--verify"] };
+  const managed = { type: "command", command: process.platform === "win32" ? "NODE" : "node", args: [path.join(active, "hooks", "check-traditional.mjs"), "--flag"] };
+  const argumentOnly = { type: "command", command: "node", args: ["other-tool.mjs", ...managed.args] };
+  const input = { hooks: { Stop: [{ hooks: [foreign, managed, argumentOnly] }] } };
+  const settings = path.join(repo, "claude", "settings.json");
+  if (process.platform === "win32") {
+    for (const name of ["backup.ps1", "scripts/retire-claude-hooks.mjs"]) await fs.copyFile(path.join(repoRoot, name), path.join(repo, name));
+    await fs.writeFile(path.join(active, "settings.json"), JSON.stringify(input));
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(repo, "backup.ps1")], {
+      cwd: repo, encoding: "utf8", env: { ...process.env, USERPROFILE: home, HOME: home, APPDATA: path.join(home, "AppData") },
+    });
+    assert.equal(result.status, 0, result.stderr);
+  } else {
+    const result = run(script, ["--target-dir", active], JSON.stringify(input));
+    assert.equal(result.status, 0, result.stderr);
+    await fs.writeFile(settings, result.stdout);
+  }
+  const backed = JSON.parse((await fs.readFile(settings, "utf8")).replace(/^\uFEFF/, ""));
+  assert.deepEqual(backed.hooks.Stop[0].hooks, [foreign, { ...managed, args: ["__CLAUDE_STOP_HOOK_PATH__", "--flag"] }, argumentOnly]);
+  // Deploy with the ordinary full template plus the exported Stop group.
+  const template = JSON.parse(await fs.readFile(path.join(repoRoot, "claude/settings.json"), "utf8"));
+  template.hooks.Stop = backed.hooks.Stop;
+  await fs.writeFile(settings, JSON.stringify(template));
+  const published = deploy();
+  assert.equal(published.status, 0, published.stderr);
+  const hooks = JSON.parse(await fs.readFile(path.join(active, "settings.json"), "utf8")).hooks.Stop.flatMap((g) => g.hooks);
+  for (const expected of [foreign, managed, argumentOnly]) assert.equal(hooks.filter((h) => JSON.stringify(h.args) === JSON.stringify(expected.args)).length, 1);
 });
 
 test("Backup hook retirement refuses malformed JSON without partial output", () => {

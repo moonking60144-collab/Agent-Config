@@ -60,17 +60,23 @@ flowchart LR
 
 部署：[Codex](scripts/deploy-codex.mjs) · [Claude](scripts/deploy-claude.mjs) · [完整環境](deploy.ps1)。
 Codex 設定部署只查找已安裝的 Serena，使用 `codex` context，不安裝／升級工具、不遷移其他專案；首次部署未找到 Serena 時略過該 MCP 區段。既有 `config.toml` 預設保留，設定遷移須另做精準修改與驗收，不用整份覆蓋保留模型及本機選項。Claude 的舊數值用詞 hook 已退役，部署會清理舊註冊與檔案。
-檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。Push 前由 [pre-push hook](.githooks/pre-push) 執行 Node 測試、validator 與 Python 測試；本機有列出 `plugin test` 的 Claude Code build 時也跑 mod 測試，找不到就印出略過訊息後放行；新 clone 先執行 `git config core.hooksPath .githooks` 啟用。
+檢查：[Codex validator](scripts/validate-codex.mjs) · [routing eval](scripts/run-codex-evals.mjs)。新 clone 先執行 `git config --local core.hooksPath .githooks`。Push 時，[pre-push hook](.githooks/pre-push) 會在隔離的 checkout 對每個待推的不同 commit 執行 Node 測試、validator 與 Python 測試。刪除 ref 時略過檢查。本機 Claude Code 有提供 `plugin test` 時也會執行 mod 測試，否則顯示略過原因。
 
 Session provenance 分開記錄建立 rollout 的 CLI 與 PATH CLI；沒有獨立的當輪宿主版本證據時，`sessionRuntimeVersion` 保持空值。
 
-Routing eval 用 `--codex-bin "/path/to/codex"` 指定實際使用的 Desktop／IDE／CLI 執行檔；未指定時解析 PATH。版本查詢與測試共用同一支執行檔，artifact 記錄其絕對路徑與版本。這層驗證 routing classifier，App 操作及原生 skill 啟用另行驗收。
+Routing eval 用 `--codex-bin "/path/to/codex"` 指定實際使用的 Desktop／IDE／CLI 執行檔；未指定時解析 PATH。版本查詢與測試共用同一支執行檔，artifact 記錄其絕對路徑與版本。分數來自結構化的第一步、計畫採用的契約、授權及實際觀察到的工具事件。自由文字理由供人工閱讀。分流結果只代表計畫。
 
-Claude mod 從本 repo 的 marketplace 安裝，需在終端機執行。以資料夾加入的 marketplace 會直接從 repo 資料夾讀取 plugin（`claude plugin list` 的 Read from 是 repo 路徑），修改後 `/reload-plugins` 或重開 session 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
+首次部署、宿主重要更新或 hook 定義變更後，執行 `node scripts/verify-codex-host.mjs`。它用本機 Codex app-server 檢查三個使用者 hook 的信任狀態，再用 localhost 模擬模型回覆，讓真正的 Codex CLI 對有效與過期證據各跑一次 Stop。若提示未信任，在 CLI 的 `/hooks` 核對定義，信任後重跑。[Codex hooks](https://developers.openai.com/codex/hooks#review-and-trust-hooks)
+
+Claude mod 從本 repo 的 marketplace 安裝。終端機需 Claude Code 2.1.287 以上，可用 `claude --version` 確認。[Claude mods 版本需求](https://code.claude.com/docs/en/plugins/mods#turn-mods-on-or-off)
+
+以資料夾加入的 marketplace 會直接從 repo 資料夾讀取 plugin（`claude plugin list` 的 Read from 是 repo 路徑），修改後 `/reload-plugins` 或重開 session 即生效。檢查紀錄寫在 `~/.claude/workflow/claim-check/<session>.jsonl`。
 
 ```text
 claude plugin marketplace add <本 repo 路徑>
 claude plugin install claim-check@agent-config
 ```
+
+執行 `node scripts/claim-check-stats.mjs` 可從本機紀錄彙整耗時、模型回報的 token、轉交數、待查數、主模型核實成立數與自報更正數。另列下一則主模型回答確實出現更正原句的筆數，以及有成功工具呼叫 ID 的操作數。主模型查證後以 `record_finding` 回報 ID 和證據，稍後可為已成立的項目補記更正。沒有逐項 ID 的舊提醒另計。沒有紀錄時，尚無資料可評估成效。
 
 其他機器也可用 `/plugin install claim-check --marketplace moonking60144-collab/Agent-Config` 從 GitHub 安裝。

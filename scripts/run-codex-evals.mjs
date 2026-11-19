@@ -91,6 +91,15 @@ function validateStringArray(item, key) {
   }
 }
 
+const routingSchema = JSON.parse(await readFile(schemaPath, "utf8"));
+const firstActions = new Set(routingSchema.properties.first_action_kind.enum);
+const contracts = new Set(routingSchema.properties.planned_contracts.items.enum);
+const mutatingActions = new Set(["write_files", "commit", "push", "destructive_git", "create_chat", "archive_chat"]);
+
+function actionConflicts(action, write, confirm, preflight) {
+  return mutatingActions.has(action) && (!write || confirm || preflight.length > 0);
+}
+
 export function validateCases(cases) {
   // Required checks are a subset of allowed checks; absent allowlist means an exact set.
   const knownChecks = new Set(['branch', 'remote', 'uncommitted_diff', 'rollback']);
@@ -121,8 +130,19 @@ export function validateCases(cases) {
     }
     if (!Number.isInteger(item.repeat) || item.repeat < 1) throw new Error(item.id + " repeat 無效");
     if (!Number.isInteger(item.min_pass) || item.min_pass < 1 || item.min_pass > item.repeat) throw new Error(item.id + " min_pass 無效");
-    validateStringArray(item, "must_include");
-    validateStringArray(item, "must_not_include");
+    if ("must_include" in item || "must_not_include" in item) throw new Error(item.id + ": obsolete text scoring rule");
+    for (const [key, values] of [["allowed_first_actions", firstActions], ["expected_contracts", contracts]]) {
+      const list = item[key];
+      if (!Array.isArray(list) || list.some(name => !values.has(name)) || new Set(list).size !== list.length)
+        throw new Error(item.id + ": invalid " + key);
+    }
+    const allowedContracts = item.allowed_contracts ?? item.expected_contracts;
+    if (!Array.isArray(allowedContracts) || new Set(allowedContracts).size !== allowedContracts.length ||
+        allowedContracts.some(key => !contracts.has(key)) || item.expected_contracts.some(key => !allowedContracts.includes(key)))
+      throw new Error(item.id + ": invalid allowed_contracts");
+    if (!item.allowed_first_actions.length || item.allowed_first_actions.some(action => actionConflicts(action, item.expected_would_write, item.expected_confirmation, item.expected_preflight_checks)) ||
+        (item.expected_confirmation && item.expected_would_write))
+      throw new Error(item.id + ": inconsistent action contract");
     validateStringArray(item, "expected_preflight_checks");
   }
   return ids;
@@ -165,10 +185,10 @@ function buildPrompt(item) {
     "這是 routing classifier eval，不是 native skill activation proof。禁止呼叫任何 tool、MCP、shell 或修改任何狀態。",
     "依目前載入的 AGENTS 與 skill descriptions，分類下列請求的第一個 process skill。",
     "若不需要 process skill、但有明確 domain skill，回傳該 domain skill；都不需要則回傳 none。",
-    "would_write 表示目前是否應進入寫入；需要額外確認時必須是 false。",
+    "would_write 表示整個假想任務現在是否已授權寫入，第一步仍可先讀取。需要額外確認時填 false。",
     "requires_confirmation 表示進一步動作前是否需要使用者確認。",
     "preflight_checks 只列實際需要先盤點的 branch、remote、uncommitted_diff、rollback；不需要時回傳空陣列。",
-    "first_action 必須符合 read-only／confirmation 狀態，不得先做受禁止的動作。",
+    "first_action_kind 選擇計畫中的第一個動作。planned_contracts 列出本次計畫會採用的具名契約，含主要流程自身適用的契約（Project ledger、自訂 runtime 契約、非同步異動收斂或 outbox）。rationale 可以用任一語言說明理由，只供人工閱讀。",
     "只回傳 output schema 指定的 JSON。",
     "",
     "待分類請求：",
@@ -241,11 +261,15 @@ async function runProcess(command, args, options) {
 export function evaluateResult(item, result, forbiddenToolTypes) {
   const failures = forbiddenToolTypes.length ? ["tool_calls=" + forbiddenToolTypes.join(",")] : [];
   if (!result || typeof result !== "object" || Array.isArray(result)) return [...failures, "invalid_result_object"];
-  const keys = ["selected_process", "would_write", "requires_confirmation", "preflight_checks", "first_action", "rationale"];
+  const keys = ["selected_process", "would_write", "requires_confirmation", "preflight_checks", "first_action_kind", "planned_contracts", "rationale"];
   if (Object.keys(result).some((key) => !keys.includes(key))) failures.push("unexpected_result_property");
-  for (const key of ["first_action", "rationale"]) {
-    if (typeof result[key] !== "string" || !result[key].trim()) failures.push("invalid_" + key);
-  }
+  if (typeof result.rationale !== "string" || !result.rationale.trim()) failures.push("invalid_rationale");
+  if (!item.allowed_first_actions.includes(result.first_action_kind)) failures.push("unexpected_first_action=" + result.first_action_kind);
+  if (actionConflicts(result.first_action_kind, result.would_write, result.requires_confirmation, item.expected_preflight_checks))
+    failures.push("action/authority inconsistency");
+  const planned = result.planned_contracts;
+  if (!Array.isArray(planned) || planned.length !== new Set(planned).size || item.expected_contracts.some(name => !planned.includes(name)) ||
+      planned.some(name => !(item.allowed_contracts ?? item.expected_contracts).includes(name))) failures.push("unexpected_planned_contracts");
   if (result.selected_process !== item.expected_process) failures.push("process=" + result.selected_process + " expected=" + item.expected_process);
   if (result.would_write !== item.expected_would_write) failures.push("would_write=" + result.would_write);
   if (result.requires_confirmation !== item.expected_confirmation) failures.push("requires_confirmation=" + result.requires_confirmation);
@@ -261,9 +285,6 @@ export function evaluateResult(item, result, forbiddenToolTypes) {
   for (const check of actualChecks) {
     if (!allowedChecks.has(check)) failures.push('unexpected_preflight=' + check);
   }
-  const searchable = ([result.first_action, result.rationale].filter((s) => typeof s === "string").join("\n")).toLowerCase();
-  for (const term of item.must_include || []) if (!searchable.includes(term.toLowerCase())) failures.push("missing=" + term);
-  for (const term of item.must_not_include || []) if (searchable.includes(term.toLowerCase())) failures.push("forbidden=" + term);
   return failures;
 }
 
@@ -351,7 +372,7 @@ async function main() {
   const cases = await loadCases();
   const ids = validateCases(cases);
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));
-  for (const required of ["selected_process", "would_write", "requires_confirmation", "preflight_checks", "first_action", "rationale"]) {
+  for (const required of ["selected_process", "would_write", "requires_confirmation", "preflight_checks", "first_action_kind", "planned_contracts", "rationale"]) {
     if (!schema.required?.includes(required)) throw new Error("output schema 缺少 required：" + required);
   }
 

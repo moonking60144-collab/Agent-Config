@@ -44,20 +44,40 @@ export async function assistantMessage(input) {
 export function visibleProse(text) {
   const kept = [];
   let fence = null;
-  for (const line of String(text ?? "").split(/\r?\n/)) {
-    const marker = line.match(/^[ \t]*(`{3,}|~{3,})(.*)$/);
+  let listIndents = [];
+  let inParagraph = false;
+  for (let line of String(text ?? "").split(/\r?\n/)) {
+    const expanded = line.replace(/^[ \t]*/, (prefix) => {
+      let width = 0;
+      for (const ch of prefix) width += ch === "\t" ? 4 - width % 4 : 1;
+      return " ".repeat(width);
+    });
+    const indent = expanded.match(/^ */)[0].length;
+    if (expanded.trim() && fence && indent < fence.base) fence = null;
     if (fence) {
-      if (marker && /^ {0,3}\S/.test(line) && marker[1][0] === fence.character
-        && marker[1].length >= fence.length && /^[ \t]*$/.test(marker[2])) {
-        fence = null;
-      }
+      const close = expanded.slice(fence.base).match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
+      if (close && close[1][0] === fence.character && close[1].length >= fence.length) fence = null;
       continue;
     }
+    if (expanded.trim()) listIndents = listIndents.filter((base) => base <= indent);
+    let base = listIndents.at(-1) ?? 0;
+    line = expanded.slice(base);
+    const item = line.match(/^ {0,3}(?:[-+*]|\d{1,9}[.)]) {1,4}(?=\S|$)/);
+    if (item) {
+      inParagraph = false;
+      base += item[0].length;
+      listIndents.push(base);
+      line = line.slice(item[0].length);
+    }
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (marker && (marker[1][0] === "~" || !marker[2].includes("`"))) {
-      fence = { character: marker[1][0], length: marker[1].length };
+      fence = { character: marker[1][0], length: marker[1].length, base };
+      inParagraph = false;
       continue;
     }
+    if (!inParagraph && line.startsWith("    ")) continue;
     kept.push(line.replace(/`[^`\n]*`/g, "").replace(/https?:\/\/\S+/g, ""));
+    inParagraph = Boolean(line.trim());
   }
   return kept.join("\n");
 }

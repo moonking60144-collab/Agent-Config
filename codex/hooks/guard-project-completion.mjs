@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import path from "node:path";
 import {
-  findMatchingLedgers,
+  canonicalPath,
   boundedFileSha256,
   legacyCompletionBaseline,
-  readSessionProvenance,
-  resolveSessionLedger,
+  sessionLedgerContext,
+  strictBindingMarker,
   readHookInput,
 } from "./project-ledger-lib.mjs";
 import { evaluateLedgerCompletion } from "./validate-project-ledger.mjs";
@@ -21,9 +20,8 @@ async function main() {
   const input = await readHookInput();
   if (input.stop_hook_active === true || !input.session_id) return continueTurn();
 
-  const { scopeRoot, ledgers } = await findMatchingLedgers(input.cwd || process.cwd());
-  const provenance = await readSessionProvenance(scopeRoot, input.session_id);
-  const { ledgerPath, ledger } = resolveSessionLedger(provenance, ledgers);
+  const { scopeRoot, ledgers, provenance, ledgerPath, ledger } =
+    await sessionLedgerContext(input.cwd || process.cwd(), input.session_id);
   if (!ledger) {
     if (ledgerPath) return continueTurn(`Project completion guard could not resolve the session-bound ledger: ${ledgerPath}`);
     const legacy = legacyCompletionBaseline(provenance);
@@ -37,9 +35,10 @@ async function main() {
   if (ledger.status !== "complete") return continueTurn();
 
   // A checkout can host several independent tasks. Only an explicit binding assigns this Stop.
-  const matches = (file) => path.resolve(file) === path.resolve(ledger.filePath);
-  const knownStrict = provenance.strictLedgerPaths?.some(matches)
-    || provenance.baselineLedgers?.some((item) => item.strictVerificationRequired && matches(item.filePath));
+  const strictPaths = [...(provenance?.strictLedgerPaths ?? []),
+    ...(provenance?.baselineLedgers ?? []).filter((item) => item.strictVerificationRequired).map((item) => item.filePath)];
+  const knownStrict = (await Promise.all(strictPaths.map(canonicalPath))).includes(ledger.filePath)
+    || await boundedFileSha256(strictBindingMarker(input.session_id, ledger.filePath)) !== null;
   const result = await evaluateLedgerCompletion(ledger.filePath, scopeRoot, {
     requireEvidencePolicy: true, requireCompletionPolicy: true, requireVerification: Boolean(knownStrict),
   });
@@ -52,10 +51,10 @@ async function main() {
 }
 
 async function legacyCompletionChanged(baseline, ledgers) {
-  const previous = new Map(baseline.map((item) => [path.resolve(item.filePath), item]));
+  const previous = new Map(await Promise.all(baseline.map(async (item) => [await canonicalPath(item.filePath), item])));
   for (const ledger of ledgers) {
     if (ledger.status !== "complete") continue;
-    const before = previous.get(path.resolve(ledger.filePath));
+    const before = previous.get(ledger.filePath);
     if (!before || before.updatedAt !== ledger.updatedAt) return true;
     if (before.contentSha256 !== undefined &&
         before.contentSha256 !== createHash("sha256").update(ledger.content).digest("hex")) return true;

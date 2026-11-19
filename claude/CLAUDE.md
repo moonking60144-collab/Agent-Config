@@ -86,7 +86,7 @@
 - 依本輪要求的成果與語意判斷實作授權，不以特定動詞為準；commit 或 push 仍須使用者明確要求。
 - Commit message 依專案既有語言，使用 Conventional Commits；不加入任何 AI attribution（`Co-Authored-By: Claude`、`Generated with Claude Code` 之類），PR 描述、issue comment 與 release notes 同樣不加：公開 repo 的 Co-author 徽章會影響作品集評估。
 - 不使用 `--no-verify` 或 `--no-gpg-sign` 繞過 hook，除非使用者明確要求。
-- `git reset --hard`、force push、刪檔、刪分支、覆寫未提交變更、production deploy、資料 migration、外部寫入與其他不可逆操作，執行前先取得明確確認。
+- 本輪建立的暫存產物，確認歸屬及無後續依賴後可在原授權內清理。刪除既有檔案或分支、覆寫未提交變更、`git reset --hard`、force push、production deploy、資料 migration、外部寫入與其他不可逆操作，須有使用者明確授權涵蓋具體對象與範圍。
 - 會動到認證、DNS、網路存取層或使用者目前 session 的操作，步驟前先列前提清單（本機 admin、備援登入路徑、第二個獨立 session、備份）；執行前逐項確認。
 - 工作樹出現非本次產生的未預期變更時停止，先讓使用者決定如何處理。
 

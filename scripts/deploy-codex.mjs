@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { optionalMcpCommands } from "./optional-mcp.mjs";
 import {
   access,
   copyFile,
@@ -335,13 +336,16 @@ async function renderConfigTemplate() {
     throw new Error("找不到 npx，無法展開 Codex MCP command");
   }
 
-  const serena = await resolveSerenaCommand();
-  if (!serena) {
-    const start = text.indexOf("[mcp_servers.serena]");
-    if (start < 0) throw new Error("找不到 Serena template 區段");
-    const end = text.indexOf("\n[", start + 1);
-    text = text.slice(0, start) + (end < 0 ? "" : text.slice(end + 1));
-    console.log("  [略過] Serena 尚未安裝；本輪不加入 Serena MCP，安裝／升級及專案遷移須另行執行。");
+  const executables = { serena: await resolveSerenaCommand() };
+  for (const [name, token] of Object.entries(optionalMcpCommands)) {
+    if (executables[name]) {
+      text = text.replaceAll(token, executables[name].split(path.sep).join("/"));
+    } else {
+      const section = "[mcp_servers." + name;
+      if (!text.includes(section + "]")) throw new Error("Missing optional MCP template: " + name);
+      text = text.split(/(?=^\[)/m).filter(part => !part.startsWith(section + "]") && !part.startsWith(section + ".")).join("");
+      console.log("  [略過] " + name + " 尚未安裝；本輪不加入該 MCP。");
+    }
   }
   const terminalShell =
     process.platform === "win32"
@@ -351,7 +355,6 @@ async function renderConfigTemplate() {
         : "bash";
 
   text = text
-    .replaceAll("__SERENA_COMMAND__", serena ? serena.split(path.sep).join("/") : "")
     .replaceAll("__NPX_COMMAND__", npx.split(path.sep).join("/"))
     .replaceAll("__CODEX_TERMINAL_SHELL__", terminalShell);
 

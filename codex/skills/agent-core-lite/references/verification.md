@@ -76,7 +76,7 @@ Git repo 的 scope-root 必須是 repo 根目錄；探索記錄 tracked／untrac
 
 Ledger、sidecar、plan 與 receipt 預設放在 source scope 外。Repo-local 控制產物只有在 discovery 前已是 untracked 且 Git-ignored 才受支援；CLI 允許輸出到該處，完成驗證採相同放置檢查。Tracked 控制產物須移到 scope 外，不能靜默排除於原始碼 hashes。非 Git 資料夾使用外部控制產物。如此更新完成狀態才不會使自己的快照失效。
 
-每個探索出的候選都須對應檢查或具體排除理由。文字式 performance／stateful 提示須有 riskDecisions:[{kind,checks,reason}]，指定適用檢查或具體不適用理由。文字提示不是完整語意探索：重要時使用 compiler／LSP references、registrations 與 runtime traces。Snapshot 目前拒絕 symlinks、非一般檔案及超過 32 MiB 的檔案。原生測試可補充證據，但不能繞過嚴格完成檢查；沒有合適、受支援的 adapter 前，該 scope 的嚴格 receipt 保持未通過，其他有效證據依適用層級分開回報。不為取得通過而靜默縮小任務範圍。
+每個探索出的候選都須對應檢查或具體排除理由。文字式 performance／stateful 提示須有 riskDecisions:[{kind,checks,reason}]，指定適用檢查或具體不適用理由。文字提示不是完整語意探索：重要時使用 compiler／LSP references、registrations 與 runtime traces。Snapshot v2 納入 Git index 的 executable bit，以及 POSIX 工作樹檔案的執行權限；隔離驗證保留後者。舊 receipt 仍可查閱歷史檢查，要證明目前工作樹則須重新 discover／run。Snapshot 目前拒絕 symlinks、非一般檔案及超過 32 MiB 的檔案。原生測試可補充證據，但不能繞過嚴格完成檢查；沒有合適、受支援的 adapter 前，該 scope 的嚴格 receipt 保持未通過，其他有效證據依適用層級分開回報。不為取得通過而靜默縮小任務範圍。
 
 預設 trace adapter 從實際 subprocess tree 收集 Node V8 executed-file coverage。列入覆蓋但未被觀察到的 consumer 會阻擋 receipt。檔案執行覆蓋只能證明模組跑過，不代表每個分支或必要副作用都發生。其他語言可使用 trace:"probe"，由原生 coverage／trace adapter 輸出 observedConsumers；這是 probe 回報的證據，須對照實際 producer 審查。手填陣列不構成 trace 證據。
 

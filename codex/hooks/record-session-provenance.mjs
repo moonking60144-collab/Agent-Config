@@ -6,11 +6,12 @@ import os from "node:os";
 import path from "node:path";
 import {
   canonicalPath,
-  findMatchingLedgers,
+  findGitRoot,
   ledgerRequiresStrictVerification,
   legacyCompletionBaseline,
-  readSessionProvenance,
-  resolveSessionLedger,
+  sessionLedgerContext,
+  sessionBindingPath,
+  strictBindingMarker,
   sessionProvenancePath,
   boundedFileSha256,
   readHookInput,
@@ -92,26 +93,27 @@ async function atomicWrite(filePath, value) {
 async function main() {
   const input = await readHookInput();
   const cwd = path.resolve(input.cwd || process.cwd());
-  const { scopeRoot, ledgers } = await findMatchingLedgers(cwd);
+  const explicitBind = Object.hasOwn(input, "ledger_path");
+  const { scopeRoot, ledgers, bindingCwd, provenance: previous, ledgerPath: storedPath } =
+    await sessionLedgerContext(cwd, input.session_id, explicitBind);
   const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
   const filePath = sessionProvenancePath(scopeRoot, input.session_id);
   if (!filePath) return;
-  const previous = await readSessionProvenance(scopeRoot, input.session_id);
-  let { ledgerPath } = resolveSessionLedger(previous, ledgers);
-  if (Object.hasOwn(input, "ledger_path")) {
+  let ledgerPath = storedPath;
+  if (explicitBind) {
     if (typeof input.ledger_path !== "string" || !input.ledger_path.trim()) throw new Error("ledger_path must not be blank");
     const requestedPath = await canonicalPath(input.ledger_path);
-    const candidatePaths = await Promise.all(ledgers.map((candidate) => canonicalPath(candidate.filePath)));
-    const selected = ledgers.find((candidate, index) => candidatePaths[index] === requestedPath);
+    const selected = ledgers.find((candidate) => candidate.filePath === requestedPath);
     if (!selected) throw new Error("ledger_path must identify a ledger for the current checkout");
     ledgerPath = selected.filePath;
   }
+  const eventScope = await findGitRoot(cwd) || cwd;
   const [globalInstruction, config, hooks, skills, projectAgents] = await Promise.all([
     preferredInstruction(codexHome),
     boundedFileSha256(path.join(codexHome, "config.toml")),
     boundedFileSha256(path.join(codexHome, "hooks.json")),
     digestTree(path.join(codexHome, "skills")),
-    projectAgentDigests(scopeRoot, cwd),
+    projectAgentDigests(eventScope, cwd),
   ]);
   const rolloutCreationCliVersion = previous?.rolloutCreationCliVersion ?? await readRolloutCreationCliVersion(codexHome, input);
   const event = {
@@ -121,7 +123,7 @@ async function main() {
     model: input.model || null,
     permissionMode: input.permission_mode || null,
     cwd,
-    scopeRoot,
+    scopeRoot: eventScope,
     ledgerPath,
     instructionDiscoveryEvidence: "observed_standard_files_only",
     digests: {
@@ -139,9 +141,16 @@ async function main() {
     ...(await Promise.all(ledgers.map(async (candidate) => await ledgerRequiresStrictVerification(candidate) ? candidate.filePath : null))).filter(Boolean),
   ])];
 
+  if (ledgerPath && (await Promise.all(strictLedgerPaths.map(canonicalPath))).includes(ledgerPath)) {
+    const marker = strictBindingMarker(input.session_id, ledgerPath);
+    await fs.mkdir(path.dirname(marker), { recursive: true });
+    await fs.writeFile(marker, "", { flag: "a" });
+  }
   await atomicWrite(filePath, {
     schemaVersion: 2,
     sessionId: input.session_id || null,
+    bindingCwd: ledgerPath ? bindingCwd : null,
+    bindingScope: ledgerPath ? scopeRoot : null,
     ledgerPath,
     startedAt: previous?.startedAt || event.recordedAt,
     strictLedgerPaths,
@@ -155,6 +164,7 @@ async function main() {
     observabilityLimit: "Codex hooks expose active files and lifecycle input, not native skill/reference activation telemetry.",
     events: [...(Array.isArray(previous?.events) ? previous.events : []), event],
   });
+  if (explicitBind) await atomicWrite(sessionBindingPath(input.session_id), { sessionId: input.session_id, cwd: bindingCwd, scopeRoot, ledgerPath });
 }
 
 main().catch((error) => {

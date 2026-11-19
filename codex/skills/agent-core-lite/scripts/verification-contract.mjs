@@ -8,6 +8,11 @@ const text = (value) => typeof value === "string" && value.trim().length > 0;
 const sha = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const strings = (value) => Array.isArray(value) && value.every(text);
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+export function snapshotDigest({ formatVersion, head, files }) {
+  if (formatVersion === undefined) return digest({ head, files }); // historical content-only receipt
+  if (formatVersion !== 2) throw new Error("unsupported snapshot format");
+  return digest({ formatVersion, head, files });
+}
 const sourceKey = (value) => {
   const normalized = path.posix.normalize(value.replaceAll("\\", "/"));
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
@@ -24,7 +29,7 @@ function validatePlanShape(plan) {
   const errors = [];
   if (!object(plan) || plan.version !== PROTOCOL_VERSION) return ["unsupported verification plan"];
   if (!object(plan.discovery) || !sha(plan.discovery.snapshot?.digest) || !Array.isArray(plan.discovery.candidates)) return ["machine discovery snapshot is required"];
-  if (plan.discovery.snapshot.digest !== digest({ head: plan.discovery.snapshot.head, files: plan.discovery.snapshot.files })) errors.push("discovery snapshot digest mismatch");
+  if (plan.discovery.snapshot.digest !== snapshotDigest(plan.discovery.snapshot)) errors.push("discovery snapshot digest mismatch");
   if (!Array.isArray(plan.checks) || plan.checks.length === 0 || plan.checks.length > 64) return ["checks must contain 1..64 entries"];
   const ids = new Set();
   for (const check of plan.checks) {

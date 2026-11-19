@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { optionalMcpCommands } from "./optional-mcp.mjs";
 import {
   access,
   readFile,
@@ -168,6 +169,8 @@ if not isinstance(servers, dict):
     errors.append("mcp_servers must be a table")
     servers = {}
 for name, settings in expected.get("mcp_servers", {}).items():
+    if name in json.loads(sys.argv[3]) and name not in servers:
+        continue  # First-time deployment omits this optional local executable.
     prefix = "mcp_servers." + name
     live = servers.get(name)
     if not isinstance(live, dict):
@@ -190,7 +193,7 @@ for name, settings in expected.get("mcp_servers", {}).items():
             errors.append(prefix + ".command cannot resolve to an executable")
 print(json.dumps(errors))
 `;
-  const result = runPython(python, code, [path.join(sourceRoot, "config.toml"), target]);
+  const result = runPython(python, code, [path.join(sourceRoot, "config.toml"), target, JSON.stringify(Object.keys(optionalMcpCommands))]);
   if (result.error || result.status !== 0) {
     fail("active config contract 無法驗證：" + (result.stderr || result.error?.message || result.stdout));
     return;
@@ -327,8 +330,8 @@ function validateTomlPolicy(text, label, options = {}) {
     "features",
     "agents",
     "mcp_servers.context7",
-    "mcp_servers.serena",
   ];
+  if (options.template) requiredSections.push(...Object.keys(optionalMcpCommands).map(name => "mcp_servers." + name));
 
   for (const section of requiredSections) {
     const escaped = section.replace(/[.*+?^()|[\]\\{}$]/g, "\\$&");
@@ -343,7 +346,7 @@ function validateTomlPolicy(text, label, options = {}) {
 
   const tokens = [
     "__NPX_COMMAND__",
-    "__SERENA_COMMAND__",
+    ...Object.values(optionalMcpCommands),
     "__SYSTEM_ROOT__",
     "__CODEX_TERMINAL_SHELL__",
   ];

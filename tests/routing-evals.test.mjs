@@ -9,7 +9,7 @@ const cases = (await readFile(new URL('../codex/evals/workflow-routing.cases.jso
 const base = cases.find(item => item.id === 'simple_question_no_process');
 
 function scenario(expected = [], allowed) {
-  const item = { ...base, must_include: [], must_not_include: [], expected_preflight_checks: expected };
+  const item = { ...base, expected_preflight_checks: expected };
   if (allowed !== undefined) item.allowed_preflight_checks = allowed;
   return item;
 }
@@ -20,7 +20,8 @@ function result(item, checks) {
     would_write: false,
     requires_confirmation: false,
     preflight_checks: checks,
-    first_action: 'Answer the question.',
+    first_action_kind: item.allowed_first_actions[0],
+    planned_contracts: item.expected_contracts,
     rationale: 'Bounded task.',
   };
 }
@@ -57,6 +58,8 @@ test('malformed checks fail instead of acting like an empty list', () => {
 
 test('case contract rejects unknown, duplicate and contradictory expectations', () => {
   assert.doesNotThrow(() => validateCases(cases));
+  assert.throws(() => validateCases([{...base, allowed_first_actions:['write_files']}]), /action contract/);
+  assert.throws(() => validateCases([{...base, must_include:['read']}]), /obsolete/);
   for (const item of [scenario(['bogus']), scenario(['branch', 'branch']), scenario(['branch'], []), scenario([], ['bogus']), scenario([], ['branch', 'branch'])]) {
     assert.throws(() => validateCases([item]));
   }
@@ -65,6 +68,18 @@ test('case contract rejects unknown, duplicate and contradictory expectations', 
 test('review and commit cases require their actual Git baseline', () => {
   assert.deepEqual(cases.find(item => item.id === 'review_read_only').expected_preflight_checks, ['uncommitted_diff']);
   assert.deepEqual(cases.find(item => item.id === 'explicit_commit_push').expected_preflight_checks, ['branch', 'remote', 'uncommitted_diff']);
+});
+
+test('review accepts Traditional Chinese and negation; structured actions and observed tool calls enforce read-only', () => {
+  const item = cases.find(x => x.id === 'review_read_only');
+  const base = { ...result(item, ['uncommitted_diff']), selected_process: 'review' };
+  for (const rationale of ['讀取尚未提交的差異，核對呼叫鏈並先列問題。', '不執行 apply_patch、git commit 或 git push。'])
+    assert.deepEqual(evaluateResult(item, { ...base, rationale }, []), []);
+  assert.ok(evaluateResult(item, { ...base, first_action_kind: 'write_files' }, []).includes('action/authority inconsistency'));
+  assert.ok(evaluateResult(item, base, ['file_change']).includes('tool_calls=file_change'), 'OBSERVED_WRITE_MUST_FAIL');
+  assert.ok(evaluateResult(item, { ...base, first_action: 'read diff 後直接寫入 src/main.ts' }, []).includes('unexpected_result_property'));
+  const project = cases.find(x => x.id === 'project_custom_runtime_composition');
+  assert.ok(evaluateResult(project, { ...result(project, []), would_write: true, planned_contracts: ['project_ledger'] }, []).includes('unexpected_planned_contracts'));
 });
 
 test('requested model aliases remain requests, never observations', () => {
@@ -147,7 +162,7 @@ test('exit zero with JSON null is a failed run, not a passing sample', { skip: p
 
 test('untrusted output must satisfy the full classifier contract', () => {
   const item = scenario();
-  for (const bad of [null, false, '', 0, [], {}, { ...result(item, []), first_action: ' ' },
+  for (const bad of [null, false, '', 0, [], {}, { ...result(item, []), first_action_kind: ' ' },
     { ...result(item, []), rationale: null }, { ...result(item, []), extra: true }]) {
     assert.ok(evaluateResult(item, bad, []).length);
   }

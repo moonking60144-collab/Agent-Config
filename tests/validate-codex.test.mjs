@@ -34,6 +34,14 @@ test("Canonical validator distinguishes portable drift from runtime selections",
   };
   const baseline = await run(config);
   assert.equal(baseline.status, 0, baseline.stderr || baseline.stdout);
+  const withoutServer = (name) => config.split(/(?=^\[)/m)
+    .filter((part) => !part.startsWith("[mcp_servers." + name + "]") && !part.startsWith("[mcp_servers." + name + "."))
+    .join("");
+  const optional = await run(withoutServer("serena"));
+  assert.equal(optional.status, 0, optional.stderr || optional.stdout);
+  const required = await run(withoutServer("context7"));
+  assert.equal(required.status, 1);
+  assert.match(required.stderr, /mcp_servers\.context7/);
   const bom = await run("\uFEFF" + config);
   assert.equal(bom.status, 0, bom.stderr || bom.stdout);
 

@@ -25,6 +25,9 @@ OBSERVED = set()
 
 class UiUxIntegration(unittest.TestCase):
     def setUp(self):
+        # Direct imports must leave the vendored tree identical to its file manifest.
+        self.addCleanup(setattr, sys, "dont_write_bytecode", sys.dont_write_bytecode)
+        sys.dont_write_bytecode = True
         self.workspace = tempfile.TemporaryDirectory(prefix="ui ux integration ")
         self.addCleanup(self.workspace.cleanup)
         self.cwd = Path(self.workspace.name)

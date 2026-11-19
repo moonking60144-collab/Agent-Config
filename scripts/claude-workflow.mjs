@@ -52,7 +52,6 @@ function adaptProjectHook(text, name) {
   if (name === "project-ledger-lib.mjs") {
     text = replaceRequired(text, 'import path from "node:path";',
       'import path from "node:path";\nimport { fileURLToPath } from "node:url";\nconst workflowProjects = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "workflow", "projects");');
-    text = replaceRequired(text, 'path.join(os.homedir(), ".codex", "projects", slug)', 'path.join(workflowProjects, slug)');
     text = replaceRequired(text, 'path.join(os.homedir(), ".codex", "projects")', 'workflowProjects');
     text = text.replaceAll('", ".codex", "ledgers"', '", ".claude", "ledgers"')
       .replaceAll(', ".codex", "ledgers"', ', ".claude", "ledgers"')
@@ -110,38 +109,69 @@ export async function prepareClaudeWorkflow(repoRoot, targetDir) {
   return { files, skillNames };
 }
 
+function hookPlatform(targetDir) {
+  return /^[A-Z]:[\\/]|^\\\\/i.test(targetDir) ? path.win32 : path.posix;
+}
+
+export function managedHookPaths(targetDir) {
+  return new Map(Object.entries({
+    __CLAUDE_PROVENANCE_HOOK_PATH__: "record-session-provenance.mjs",
+    __CLAUDE_RESUME_HOOK_PATH__: "resume-project-ledger.mjs",
+    __CLAUDE_COMPLETION_HOOK_PATH__: "guard-project-completion.mjs",
+    __CLAUDE_STOP_HOOK_PATH__: "check-traditional.mjs",
+    __CLAUDE_HANDOFF_HOOK_PATH__: "resume-handoff.mjs",
+  }).map(([token, name]) => [token, hookPlatform(targetDir).join(targetDir, "hooks", name)]));
+}
+
+function hookPathKey(file, targetDir) {
+  const value = String(file ?? "");
+  return hookPlatform(targetDir) === path.win32 ? value.replaceAll("\\", "/").toLowerCase() : value;
+}
+
+export function isNodeHook(hook, targetDir) {
+  return hookPathKey(hook.command, targetDir) === "node";
+}
+
 export function removeRetiredClaudeHooks(hooks, targetDir) {
-  const windows = process.platform === "win32" || /^[A-Za-z]:[\\/]|^\\\\/.test(targetDir);
-  const normalize = (value) => {
-    const normalized = String(value ?? "").replaceAll("\\", "/");
-    return windows ? normalized.toLowerCase() : normalized;
-  };
+  const normalize = (value) => hookPathKey(value, targetDir);
   const retired = new Set([
     `${targetDir.replace(/[\\/]$/, "")}/hooks/check-evidence.mjs`,
     "__USERPROFILE__/.claude/hooks/check-evidence.mjs", "__CLAUDE_EVIDENCE_HOOK_PATH__",
   ].map(normalize));
   return Object.fromEntries(Object.entries(hooks ?? {}).map(([event, groups]) => [event,
     groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) =>
-      !hook.args?.some((argument) => retired.has(normalize(argument))) &&
+      !(isNodeHook(hook, targetDir) && retired.has(normalize(hook.args?.[0]))) &&
       ![...retired].some((file) => normalize(hook.command) === `node "${file}"`)
     ) })).filter((group) => group.hooks.length),
   ]));
 }
 
+export function portableClaudeHooks(hooks, targetDir) {
+  const result = removeRetiredClaudeHooks(hooks, targetDir);
+  const tokens = new Map([...managedHookPaths(targetDir)]
+    .map(([token, file]) => [hookPathKey(file, targetDir), token]));
+  for (const group of Object.values(result).flat()) {
+    for (const hook of group.hooks) {
+      if (!isNodeHook(hook, targetDir) || !Array.isArray(hook.args)) continue;
+      const token = tokens.get(hookPathKey(hook.args[0], targetDir));
+      if (token) hook.args = [token, ...hook.args.slice(1)];
+    }
+  }
+  return result;
+}
+
 export function mergeClaudeHooks(existing, managed, targetDir) {
   existing = removeRetiredClaudeHooks(existing, targetDir);
   managed = removeRetiredClaudeHooks(managed, targetDir);
-  const owned = new Set([
-    "check-traditional.mjs", "record-session-provenance.mjs",
-    "resume-project-ledger.mjs", "guard-project-completion.mjs", "resume-handoff.mjs",
-  ].map((name) => path.join(targetDir, "hooks", name)));
+  const owned = [...managedHookPaths(targetDir).values()];
+  const ownedPaths = new Set(owned.map((file) => hookPathKey(file, targetDir)));
   // Hooks identical to a template entry were published by an earlier deploy, even without args.
   const templateHooks = new Set(Object.values(managed).flat().flatMap((group) => group.hooks).map((hook) => JSON.stringify(hook)));
   const result = {};
   for (const [event, groups] of Object.entries(existing ?? {})) {
     result[event] = groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) => {
       if (templateHooks.has(JSON.stringify(hook))) return false;
-      if (Array.isArray(hook.args)) return !hook.args.some((argument) => owned.has(argument));
+      if (Array.isArray(hook.args)) return !(isNodeHook(hook, targetDir) && ownedPaths.has(hookPathKey(hook.args[0], targetDir)));
       return ![...owned].some((file) => hook.command === `node "${file}"`);
     }) })).filter((group) => group.hooks.length);
   }

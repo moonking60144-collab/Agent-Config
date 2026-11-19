@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { prepareClaudeWorkflow, mergeClaudeHooks } from "./claude-workflow.mjs";
+import { prepareClaudeWorkflow, mergeClaudeHooks, managedHookPaths, isNodeHook } from "./claude-workflow.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDir);
@@ -20,7 +20,7 @@ const sourceDir = path.join(repoRoot, "claude");
 const targetDir = path.join(home, ".claude");
 const hookTarget = path.join(targetDir, "hooks", "check-traditional.mjs");
 const retiredHookTarget = path.join(targetDir, "hooks", "check-evidence.mjs");
-const managedHookPaths = ["lib/prose.mjs", "check-traditional.mjs", "resume-handoff.mjs"];
+const directHookFiles = ["lib/prose.mjs", "check-traditional.mjs", "resume-handoff.mjs"];
 const backupDir = path.join(targetDir, "backups", "deploy-claude");
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -80,22 +80,16 @@ const [existing, template, instructions] = await Promise.all([
   fs.readFile(path.join(sourceDir, "CLAUDE.md"), "utf8"),
 ]);
 
-const hooks = await Promise.all(managedHookPaths.map(async (relativePath) => ({
+const hooks = await Promise.all(directHookFiles.map(async (relativePath) => ({
   target: path.join(targetDir, "hooks", relativePath),
   content: await fs.readFile(path.join(sourceDir, "hooks", relativePath), "utf8"),
 })));
 const workflow = await prepareClaudeWorkflow(repoRoot, targetDir);
-const hookTokens = new Map([
-  ["__CLAUDE_PROVENANCE_HOOK_PATH__", path.join(targetDir, "hooks", "record-session-provenance.mjs")],
-  ["__CLAUDE_RESUME_HOOK_PATH__", path.join(targetDir, "hooks", "resume-project-ledger.mjs")],
-  ["__CLAUDE_COMPLETION_HOOK_PATH__", path.join(targetDir, "hooks", "guard-project-completion.mjs")],
-  ["__CLAUDE_STOP_HOOK_PATH__", hookTarget],
-  ["__CLAUDE_HANDOFF_HOOK_PATH__", path.join(targetDir, "hooks", "resume-handoff.mjs")],
-]);
+const hookTokens = managedHookPaths(targetDir);
 for (const group of Object.values(template.hooks).flat()) {
   for (const hook of group.hooks) {
-    if (Array.isArray(hook.args)) {
-      hook.args = hook.args.map((argument) => hookTokens.get(argument) ?? argument);
+    if (isNodeHook(hook, targetDir) && hookTokens.has(hook.args?.[0])) {
+      hook.args[0] = hookTokens.get(hook.args[0]);
     }
   }
 }

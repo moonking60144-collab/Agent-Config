@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { discover, runPlan, gitEnvForRepo } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
-import { evaluateReceipt, validatePlan } from "../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
+import { discover, runPlan, gitEnvForRepo, receiptFreshnessError } from "../codex/skills/agent-core-lite/scripts/verify-change.mjs";
+import { digest, evaluateReceipt, validatePlan } from "../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
 import { validateEvidenceLinks } from "../codex/skills/agent-core-lite/scripts/verification-contract.mjs";
 
 const cli = fileURLToPath(new URL("../codex/skills/agent-core-lite/scripts/verify-change.mjs", import.meta.url));
@@ -63,6 +63,70 @@ test("deleted exports and deleted files retain their caller discovery", async (t
   await fs.rm(path.join(repo, "owner.mjs"));
   const removedFile = await discover(repo);
   assert.ok(removedFile.candidates.includes("routes/admin.mjs"));
+});
+
+test("changing only the Git executable bit invalidates a current receipt", async t => {
+  const { repo, plan } = await fixture(t);
+  const receipt = await runPlan(plan, repo);
+  assert.equal(receipt.status, "passed");
+  const result = spawnSync("git", ["-C", repo, "-c", "core.filemode=false", "update-index", "--chmod=+x", "probe.mjs"], { env: gitEnvForRepo() });
+  assert.equal(result.status, 0);
+  assert.match(await receiptFreshnessError(repo, receipt) ?? "", /stale/, "MODE_ONLY_MUST_INVALIDATE");
+  const current = await discover(repo);
+  const oldProbe = plan.discovery.snapshot.files.find(f => f.path === "probe.mjs");
+  const newProbe = current.snapshot.files.find(f => f.path === "probe.mjs");
+  assert.equal(newProbe.sha256, oldProbe.sha256);
+  assert.equal(newProbe.indexExecutable, true);
+  assert.notEqual(current.snapshot.digest, plan.discovery.snapshot.digest);
+  const legacy = structuredClone(receipt);
+  const snapshot = legacy.plan.discovery.snapshot;
+  snapshot.files = snapshot.files.map(({path,sha256}) => ({path,sha256}));
+  delete snapshot.formatVersion;
+  snapshot.digest = digest({head:snapshot.head, files:snapshot.files});
+  legacy.sourceBefore = legacy.sourceAfter = snapshot.digest;
+  legacy.planSha256 = digest(legacy.plan);
+  assert.deepEqual(evaluateReceipt(legacy), []); // historical checks remain readable
+  assert.match(await receiptFreshnessError(repo, legacy), /content-only/);
+  await fs.rm(path.join(repo,"probe.mjs"));
+  const before = (await discover(repo)).snapshot;
+  const blob = spawnSync("git",["-C",repo,"rev-parse",":probe.mjs"],{encoding:"utf8",env:gitEnvForRepo()}).stdout.trim();
+  assert.equal(spawnSync("git",["-C",repo,"update-index","--cacheinfo","100644," + blob + ",probe.mjs"],{env:gitEnvForRepo()}).status,0);
+  assert.notEqual((await discover(repo)).snapshot.digest,before.digest);
+});
+
+test("POSIX executable probe runs directly in pristine and mutant copies", { skip: process.platform === "win32" }, async t => {
+  const { repo, plan } = await fixture(t);
+  const probe = path.join(repo, "probe.mjs");
+  await fs.writeFile(probe, "#!/usr/bin/env node\n" + await fs.readFile(probe, "utf8"));
+  await fs.chmod(probe, 0o755);
+  plan.discovery = await discover(repo);
+  plan.coverage = plan.discovery.candidates.map(name => ({ path: name, checks: ["ancestry"] }));
+  plan.checks[0].command = ["./probe.mjs"];
+  const receipt = await runPlan(plan, repo);
+  assert.equal(receipt.status, "passed", receipt.errors.join("\n"));
+  await fs.chmod(probe, 0o644);
+  assert.match(await receiptFreshnessError(repo, receipt), /stale/);
+});
+
+test("staged rename with a renamed export still discovers callers of the old name", async (t) => {
+  const { repo } = await fixture(t);
+  const git = (...args) => {
+    const r = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8", env: gitEnvForRepo() });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  const padding = Array.from({ length: 30 }, (_, n) => "// retained line " + n).join("\n");
+  await fs.writeFile(path.join(repo, "old.mjs"), padding + "\nexport const oldName = 1;\n");
+  await fs.writeFile(path.join(repo, "caller.mjs"), 'import { oldName } from "./old.mjs";\n');
+  git("add", "old.mjs", "caller.mjs");
+  git("-c", "user.name=test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "rename fixture");
+  git("mv", "old.mjs", "new.mjs");
+  await fs.writeFile(path.join(repo, "new.mjs"), padding + "\nexport const newName = 1;\n");
+  git("add", "new.mjs");
+  assert.match(git("diff", "--cached", "-M", "--name-status"), /R\d+\s+old\.mjs\s+new\.mjs/);
+  const result = await discover(repo);
+  assert.ok(result.symbols.includes("oldName") && result.symbols.includes("newName"));
+  assert.ok(result.candidates.includes("caller.mjs"));
 });
 
 test("files without symbol extraction are reported and --symbols recovers their callers", async (t) => {

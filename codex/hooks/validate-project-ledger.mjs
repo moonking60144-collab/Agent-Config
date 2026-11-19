@@ -4,7 +4,7 @@ import { constants as fsConstants, createReadStream, promises as fs, readFileSyn
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluateReceipt, validateEvidenceLinks, digest, MAX_RECEIPT_BYTES } from "../skills/agent-core-lite/scripts/verification-contract.mjs";
-import { snapshot, validateControlArtifact, gitEnvForRepo } from "../skills/agent-core-lite/scripts/verify-change.mjs";
+import { receiptFreshnessError, validateControlArtifact, gitEnvForRepo } from "../skills/agent-core-lite/scripts/verify-change.mjs";
 import {
   canonicalPath,
   expandHome,
@@ -593,7 +593,10 @@ export async function evaluateLedgerCompletion(ledgerPath, scopeRoot = null, opt
         const receipt = JSON.parse(content.toString("utf8"));
         result.errors.push(...evaluateReceipt(receipt).map((error) => `verification: ${error}`));
         if (result.errors.length === 0) result.errors.push(...validateEvidenceLinks(contract.requiredEvidence, receipt));
-        if (result.errors.length === 0 && (await snapshot(resolvedScopeRoot)).digest !== receipt.sourceAfter) result.errors.push("verification receipt is stale for the current working tree");
+        if (result.errors.length === 0) {
+          const stale = await receiptFreshnessError(resolvedScopeRoot, receipt);
+          if (stale) result.errors.push(stale);
+        }
       } catch (error) { result.errors.push(`verification receipt cannot be verified: ${error.message}`); }
     }
   }

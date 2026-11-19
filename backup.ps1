@@ -59,23 +59,9 @@ function Normalize-ClaudeSettingsTemplate {
     $obj = $normalized | ConvertFrom-Json
     $obj.PSObject.Properties.Remove('model')
     $obj.PSObject.Properties.Remove('skipWorkflowUsageWarning')
-    foreach($stop in @($obj.hooks.PSObject.Properties | ForEach-Object { $_.Value })){
-      foreach($hook in @($stop.hooks)){
-        $hookArgs = (@($hook.args) -join ' ')
-        if((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'check-traditional\.mjs')){
-          $hook.args = @('__CLAUDE_STOP_HOOK_PATH__')
-          $hook.statusMessage = '檢查繁體中文'
-        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'record-session-provenance\.mjs')){
-          $hook.args = @('__CLAUDE_PROVENANCE_HOOK_PATH__')
-        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'resume-project-ledger\.mjs')){
-          $hook.args = @('__CLAUDE_RESUME_HOOK_PATH__')
-        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'guard-project-completion\.mjs')){
-          $hook.args = @('__CLAUDE_COMPLETION_HOOK_PATH__')
-        } elseif((($hook.command -as [string]) -eq 'node') -and ($hookArgs -match 'resume-handoff\.mjs')){
-          $hook.args = @('__CLAUDE_HANDOFF_HOOK_PATH__')
-        }
-      }
-    }
+    # Foreign hooks own their paths and arguments, including ones below this user's home.
+    $parsed = ($cleaned -join [Environment]::NewLine) | ConvertFrom-Json
+    if($parsed.PSObject.Properties['hooks']){ $obj.hooks = $parsed.hooks }
     return (($obj | ConvertTo-Json -Depth 20) + "`n")
   } catch {
     throw "Cannot normalize Claude settings; no template was written: $_"
@@ -134,7 +120,7 @@ if(Test-Path $cm){
 # Claude settings.json（把實際 hook 路徑換回佔位符）
 $cs = Join-Parts $U '.claude' 'settings.json'
 if(Test-Path $cs){
-  $t = Get-Content $cs -Raw
+  $t = Get-Content -LiteralPath $cs -Raw -Encoding UTF8
   $t = Normalize-ClaudeSettingsTemplate $t
   [System.IO.File]::WriteAllText((Join-Parts $src 'claude' 'settings.json'), $t, $enc)
   Ok 'settings.json <- ~/.claude/settings.json（已還原跨平台 hook 佔位符）'

@@ -12,10 +12,10 @@ import { attachVerification } from "./fixtures/verification-receipt.mjs";
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t, runtime = "codex") {
+async function fixture(t, runtime = "codex", repoName = "repo") {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "native-completion-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const repo = path.join(root, "repo"), home = path.join(root, "home");
+  const repo = path.join(root, repoName), home = path.join(root, "home");
   const active = path.join(home, `.${runtime}`);
   let hooks = path.join(repoRoot, "codex/hooks");
   if (runtime === "claude") {
@@ -26,7 +26,7 @@ async function fixture(t, runtime = "codex") {
       await fs.writeFile(file.target, file.content);
     }
   }
-  const ledgerDir = path.join(active, runtime === "codex" ? "projects" : "workflow/projects", "repo", "ledgers");
+  const ledgerDir = path.join(active, runtime === "codex" ? "projects" : "workflow/projects", repoName, "ledgers");
   await fs.mkdir(ledgerDir, { recursive: true });
   await fs.mkdir(repo, { recursive: true });
   const ledger = path.join(ledgerDir, "task.md"), sidecar = path.join(ledgerDir, "task.completion.json");
@@ -68,6 +68,57 @@ async function fixture(t, runtime = "codex") {
 }
 
 for (const runtime of ["codex", "claude"]) {
+  test(`${runtime}: bound checkout survives another event cwd for resume and Stop`, async (t) => {
+    const f = await fixture(t, runtime, ".dotfiles");
+    const chat = path.join(f.root, "chat");
+    await fs.mkdir(chat);
+    const record = "record-session-provenance.mjs", resume = "resume-project-ledger.mjs", stop = "guard-project-completion.mjs";
+    f.hook(record, { cwd: chat, source: "startup" });
+    await f.save("active", "next_instruction: Follow the bound checkout.\n");
+    f.hook(record, { ledger_path: f.ledger });
+    f.hook(record, { cwd: chat, source: "compact" });
+    assert.match(f.hook(resume, { cwd: chat }).hookSpecificOutput.additionalContext, /Follow the bound checkout/);
+    await f.save("complete");
+    assert.equal(f.hook(stop, { cwd: chat }).decision, undefined);
+    await fs.appendFile(path.join(f.repo, "config.mjs"), "// stale evidence\n");
+    assert.equal(f.hook(stop, { cwd: chat }).decision, "block", "BOUND_CHECKOUT_MUST_BLOCK");
+    assert.equal(f.hook(stop, { cwd: chat, session_id: "another-session" }).decision, undefined);
+    // Pre-index installations can leave an unbound record in chat next to the actual binding.
+    const projects = path.dirname(path.dirname(f.ledgerDir));
+    await fs.rm(path.join(projects, ".session-bindings", digest("native-session") + ".json"));
+    const previous = path.join(path.dirname(f.ledgerDir), "sessions/native-session.json");
+    await fs.writeFile(previous, JSON.stringify({ schemaVersion: 2, sessionId: "native-session", ledgerPath: f.ledger,
+      events: [{ cwd: f.repo, scopeRoot: f.repo, ledgerPath: f.ledger }] }));
+    assert.equal(f.hook(stop, { cwd: chat }).decision, "block", "LEGACY_BINDING_MUST_BLOCK");
+  });
+
+  test(`${runtime}: a delayed unbound snapshot cannot lower a bound ledger's strict requirement`, async (t) => {
+    const f = await fixture(t, runtime);
+    const recorder = "record-session-provenance.mjs";
+    f.hook(recorder, { source: "startup" });
+    const record = path.join(path.dirname(f.ledgerDir), "sessions/native-session.json");
+    const stale = await fs.readFile(record);
+    await f.save("active", "verification_mode: strict\n");
+    f.hook(recorder, { ledger_path: f.ledger });
+    await fs.writeFile(record, stale); // final rename from a recorder that started before bind
+    await f.save("complete");
+    assert.equal(f.hook("guard-project-completion.mjs").decision, "block", "STRICT_BINDING_MUST_SURVIVE");
+  });
+
+  test(`${runtime}: an existing Windows ledger spelling retains its identity`, { skip: process.platform !== "win32" }, async (t) => {
+    const f = await fixture(t, runtime);
+    const input = { ledger_path: f.ledger.toUpperCase() };
+    f.hook("record-session-provenance.mjs", input);
+    await f.save("complete");
+    await fs.appendFile(path.join(f.repo, "config.mjs"), "// stale evidence\n");
+    const projects = path.dirname(path.dirname(f.ledgerDir));
+    const index = path.join(projects, ".session-bindings", digest("native-session") + ".json");
+    const stored = JSON.parse(await fs.readFile(index, "utf8"));
+    stored.ledgerPath = stored.ledgerPath.toUpperCase();
+    await fs.writeFile(index, JSON.stringify(stored));
+    assert.equal(f.hook("guard-project-completion.mjs", { cwd: f.repo.toUpperCase() }).decision, "block");
+  });
+
   test(`${runtime}: a symlink at the expected sidecar cannot authorize its external target`, { skip: process.platform === "win32" }, async (t) => {
     const f = await fixture(t, runtime);
     f.hook("record-session-provenance.mjs", { ledger_path: f.ledger });
