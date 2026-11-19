@@ -143,25 +143,56 @@ function launchOptions() {
     const takesValue = aliases.some(alias => /^[-\w]+=/u.test(alias));
     for (const alias of aliases) options.set(alias.split(/[=\[]/, 1)[0], takesValue);
   }
-  nodeOptions = options;
-  return options;
+  const v8 = new Map();
+  const flags = execFileSync(process.execPath, ["--v8-options"], { encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "" } });
+  for (const match of flags.matchAll(/^  (--[\w-]+) \([^\n]*\r?\n\s+type: (\w+)/gm)) {
+    v8.set(match[1].replaceAll("_", "-"), match[2]);
+  }
+  nodeOptions = { options, v8 };
+  return nodeOptions;
 }
 
-export function nodeScriptIndex(hook, targetDir) {
-  const command = hookPathKey(hook.command, targetDir);
-  if (command !== "node" && !(command === "node.exe" && hookPlatform(targetDir) === path.win32)) return -1;
-  if (!Array.isArray(hook.args)) return -1;
-  for (let i = 0; i < hook.args.length; i++) {
-    const arg = hook.args[i];
+// Accept a complete sequence of literal shell words. Expansions, operators and
+// adjacent quote fragments can change which program runs or what it receives.
+function shellWords(command, windows, shell) {
+  if (typeof command !== "string" || /[;&|<>$`^%!\r\n]/.test(command)) return null;
+  const powerShell = shell === "powershell";
+  const word = /[ \t]*(?:"([^"]*)"|'([^']*)'|([a-zA-Z0-9_./:\\@=+-]+))(?=[ \t]|$)/gy;
+  const input = command.trim();
+  if (!/^node(?:\.exe)?[ \t]/i.test(input)) return null;
+  const words = [];
+  while (word.lastIndex < input.length) {
+    const match = word.exec(input);
+    if (!match) return null;
+    if (match[2] !== undefined && windows && !powerShell && shell !== "bash") return null;
+    if (match[3]?.includes("\\") && !powerShell) return null;
+    if (match[1]?.endsWith("\\") || match[1]?.includes("\\\\")) return null;
+    words.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return words;
+}
+
+const directCliOptions = new Set(["--env-file", "--env-file-if-exists", "--experimental-network-inspection", "--experimental-worker-inspection"]);
+
+function scriptIndex(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (typeof arg !== "string" || !arg || arg === "-") return -1;
-    if (arg === "--") return i + 1 < hook.args.length ? i + 1 : -1;
+    if (arg === "--") return i + 1 < args.length ? i + 1 : -1;
     if (!arg.startsWith("-")) return i;
     const option = arg.split("=", 1)[0].replaceAll("_", "-");
     const allowed = process.allowedNodeEnvironmentFlags;
     if (/^--(?:prof-process|entry-url|snapshot-blob|test(?:-|$))/.test(option)) return -1;
-    if (!allowed.has(option) && option !== "--env-file" && option !== "--env-file-if-exists") return -1;
+    if (!allowed.has(option) && !directCliOptions.has(option)) {
+      if (!option.startsWith("--") || ["--help", "--version", "--v8-options"].includes(option)) return -1;
+      const { v8 } = launchOptions();
+      const type = v8.get(option);
+      if (type === "bool" ? !arg.includes("=") : type && arg.includes("=")) continue;
+      if (!arg.includes("=") && /^--no-?/.test(option) && v8.get(option.replace(/^--no-?/, "--")) === "bool") continue;
+      return -1;
+    }
     if (arg.includes("=")) continue;
-    const takesValue = launchOptions().get(option);
+    const takesValue = launchOptions().options.get(option);
     if (takesValue === undefined) {
       // --help may show just one spelling of a boolean pair. Unlisted V8
       // value flags require the attached =value form, handled above.
@@ -169,9 +200,36 @@ export function nodeScriptIndex(hook, targetDir) {
       if (allowed.has("--" + name) && allowed.has("--no-" + name)) continue;
       return -1;
     }
-    if (takesValue && typeof hook.args[++i] !== "string") return -1;
+    if (takesValue && typeof args[++i] !== "string") return -1;
   }
   return -1;
+}
+
+function nodeEntry(hook, targetDir) {
+  if (hook.type !== "command") return null;
+  let { command, args } = hook;
+  if (args === undefined) {
+    const words = shellWords(command, hookPlatform(targetDir) === path.win32, hook.shell);
+    if (!words) return null;
+    [command, ...args] = words;
+  }
+  const key = hookPathKey(command, targetDir);
+  if (key !== "node" && !(key === "node.exe" && hookPlatform(targetDir) === path.win32)) return null;
+  if (!Array.isArray(args)) return null;
+  const index = scriptIndex(args);
+  return index < 0 ? null : { command, args, index };
+}
+
+function scriptPath(hook, targetDir) {
+  const entry = nodeEntry(hook, targetDir);
+  return entry && hookPathKey(entry.args[entry.index], targetDir);
+}
+
+export function mapHookScript(hook, targetDir, replacements) {
+  const entry = nodeEntry(hook, targetDir);
+  if (!entry) return hook;
+  const replacement = replacements.get(hookPathKey(entry.args[entry.index], targetDir));
+  return replacement ? { ...hook, command: entry.command, args: entry.args.with(entry.index, replacement) } : hook;
 }
 
 export function removeRetiredClaudeHooks(hooks, targetDir) {
@@ -182,8 +240,7 @@ export function removeRetiredClaudeHooks(hooks, targetDir) {
   ].map(normalize));
   return Object.fromEntries(Object.entries(hooks ?? {}).map(([event, groups]) => [event,
     groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) =>
-      !retired.has(normalize(hook.args?.[nodeScriptIndex(hook, targetDir)])) &&
-      ![...retired].some((file) => normalize(hook.command) === `node "${file}"`)
+      !retired.has(scriptPath(hook, targetDir))
     ) })).filter((group) => group.hooks.length),
   ]));
 }
@@ -193,11 +250,7 @@ export function portableClaudeHooks(hooks, targetDir) {
   const tokens = new Map([...managedHookPaths(targetDir)]
     .map(([token, file]) => [hookPathKey(file, targetDir), token]));
   for (const group of Object.values(result).flat()) {
-    for (const hook of group.hooks) {
-      const index = nodeScriptIndex(hook, targetDir);
-      const token = tokens.get(hookPathKey(hook.args?.[index], targetDir));
-      if (token) hook.args = hook.args.with(index, token);
-    }
+    group.hooks = group.hooks.map(hook => mapHookScript(hook, targetDir, tokens));
   }
   return result;
 }
@@ -213,8 +266,7 @@ export function mergeClaudeHooks(existing, managed, targetDir) {
   for (const [event, groups] of Object.entries(existing ?? {})) {
     result[event] = groups.map((group) => ({ ...group, hooks: group.hooks.filter((hook) => {
       if (templateHooks.has(JSON.stringify(hook))) return false;
-      if (Array.isArray(hook.args)) return !ownedPaths.has(hookPathKey(hook.args[nodeScriptIndex(hook, targetDir)], targetDir));
-      return ![...owned].some((file) => hook.command === `node "${file}"`);
+      return !ownedPaths.has(scriptPath(hook, targetDir));
     }) })).filter((group) => group.hooks.length);
   }
   for (const [event, groups] of Object.entries(managed)) {

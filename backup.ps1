@@ -127,7 +127,7 @@ if(Test-Path $cs){
 } else { Skip "$cs 不存在" }
 
 # Claude managed hooks and their shared helper
-foreach($relative in @('lib/prose.mjs', 'check-traditional.mjs', 'resume-handoff.mjs')){
+foreach($relative in @('lib/vendor/markdown-it-15.0.3.mjs', 'lib/vendor/LICENSE.txt', 'lib/prose.mjs', 'check-traditional.mjs', 'resume-handoff.mjs')){
   $hk = Join-Parts $U '.claude' 'hooks' $relative
   $target = Join-Parts $src 'claude' 'hooks' $relative
   if(Test-Path $hk){

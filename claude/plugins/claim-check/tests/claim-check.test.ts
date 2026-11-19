@@ -12,6 +12,16 @@ const answer = (text: string) => ({ value: { isAnswered: true as const, text, us
 const notFound = () => ({
   value: { isAnswered: false as const, reason: 'api-error' as const, status: 404, error: 'model_not_found' as const, usage: COUNTS },
 })
+
+test('A truncated final record does not interrupt a short answer or discard the last complete check', async ($, on) => {
+  const { files } = engine(on, () => answer('OK'))
+  files.set(LOG, '{"event":"check","turnId":"old","kind":"ok"}\n{"event":')
+  const short = await $.turn.complete(turn('claude-opus-5-5', { answer: '短答' }))
+  expect(short.text).toBe('短答')
+  await $.turn.complete(turn('claude-opus-5-5'))
+  const rows = files.get(LOG)!.trim().split('\n').map(line => JSON.parse(line))
+  expect(rows.map(row => row.turnId)).toEqual(['old', 't1'])
+})
 const refused = () => ({ deny: 'model not allowed for this account' })
 
 function turn(model: string, extra: Record<string, unknown> = {}) {
@@ -24,6 +34,7 @@ function engine(on: On, reply: (model: string, call: number) => ReturnType<typeo
   const calls: { model: string; prompt: string; system: string }[] = []
   const files = new Map<string, string>()
   const statuses: (string | undefined)[] = []
+  mock.store(on)
   const session = mock.session(on)
   on('model.complete', ($, e) => {
     calls.push({ model: e.model, prompt: e.prompt, system: e.system ?? '' })

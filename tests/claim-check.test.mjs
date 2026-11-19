@@ -1,20 +1,26 @@
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { register } from "../claude/plugins/claim-check/hooks/register.ts";
 import { summarize } from "../scripts/claim-check-stats.mjs";
 
-function engine(complete, checker = "auto", files = new Map()) {
+function engine(complete, checker = "auto", files = new Map(), journal = new Map()) {
+  const context = { id: "test", userTurn: 1 };
   const handlers = new Map(), calls = [], forwarded = [];
   const on = (event, filter, method) => { handlers.set(event, method ?? filter); return { catch() {} }; };
   register(on, { checker });
-  const host = { env: { get: async () => "/mock" }, session: { id: async () => "test", append: async m => forwarded.push(m) },
+  const host = { store: { get: async k => journal.get(k), set: async (k,v) => journal.set(k, structuredClone(v)), delete: async k => journal.delete(k) }, env: { get: async () => "/mock" }, session: { id: async () => context.id, turns: async () => context.userTurn, append: async m => forwarded.push(m) },
     fs: { exists: async f => files.has(f), read: async f => files.get(f), write: async (f,s) => files.set(f,s) },
     model: { complete: async req => { calls.push(req); return complete(calls.length); } },
     tool: { register: async ({ name }) => ({ tool: "mcp__claim-check__" + name }) } };
   const invoke = (event, data) => handlers.get(event)(host, data, async () => ({ text: "answer" }));
   const turn = () => invoke("turn.complete", { answer: "a".repeat(201), reason: "answer", turnId: "t", usage: { model: "claude-fable" } });
   const rows = () => [...files.values()].flatMap(s => s.trim().split("\n").map(x => JSON.parse(x)));
-  return { calls, turn, rows, forwarded, invoke };
+  return { calls, turn, rows, forwarded, invoke, context, host };
 }
 const ok = { isAnswered:true, text:"OK", usage:{ input_tokens:3 } };
 const api = (error, status) => ({ isAnswered:false, reason:"api-error", error, status, usage:{input_tokens:1} });
@@ -134,4 +140,105 @@ test("forwarded claims remain pending until the main agent supplies its own asse
   assert.equal(stats.mainReportedConfirmed,1); assert.equal(stats.mainReportedDismissed,1);
   assert.equal(stats.correctionExcerptObserved,1); assert.equal(stats.mainReportedCorrections,1); assert.equal(stats.pending,0); assert.equal(stats.legacyForwardedWithoutIds,1);
   assert.deepEqual(stats.reportedUsage,{input_tokens:3});
+});
+
+const logPath = id => "/mock/.claude/workflow/claim-check/" + id + ".jsonl";
+const readSession = (files, id) => (files.get(logPath(id)) ?? "").split("\n").filter(Boolean).map(line => JSON.parse(line));
+const respond = (engine, turnId, answer) => engine.invoke("turn.complete", { reason: "answer", turnId, answer });
+const report = { id: "t/1", verdict: "confirmed", evidence: "verified output", correction: "fixed text" };
+const flaggedReply = () => ({ ...ok, text: "- [矛盾] incorrect" });
+
+test("switching and resuming sessions isolates pending quotes, evidence and operation references", async () => {
+  const files = new Map(), journal = new Map();
+  const e = engine(flaggedReply, "auto", files, journal);
+  e.context.id = "A";
+  await e.invoke("tool.call", { tool: "Edit", tool_use_id: "op-A", file: "private-A" });
+  await e.turn();
+  assert.ok(!(await e.invoke("tool.run", report)).deny);
+  e.context.id = "B";
+  await respond(e, "B-short", "fixed text");
+  await e.turn();
+  assert.ok(!e.calls.at(-1).prompt.includes("private-A"));
+  assert.ok((await e.invoke("tool.run", { ...report, operation_ref: "op-A" })).deny);
+  e.context.id = "A";
+  await respond(e, "A-first", "fixed text");
+  assert.deepEqual(readSession(files, "A").filter(row => row.event.startsWith("correction_")).map(row => row.turnId), ["A-first"], "SESSION_OWNS_QUOTE");
+  assert.ok(!readSession(files, "B").some(row => row.event.startsWith("correction_")));
+});
+
+for (const fault of ["read", "write", "delete", "get", "set"]) {
+  test("a " + fault + " failure followed by reload preserves the first answer exactly once", async () => {
+    for (const hit of [true, false]) {
+      const files = new Map(), journal = new Map();
+      const load = () => engine(flaggedReply, "auto", files, journal);
+      const initial = load();
+      await initial.turn();
+      assert.ok(!(await initial.invoke("tool.run", report)).deny);
+      const first = load();
+      const backend = ["read", "write"].includes(fault) ? first.host.fs : first.host.store;
+      backend[fault] = async () => { throw Error("injected fault"); };
+      const outcome = await respond(first, "original", hit ? "fixed text" : "different");
+      if (fault === "set") assert.equal(outcome.text, "answer");
+      else assert.match(outcome.text, /injected fault/);
+      await respond(load(), "later", hit ? "different" : "fixed text");
+      await respond(load(), "latest", "fixed text");
+      const terminal = readSession(files, "test").filter(row => row.event.startsWith("correction_"));
+      assert.deepEqual(terminal.map(row => [row.event, row.turnId]), [[hit ? "correction_in_answer" : "correction_not_in_answer", "original"]], "FIRST_ANSWER_SURVIVES_RELOAD");
+      assert.equal(journal.size, 0);
+      assert.equal(summarize([readSession(files, "test")]).correctionExcerptObserved, Number(hit));
+    }
+  });
+}
+
+test("damaged final JSONL fragment and missing newline recover through the hook and stats CLI", async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "claim-log-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const cli = fileURLToPath(new URL("../scripts/claim-check-stats.mjs", import.meta.url));
+  const previous = JSON.stringify({ event: "check", kind: "ok", turnId: "old" });
+  for (const suffix of ['\r\n{"event":', ""]) {
+    const text = previous + suffix;
+    const files = new Map([[logPath("test"), text]]);
+    const e = engine(() => ok, "auto", files);
+    assert.equal((await respond(e, "short", "x")).text, "answer", "DAMAGED_TAIL_MUST_NOT_INTERRUPT");
+    assert.equal((await respond(e, "another", "y")).text, "answer");
+    await writeFile(path.join(dir, "test.jsonl"), text);
+    const stats = spawnSync(process.execPath, [cli, dir], {encoding:"utf8"});
+    assert.equal(stats.status, 0, stats.stderr);
+    assert.equal(JSON.parse(stats.stdout).checks, 1);
+    await e.turn();
+    assert.deepEqual(e.rows().map(row => row.turnId), ["old", "t"]);
+  }
+  const broken = previous + '\n{"event":\n' + previous + '\n';
+  await writeFile(path.join(dir, "test.jsonl"), broken);
+  const stats = spawnSync(process.execPath, [cli, dir], { encoding: "utf8" });
+  assert.notEqual(stats.status, 0);
+  const files = new Map([[logPath("test"), broken]]);
+  const e = engine(() => ok, "auto", files);
+  assert.match((await e.turn()).text, /失敗/);
+  assert.equal(files.get(logPath("test")), broken);
+});
+
+test("alternating storage failures preserve user-turn order across multiple reloads", async () => {
+  for (const firstBackend of ["store", "fs"]) {
+    for (const secondUserTurn of [1, 2]) {
+      const files = new Map(), journal = new Map();
+      const load = () => engine(flaggedReply, "auto", files, journal);
+      const initial = load();
+      await initial.turn();
+      assert.ok(!(await initial.invoke("tool.run", report)).deny);
+      const first = load(), second = load();
+      const fail = async () => { throw Error("temporarily unavailable"); };
+      if (firstBackend === "store") { first.host.store.get = fail; second.host.fs.read = fail; }
+      else { first.host.fs.read = fail; second.host.store.get = fail; }
+      await respond(first, "first", "different");
+      second.context.userTurn = secondUserTurn;
+      await respond(second, "second", "fixed text");
+      await respond(load(), "later", "fixed text");
+      const rows = readSession(files, "test").filter(row => row.event.startsWith("correction_"));
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].event, secondUserTurn === 2 ? "correction_not_in_answer" : "correction_order_unknown");
+      if (secondUserTurn === 2) assert.equal(rows[0].turnId, "first");
+      assert.equal(summarize([readSession(files, "test")]).correctionExcerptObserved, 0);
+    }
+  }
 });

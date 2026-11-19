@@ -1,3 +1,4 @@
+import { parseLog } from "../claude/plugins/claim-check/hooks/register.ts";
 import { readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,10 +8,11 @@ import { fileURLToPath } from "node:url";
 export function summarize(sessions) {
   const stats = { sessions: sessions.length, checks: 0, checkMs: 0, forwarded: 0, legacyForwardedWithoutIds: 0,
     pending: 0, mainReportedConfirmed: 0, mainReportedDismissed: 0, inconclusive: 0,
-    mainReportedCorrections: 0, correctionExcerptObserved: 0, correctionToolCallObserved: 0, reportedUsage: {}, attemptsWithoutUsage: 0 };
+    mainReportedCorrections: 0, correctionExcerptObserved: 0, correctionOrderUnknown: 0, correctionToolCallObserved: 0, reportedUsage: {}, attemptsWithoutUsage: 0 };
   for (const rows of sessions) {
     const findings = new Map(), quotes = new Set();
     for (const row of rows) {
+      if (row.event === "correction_order_unknown") { stats.correctionOrderUnknown++; continue; }
       if (row.event === "correction_in_answer") { quotes.add(row.id); continue; }
       if (row.event === "main_review") {
         if (findings.has(row.id)) findings.set(row.id, row);
@@ -51,7 +53,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const sessions = [];
   for (const entry of entries.filter(x => x.isFile() && x.name.endsWith(".jsonl"))) {
     const text = await readFile(path.join(dir, entry.name), "utf8");
-    sessions.push(text.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)));
+    sessions.push(parseLog(text).rows);
   }
   console.log(JSON.stringify(summarize(sessions), null, 2));
 }

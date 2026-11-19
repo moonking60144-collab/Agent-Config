@@ -13,3 +13,4 @@
 .githooks/* text eol=lf
 
 codex/skills/frontend-ui-designer/vendor/ui-ux-pro-max/** text eol=lf
+claude/hooks/lib/vendor/** text eol=lf

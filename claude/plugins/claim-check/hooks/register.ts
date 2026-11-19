@@ -43,9 +43,6 @@ type Outcome =
   | { kind: 'flagged'; checker: string; text: string; usage: unknown; items: Item[] }
   | { kind: 'skipped'; checker: string | null; text: string; code?: string; status?: number | null; usage?: unknown }
 
-// Main-loop tool evidence, oldest first, kept across turns so an answer citing an earlier result is not misjudged.
-const evidence: string[] = []
-
 function clip(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}…（已截短，原長 ${text.length} 字元）`
 }
@@ -61,7 +58,7 @@ function oneLine(text: string): string {
   return text.replace(/\s*\r?\n\s*/g, ' ')
 }
 
-function remember(entry: string): void {
+function remember(evidence: string[], entry: string): void {
   evidence.push(entry)
   let total = evidence.reduce((sum, item) => sum + item.length, 0)
   while (total > EVIDENCE_CHARS && evidence.length > 1) total -= evidence.shift()!.length
@@ -149,33 +146,125 @@ async function feed($: EngineInterface, checker: string, items: Item[], turnId: 
   return ids
 }
 
-async function logPath($: EngineInterface): Promise<string> {
+async function logPath($: EngineInterface, sessionId: string): Promise<string> {
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
   if (!home) throw new Error('找不到家目錄')
-  return `${home}/.claude/workflow/claim-check/${await $.session.id()}.jsonl`
+  return `${home}/.claude/workflow/claim-check/${sessionId}.jsonl`
 }
 
-async function readRows($: EngineInterface) {
-  const path = await logPath($)
-  if (!await $.fs.exists(path)) return []
-  return String(await $.fs.read(path)).split('\n').filter(Boolean).map(line => JSON.parse(line))
+// An interrupted final append can leave an unterminated fragment. Completed
+// invalid rows still surface an error rather than silently discarding history.
+export function parseLog(text: string) {
+  const end = text.lastIndexOf('\n') + 1
+  const complete = text.slice(0, end)
+  const rows = complete.split('\n').filter(line => line.trim()).map(line => JSON.parse(line))
+  const tail = text.slice(end)
+  if (tail.trim()) {
+    try {
+      rows.push(JSON.parse(tail))
+      return { rows, prefix: text + '\n' }
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error
+    }
+  }
+  return { rows, prefix: complete }
 }
 
-function restoreQuotes(rows: Awaited<ReturnType<typeof readRows>>): Map<string, string> {
+async function readLog($: EngineInterface, sessionId: string) {
+  const path = await logPath($, sessionId)
+  const text = await $.fs.exists(path) ? String(await $.fs.read(path)) : ''
+  return { ...parseLog(text), path }
+}
+
+function restoreQuotes(rows: ReturnType<typeof parseLog>['rows']): Map<string, string> {
   const pending = new Map<string, string>()
   for (const row of rows) {
     // Old reviews did not log a missed short answer, so their eligibility is unknown.
     if (row.event === 'main_review' && row.quotePending === true) pending.set(row.id, row.correction)
-    if (row.event === 'correction_in_answer' || row.event === 'correction_not_in_answer') pending.delete(row.id)
+    if (row.event === 'correction_in_answer' || row.event === 'correction_not_in_answer' || row.event === 'correction_order_unknown') pending.delete(row.id)
   }
   return pending
 }
 
-async function record($: EngineInterface, entries: Record<string, unknown>[]): Promise<void> {
-  const path = await logPath($)
-  const previous = (await $.fs.exists(path)) ? ((await $.fs.read(path)) as string) : ''
+type Log = Awaited<ReturnType<typeof readLog>>
+type Comparison = { event: string; id: string; turnId: string }
+type Answer = { turnId: string; answer: string }
+type Journal = { original: Answer; userTurn: number } | { comparisons: Comparison[] }
+type SessionState = { id: string; key: string; evidence: string[]; completedTools: Set<string>;
+  pending?: Map<string, string>; journal?: Journal | null }
+
+async function appendRows($: EngineInterface, log: Log, entries: Record<string, unknown>[]) {
   const at = new Date().toISOString()
-  await $.fs.write(path, previous + entries.map(entry => JSON.stringify({ at, ...entry }) + '\n').join(''))
+  await $.fs.write(log.path, log.prefix + entries.map(entry => JSON.stringify({ at, ...entry }) + '\n').join(''))
+}
+
+async function saveJournal($: EngineInterface, state: SessionState, journal: Journal) {
+  state.journal = journal
+  await $.store.set(state.key, journal)
+}
+
+// Serialize recovery with new reports so an old answer cannot consume a newer quote.
+async function compareAnswer($: EngineInterface, state: SessionState, answer?: Answer) {
+  if (state.journal === undefined) {
+    try {
+      state.journal = (await $.store.get(state.key) as Journal | undefined) ?? null
+    } catch (error) {
+      // An earlier journal may exist. Save the first candidate in the other
+      // backend without declaring it final until the journal can be inspected.
+      if (answer) {
+        const log = await readLog($, state.id)
+        const candidates = new Set(log.rows.filter(row => row.event === 'comparison_candidate').map(row => row.id))
+        const userTurn = await $.session.turns()
+        const entries = [...restoreQuotes(log.rows)].filter(([id]) => !candidates.has(id)).map(([id, quote]) => ({
+          event: 'comparison_candidate', id, turnId: answer.turnId, userTurn, hit: answer.answer.includes(quote),
+        }))
+        if (entries.length) await appendRows($, log, entries)
+      }
+      throw error
+    }
+  }
+  const saved = state.journal
+  if (!saved && (!answer || state.pending?.size === 0)) return
+  let log: Log
+  try {
+    log = await readLog($, state.id)
+  } catch (error) {
+    // Only a failed cold read needs the original text until its quotes can be recovered.
+    if (!saved && answer) await saveJournal($, state, { original: answer, userTurn: await $.session.turns() })
+    throw error
+  }
+  const pending = restoreQuotes(log.rows)
+  const original = saved && 'original' in saved ? saved.original : answer
+  let comparisons: Comparison[] = []
+  if (saved && 'comparisons' in saved) {
+    comparisons = saved.comparisons.filter(row => pending.has(row.id))
+  } else if (original) {
+    const candidates = new Map(log.rows.filter(row => row.event === 'comparison_candidate').map(row => [row.id, row] as const))
+    comparisons = [...pending].map(([id, quote]) => {
+      let candidate = candidates.get(id)
+      if (candidate && saved && 'original' in saved) {
+        // Alternating failures can leave an observation in each backend. The
+        // host's prompt count orders separate user turns even across restarts.
+        if (candidate.userTurn === saved.userTurn && candidate.turnId !== original.turnId)
+          return { event: 'correction_order_unknown', id, turnId: original.turnId }
+        if (candidate.userTurn > saved.userTurn) candidate = undefined
+      }
+      const hit = candidate ? candidate.hit : original.answer.includes(quote)
+      return { event: hit ? 'correction_in_answer' : 'correction_not_in_answer', id, turnId: candidate?.turnId ?? original.turnId }
+    })
+  }
+  if (comparisons.length) {
+    // If the plugin store is unavailable, a successful primary write still
+    // makes the outcome durable. Keep it in memory when both writes fail.
+    await saveJournal($, state, { comparisons }).catch(() => undefined)
+    await appendRows($, log, comparisons)
+    for (const row of comparisons) pending.delete(row.id)
+  }
+  state.pending = pending
+  if (state.journal) {
+    await $.store.delete(state.key)
+    state.journal = null
+  }
 }
 
 export const register: Register = (on, options) => {
@@ -185,9 +274,15 @@ export const register: Register = (on, options) => {
     writeTail = result.catch(() => undefined)
     return result
   }
-  let pendingQuotes: Map<string, string> | undefined
-  let unwrittenComparisons: { event: string; id: string; turnId: string }[] = []
-  const completedTools = new Set<string>()
+  const sessions = new Map<string, SessionState>()
+  function sessionState(id: string) {
+    let state = sessions.get(id)
+    if (!state) {
+      state = { id, key: 'correction:' + id, evidence: [], completedTools: new Set() }
+      sessions.set(id, state)
+    }
+    return state
+  }
   const name = 'record_finding'
   on('session.start', async ($, e, next) => {
     await $.tool.register({ name, description: '記錄主模型對已轉交 finding 的核實結果。', inputSchema: {
@@ -197,60 +292,56 @@ export const register: Register = (on, options) => {
     } })
     return next(e)
   }).catch(($, e, next) => next(e))
-  on('tool.run', { tool: 'mcp__claim-check__record_finding' }, async ($, e) => serialize(async () => {
-    const { id, verdict, evidence: basis, correction, operation_ref: ref } = e as unknown as Record<string, unknown>
-    const invalid = (text: string) => ({ deny: text })
-    if (e.agentId !== undefined || typeof id !== 'string' || !['confirmed', 'dismissed', 'inconclusive'].includes(String(verdict)) ||
-        typeof basis !== 'string' || !basis.trim() || (correction !== undefined && (verdict !== 'confirmed' || typeof correction !== 'string' || !correction.trim())))
-      return invalid('核實結果需附上證據，更正只適用於成立的項目。')
-    if (ref !== undefined && (!correction || typeof ref !== 'string' || !completedTools.has(ref)))
-      return invalid('operation_ref 必須對應近期成功的主模型工具呼叫。')
-    const rows = await readRows($)
-    if (!rows.some(row => row.forwardedIds?.includes(id))) return invalid('此 session 沒有轉交該項目。')
-    const previous = rows.filter(row => row.event === 'main_review' && row.id === id).at(-1)
-    const addsCorrection = previous?.verdict === 'confirmed' && verdict === 'confirmed' && !previous.correction && Boolean(correction)
-    if (previous && previous.verdict !== 'inconclusive' && !addsCorrection) return invalid('此項目已有最終核實結果。')
-    const quote = typeof correction === 'string' && ref === undefined ? correction.trim() : undefined
-    await record($, [{ event: 'main_review', id, verdict, evidence: clip(basis.trim(), 1500),
-      correction: quote ?? (typeof correction === 'string' ? clip(correction, 1500) : undefined),
-      quotePending: quote ? true : undefined, observedToolRef: ref }])
-    if (quote) {
-      pendingQuotes ??= restoreQuotes(rows)
-      pendingQuotes.set(id, quote)
-    }
-    return { result: '核實結果已記錄。' }
-  }))
-  on('tool.call', async ($, e, next) => {
-    const result = await next(e)
-    if (e.agentId === undefined && e.tool !== 'mcp__claim-check__record_finding') {
-      if (e.tool_use_id && !result.isError && result.deny === undefined) {
-        completedTools.add(e.tool_use_id)
-        if (completedTools.size > 128) completedTools.delete(completedTools.values().next().value!)
+  on('tool.run', { tool: 'mcp__claim-check__record_finding' }, async ($, e) => {
+    const state = sessionState(await $.session.id())
+    return serialize(async () => {
+      const { id, verdict, evidence: basis, correction, operation_ref: ref } = e as unknown as Record<string, unknown>
+      const invalid = (text: string) => ({ deny: text })
+      if (e.agentId !== undefined || typeof id !== 'string' || !['confirmed', 'dismissed', 'inconclusive'].includes(String(verdict)) ||
+          typeof basis !== 'string' || !basis.trim() || (correction !== undefined && (verdict !== 'confirmed' || typeof correction !== 'string' || !correction.trim())))
+        return invalid('核實結果需附上證據，更正只適用於成立的項目。')
+      if (ref !== undefined && (!correction || typeof ref !== 'string' || !state.completedTools.has(ref)))
+        return invalid('operation_ref 必須對應近期成功的主模型工具呼叫。')
+      await compareAnswer($, state)
+      const log = await readLog($, state.id)
+      const { rows } = log
+      if (!rows.some(row => row.forwardedIds?.includes(id))) return invalid('此 session 沒有轉交該項目。')
+      const previous = rows.filter(row => row.event === 'main_review' && row.id === id).at(-1)
+      const addsCorrection = previous?.verdict === 'confirmed' && verdict === 'confirmed' && !previous.correction && Boolean(correction)
+      if (previous && previous.verdict !== 'inconclusive' && !addsCorrection) return invalid('此項目已有最終核實結果。')
+      const quote = typeof correction === 'string' && ref === undefined ? correction.trim() : undefined
+      await appendRows($, log, [{ event: 'main_review', id, verdict, evidence: clip(basis.trim(), 1500),
+        correction: quote ?? (typeof correction === 'string' ? clip(correction, 1500) : undefined),
+        quotePending: quote ? true : undefined, observedToolRef: ref }])
+      if (quote) {
+        state.pending ??= restoreQuotes(rows)
+        state.pending.set(id, quote)
       }
-      const args = Object.fromEntries(Object.entries(e).filter(([key]) => !SKIPPED_INPUT_KEYS.has(key)))
-      const output = result.deny !== undefined ? `已拒絕：${result.deny}` : `${result.isError ? '錯誤：' : ''}${result.text ?? ''}`
-      const inputChars = WRITE_TOOLS.has(e.tool) ? WRITE_INPUT_CHARS : INPUT_CHARS
-      remember(`### ${e.tool}\n輸入：${clipEnds(JSON.stringify(args), inputChars)}\n輸出：${clipEnds(output, OUTPUT_CHARS)}`)
+      return { result: '核實結果已記錄。' }
+    })
+  })
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId !== undefined || e.tool === 'mcp__claim-check__record_finding') return next(e)
+    const { completedTools, evidence } = sessionState(await $.session.id())
+    const result = await next(e)
+    if (e.tool_use_id && !result.isError && result.deny === undefined) {
+      completedTools.add(e.tool_use_id)
+      if (completedTools.size > 128) completedTools.delete(completedTools.values().next().value!)
     }
+    const args = Object.fromEntries(Object.entries(e).filter(([key]) => !SKIPPED_INPUT_KEYS.has(key)))
+    const output = result.deny !== undefined ? `已拒絕：${result.deny}` : `${result.isError ? '錯誤：' : ''}${result.text ?? ''}`
+    const inputChars = WRITE_TOOLS.has(e.tool) ? WRITE_INPUT_CHARS : INPUT_CHARS
+    remember(evidence, `### ${e.tool}\n輸入：${clipEnds(JSON.stringify(args), inputChars)}\n輸出：${clipEnds(output, OUTPUT_CHARS)}`)
     return result
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined || e.reason !== 'answer') return next(e)
+    const state = sessionState(await $.session.id())
     const done = await next(e)
-    if (e.agentId !== undefined || e.reason !== 'answer') return done
     const notices: string[] = []
-    await serialize(async () => {
-      pendingQuotes ??= restoreQuotes(await readRows($))
-      for (const [id, quote] of pendingQuotes) {
-        unwrittenComparisons.push({ event: e.answer.includes(quote) ? 'correction_in_answer' : 'correction_not_in_answer', id, turnId: e.turnId })
-      }
-      pendingQuotes.clear()
-      // On write failure retry this answer's outcome, without comparing a later answer.
-      if (unwrittenComparisons.length) {
-        await record($, unwrittenComparisons)
-        unwrittenComparisons = []
-      }
-    }).catch((error: unknown) => { notices.push(`更正比對紀錄寫入失敗：${describe(error)}`) })
+    await serialize(() => compareAnswer($, state, { answer: e.answer, turnId: e.turnId }))
+      .catch((error: unknown) => { notices.push(`更正比對紀錄存取失敗：${describe(error)}`) })
     if (e.answer.length < MIN_ANSWER_CHARS) return notices.length ? { ...done, text: oneLine(notices.join('；')) } : done
     const answeredBy = e.usage?.model ?? 'unknown'
     const prompt = [
@@ -258,7 +349,7 @@ export const register: Register = (on, options) => {
       clip(e.answer, ANSWER_CHARS),
       '',
       '## 工具證據（由舊到新，已截短）',
-      evidence.length > 0 ? evidence.join('\n\n') : '（本段對話沒有記錄到工具呼叫）',
+      state.evidence.length > 0 ? state.evidence.join('\n\n') : '（本段對話沒有記錄到工具呼叫）',
     ].join('\n')
     const started = Date.now()
     const attempts: Attempt[] = []
@@ -267,13 +358,14 @@ export const register: Register = (on, options) => {
     // Findings are for the main model, which reads them next turn; the person only hears about a check that did not complete.
     if (outcome.kind === 'unparsed') notices.push(`結論檢查（${outcome.checker}）：檢查模型的回覆格式不符，已略過`)
     if (outcome.kind === 'skipped') notices.push(`結論檢查未執行：${outcome.text}`)
-    const forwardedIds = outcome.kind === 'flagged'
+    const sameSession = state.id === await $.session.id()
+    const forwardedIds = outcome.kind === 'flagged' && sameSession
       ? await feed($, outcome.checker, outcome.items, e.turnId).catch((error: unknown) => {
         notices.push(`結論檢查無法交給主模型：${describe(error)}`)
         return []
       })
       : []
-    await serialize(() => record($, [{ event: 'check', turnId: e.turnId, answeredBy, ms, attempts, fed: forwardedIds.length, forwardedIds, promptChars: prompt.length + SYSTEM.length, ...outcome }])).catch((error: unknown) => {
+    await serialize(async () => appendRows($, await readLog($, state.id), [{ event: 'check', turnId: e.turnId, answeredBy, ms, attempts, fed: forwardedIds.length, forwardedIds, promptChars: prompt.length + SYSTEM.length, ...outcome }])).catch((error: unknown) => {
       notices.push(`結論檢查紀錄寫入失敗：${describe(error)}`)
     })
     if (notices.length === 0) return done
