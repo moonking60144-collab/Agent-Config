@@ -18,13 +18,27 @@ References 按需載入：新視覺方向可看 [visual directions](references/v
 
 ## UI UX Pro Max 設計查詢
 
-已內附 UI UX Pro Max 的離線資料與查詢工具。需要新系統的整體視覺規範、配色／字體／圖表候選，或具體 UX／技術棧指引時，依 [設計查詢](references/ui-ux-pro-max.md) 執行最小相關查詢。已有足夠設計依據的局部修改直接沿用，不為每次 UI 任務生成整套 design system。輸出是待核對的建議；使用者要求、既有設計與本 skill 的工程契約優先。
+已內附 UI UX Pro Max 的離線資料與查詢工具，只用來查圖表類型、UX 指引與技術棧問題，依 [設計查詢](references/ui-ux-pro-max.md) 執行最小相關查詢。配色、字體與版面由專案 tokens 與下方視覺基準決定，不採用 `--design-system` 產生的整套規範。輸出是待核對的建議；使用者要求、既有設計與本 skill 的工程契約優先。
 
 ## 設計判斷
 
 先讓核心資訊與主要操作清楚，再決定 typography、色彩、密度、surface 與動效。Landing page 面向訪客的需求、信任與行動；內部工具優先資料可讀性、狀態可辨識及操作效率。不要把行銷頁的 hero、展示字體或大量留白強套到高密度表格。
 
 整頁沿用一致的 tokens、文字層級與 surface language。只有任務明確要求新方向時才改變品牌語言。外部案例搜尋限需要新方向或使用者要求時，用足以支持決策的參考，不固定搜尋數量、不照搬品牌素材。
+
+### 視覺基準
+
+目標是安靜、一致、資訊先行：層級靠字級、字重、間距與對齊建立，裝飾越少越好。使用者指定與既有 design system 優先；以下補足它們沒決定的部分。
+
+- **先有 tokens 才寫樣式：** 專案有 tokens 就只用 tokens，元件 CSS 不新增色碼、任意字級或陰影。新畫面或改版遇到專案沒有 tokens 時，先在全域 `:root` 定最小一組：底色、表面、邊框、主／次文字、單一 accent、成功／警告／錯誤／資訊各一組文字與底色，以及字級、字重、間距、圓角、陰影；局部小改沿用周邊既有值，不為此建整套 tokens。
+- **中性色刻意選：** 灰階帶一點 accent 的色相，整頁同一組灰，不直接沿用框架預設灰。
+- **accent 只有一個：** 只給主要操作、目前選取與連結；狀態一律用語意色。
+- **字級照 scale：** 字級與字重只用 tokens 定義的值；數字欄用 `tabular-nums` 並靠右；等寬字只用一組字型堆疊。
+- **陰影只給浮層：** 下拉選單、對話框、toast 才有陰影；頁面上的靜態區塊用間距、標題或下方容器規則的 1px 邊框分組。
+- **重複元素對齊：** 同一排卡片、同一張表、同一組 label／value 用相同內距、基線與對齊；高度由內容決定。
+- **摘要在前：** 先放使用者要判斷的數字或狀態，再放明細；需要處理的狀態用 badge 或 dot 加文字，第一眼就看得到。
+- **避開常見 AI 套路**（使用者指定時例外）：紫藍漸層、米白底配 serif 與赭紅 accent、近黑底配單一螢光色、emoji 當標記、全部置中、每個區塊同樣圓角加陰影。
+- **份量看用途：** 內部工具以排版精準為準；landing page、活動頁等明確要求時才做強烈風格。拿不準時，排得好就夠了。
 
 ### 容器與語意色
 
@@ -51,6 +65,8 @@ References 按需載入：新視覺方向可看 [visual directions](references/v
 ## 驗收與交付
 
 在已授權範圍內，以相同 viewport、theme、state 與內容比對來源及實作；操作主要流程，不只截 default state。版面、裝置與色彩／文字／控制項辨識的檢查依 responsive checklist，來源還原依產品設計整合 reference。無法執行的畫面或互動明確標示未驗證。
+
+新畫面或改版完成後，在主要 viewport 與窄寬度各截一張圖（支援深色模式時兩種都截），逐條對照視覺基準修一輪再交付；不為微調反覆截圖。
 
 行為與跨 consumer 證據依 Lite 的 [verification](../agent-core-lite/references/verification.md)；高頻／高密度 UI 或共享資源競爭才讀 [interaction performance](../agent-core-lite/references/interaction-performance.md)。視覺通過不代替效能、資料流或正式寫入證據。
 

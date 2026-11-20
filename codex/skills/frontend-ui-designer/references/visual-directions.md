@@ -2,6 +2,8 @@
 
 每個方向包含：氣質描述、核心設計決策、字體策略、色彩策略、動效策略、適用場景、禁止退化成什麼。
 
+使用者沒有指定時，不直接套用 Warm Editorial 的暖白＋serif＋赭紅，或 Technical Brutalist 的黑白＋單一螢光 accent；這兩組和 [SKILL.md](../SKILL.md) 視覺基準列出的常見 AI 套路重疊。
+
 ---
 
 ## 1. Editorial Minimal

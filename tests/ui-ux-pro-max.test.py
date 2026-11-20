@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -111,10 +110,9 @@ class UiUxIntegration(unittest.TestCase):
         self.assertEqual(result["results"], [])
 
     def test_design_generation_exposes_fallback_and_density(self):
-        reference = (SKILL / "references/ui-ux-pro-max.md").read_text("utf-8")
-        command = next(line for line in reference.splitlines()
-                       if line.startswith("python ") and "--design-system" in line)
-        result = json.loads(self.query(*shlex.split(command)[5:], json_output=False))
+        # The skill no longer documents --design-system, but the vendored generator stays callable.
+        result = self.query("manufacturing operations dashboard", "--design-system",
+                            "--density", "8", "-p", "Operations")
         design = result["design_system"]
         self.assertEqual(design["project_name"], "Operations")
         self.assertEqual(design["dials"]["density"], 8)

@@ -1,4 +1,4 @@
 interface:
   display_name: "Frontend UI Designer"
-  short_description: "Design distinctive, polished frontend interfaces"
-  default_prompt: "Use $frontend-ui-designer to redesign this page with a stronger visual direction and responsive polish."
+  short_description: "Design consistent, polished frontend interfaces"
+  default_prompt: "Use $frontend-ui-designer to refine this UI with the project's tokens and a clear visual hierarchy."
