@@ -56,7 +56,6 @@ prevent_idle_sleep = true
 memories = true
 chronicle = false
 fast_mode = false
-multi_agent = true
 # voice_transcription = true
 
 [memories]
