@@ -83,7 +83,7 @@
 
 - 單獨要求 review（含 re-review）或 audit，或本輪明示唯讀、先分析、不要改時，唯讀查核：不寫檔、不 stage／commit／push、不改外部狀態。單問可行性時先回答。
 - 已授權實作中的 re-review 仍是唯讀查核。主 agent 核實 finding 後，若修復在原授權內，且缺陷是本次引入或會阻礙原驗收，直接修正並重驗，不重問。無關發現只回報；若完成原任務確實需要改變需求、觸及排除項目或增加未授權的副作用，才就該決定另行確認。
-- 依本輪要求的成果與語意判斷實作授權，不以特定動詞為準；commit 或 push 仍須使用者明確要求。
+- 依本輪要求的成果與語意判斷實作授權，不以特定動詞為準；commit 或 push 仍須使用者明確要求。區分交付物的功能與本輪獲准執行的動作：「不要部署／不要寫 LIVE」若只限制代為執行，仍依原需求交付可由使用者執行的實作，在隔離環境驗證；若要求交付唯讀工具或預覽版，則保留該限制。
 - Commit message 依專案既有語言，使用 Conventional Commits；不加入任何 AI attribution（`Co-Authored-By: Claude`、`Generated with Claude Code` 之類），PR 描述、issue comment 與 release notes 同樣不加：公開 repo 的 Co-author 徽章會影響作品集評估。
 - 不使用 `--no-verify` 或 `--no-gpg-sign` 繞過 hook，除非使用者明確要求。
 - 本輪建立的暫存產物，確認歸屬及無後續依賴後可在原授權內清理。刪除既有檔案或分支、覆寫未提交變更、`git reset --hard`、force push、production deploy、資料 migration、外部寫入與其他不可逆操作，須有使用者明確授權涵蓋具體對象與範圍。

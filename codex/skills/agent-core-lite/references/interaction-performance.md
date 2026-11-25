@@ -12,7 +12,7 @@
 
 ## 依任務回答
 
-1. 定義 representative maximum load 與使用者可接受的 budget；受控對照、樣本與 receipt 使用 [shared verification](verification.md)，不另定量測程序。
+1. 定義 representative maximum load 與使用者可接受的 budget。評估使用者等待時間時，從該操作的起點量到所需結果可用，納入中途的系統等待；「可以繼續操作」與「背景處理完成」若是不同時點，分開量測。受控對照、樣本與 receipt 使用 [shared verification](verification.md)，不另定量測程序。
 2. UI 連續事件任務：定義 bounded event update strategy，例如 rAF、coalescing、throttle、ref 或 imperative overlay；高頻事件不得無界驅動 React commit。
 3. 定義本次操作單次與整段流程的時間、空間複雜度；高密度 UI 不得在 hot path 引入未量測的 O(rows × columns)，後端任務則依實際資料量、併發與排程成本判斷。
 4. UI 互動任務：定義 transient interaction state 與 committed application state 的 owner。
