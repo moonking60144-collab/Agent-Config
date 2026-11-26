@@ -1,6 +1,7 @@
 # Agent Workflow
 
 這需要隨著模型更新，並依照專案或任務需求的結果跟著UPDATE相關SKILL描述。因為隨著傳統模型權重更新，這樣模型的相關約束也會不同，所以必須隨著迭代，此Workflow也跟著迭代，且每個人Prompt的的輸出結構也不同，模型因此產生的隨機性也無法保證。
+
 建議按照自己的偏好經驗，客製化自己的相關AGENT-Config
 
 ## 架構
@@ -25,27 +26,34 @@ flowchart TB
 - Codex 與 Claude 的 8 個 skills 共用 `codex/skills/` 來源；Claude 部署時適配路徑與 hooks，兩邊的模型、工具與 ledger 分開。task-handoff 本身寫了兩邊的做法，部署時不改寫。
 - 通用工程判斷集中於上述規則與 skills；重複的 `karpathy-guidelines` 不另行部署。純探索／審查子 agent 關閉 apps、plugins、memories 與權限請求工具；檔案權限仍繼承主 session，安裝及寫入驗證由主 agent 執行。
 
-
 ## 手動安裝與更新
 
 先安裝 Git 和 Node.js。Windows 使用 PowerShell，macOS 使用終端機。
 
-第一次安裝：
+### 第一次安裝：
 
+```sh
 git clone https://github.com/moonking60144-collab/Agent-Config.git "$HOME/Agent-Config"
 cd "$HOME/Agent-Config"
+```
 
-之後更新：
+### 之後更新：
 
+```sh
 cd "$HOME/Agent-Config"
 git pull --ff-only
+```
 
-安裝或更新成功後，在同一個視窗執行部署：
+### 安裝或更新成功後，在同一個視窗執行部署：
 
-Windows（Codex、Claude Code、VS Code）：
+**Windows（Codex、Claude Code、VS Code）：**
 
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\deploy.ps1
+```
 
-macOS（Codex、Claude Code）：
+**macOS（Codex、Claude Code）：**
 
+```sh
 node scripts/deploy-codex.mjs && node scripts/deploy-claude.mjs
+```
